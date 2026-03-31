@@ -2082,23 +2082,25 @@ function PunchScreen({emp,punches:punchesFromProps,shifts,shiftDefsData,reload,o
       if(type==="in"){
         const newPunch={id:newId(),empId:emp.id,date:td,in:now,out:"",break:def.breakMin!=null?def.breakMin:BREAK_MIN,adjusted:false};
         const data=convertTo(newPunch,PUNCH_INV);
-        setLocalPunches((localPunches||punchesFromProps).concat([newPunch]));
+        // 即時画面更新（楽観的更新）
+        const updated=(localPunches||punchesFromProps).concat([newPunch]);
+        setLocalPunches(updated);
+        onPunchesUpdate(updated);
         setMsg("出勤打刻しました："+now);
+        // GASに保存（バックグラウンド）
         await gasSave("打刻",data);
-        // 打刻シートのみ再取得（全リロード不要）
-        const fresh=await gasGet("打刻");
-        onPunchesUpdate(fresh.map(r=>convertFrom(r,PUNCH_MAP)));
         setLocalPunches(null);
       } else {
         if(!punch)return;
-        const updated={...punch,out:now};
-        const data=convertTo(updated,PUNCH_INV);
-        setLocalPunches((localPunches||punchesFromProps).map(p=>String(p.empId)===String(emp.id)&&p.date===td?updated:p));
+        const updatedPunch={...punch,out:now};
+        const data=convertTo(updatedPunch,PUNCH_INV);
+        // 即時画面更新（楽観的更新）
+        const updated=(localPunches||punchesFromProps).map(p=>String(p.empId)===String(emp.id)&&p.date===td?updatedPunch:p);
+        setLocalPunches(updated);
+        onPunchesUpdate(updated);
         setMsg("退勤打刻しました："+now);
+        // GASに保存（バックグラウンド）
         await gasSave("打刻",data);
-        // 打刻シートのみ再取得
-        const fresh=await gasGet("打刻");
-        onPunchesUpdate(fresh.map(r=>convertFrom(r,PUNCH_MAP)));
         setLocalPunches(null);
       }
     }catch(e){setLocalPunches(null);alert("打刻失敗："+e.message);}
