@@ -67,6 +67,7 @@ const LEAVE_MAP  = { id:"id", "従業員id":"empId", "付与日数":"granted", "
 const PW_MAP     = { id:"id", "従業員id":"empId", "パスワード":"password" };
 const SHIFTDEF_MAP = { id:"id", "部署":"dept", "キー":"key", "名前":"label", "開始":"start", "終了":"end", "色":"color", "文字色":"tc", "順番":"order", "休憩":"breakMin" };
 const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", "申請出勤":"reqIn", "申請退勤":"reqOut", "理由":"reason", "状態":"status", "元出勤":"origIn", "元退勤":"origOut" };
+const TRANSFER_MAP  = { id:"id", "従業員id":"empId", "振替出勤日":"workDate", "振替出勤シフト":"workShift", "振替休日":"offDate", "理由":"reason", "状態":"status" };
 const WEEK_PAT_MAP  = { id:"id", "職種":"role", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
 
 // アプリ内キー → 日本語列名
@@ -76,6 +77,7 @@ const OT_INV=invertMap(OT_MAP), LV_REQ_INV=invertMap(LV_REQ_MAP), LEAVE_INV=inve
 const PW_INV=invertMap(PW_MAP);
 const SHIFTDEF_INV=invertMap(SHIFTDEF_MAP);
 const PUNCH_FIX_INV=invertMap(PUNCH_FIX_MAP);
+const TRANSFER_INV=invertMap(TRANSFER_MAP);
 const WEEK_PAT_INV=invertMap(WEEK_PAT_MAP);
 const DOW_KEYS=["sun","mon","tue","wed","thu","fri","sat"]; // 0=日〜6=土
 
@@ -229,20 +231,26 @@ const getShiftDefsByDept = (dept, shiftDefsData) => {
   return DEFAULT_SHIFT_DEFS_BY_DEPT[dept] || SHIFT_DEFS;
 };
 const OT_RULES = {
-  "医療事務_正社員":       { type:"none" },
-  "医療事務_パート":       { type:"none" },
-  "理学療法士_正社員":     { type:"fixed", limitH:20 },
-  "理学療法士_パート":     { type:"approval", capMin:7 },
-  "リハマネ_正社員":  { type:"none" },
-  "リハマネ_パート":  { type:"none" },
-  "AT_正社員":        { type:"none" },
-  "AT_パート":        { type:"none" },
-  "放射線技師_正社員":{ type:"none" },
-  "放射線技師_パート":{ type:"none" },
-  "看護師_正社員":    { type:"none" },
-  "看護師_パート":    { type:"none" },
+  "医療事務_正社員":       { type:"round", roundMin:15 },
+  "医療事務_パート":       { type:"round", roundMin:10 },
+  "理学療法士_正社員":     { type:"overtime_request", limitH:20, roundMin:15 },
+  "理学療法士_パート":     { type:"approval", capMin:10 },
+  "リハマネ_正社員":       { type:"round", roundMin:10 },
+  "リハマネ_パート":       { type:"round", roundMin:10 },
+  "AT_正社員":             { type:"fixed", limitH:20, roundMin:15 },
+  "AT_パート":             { type:"round", roundMin:10 },
+  "放射線技師_正社員":     { type:"round", roundMin:15 },
+  "放射線技師_パート":     { type:"round", roundMin:10 },
+  "看護師_正社員":         { type:"round", roundMin:15 },
+  "看護師_パート":         { type:"round", roundMin:10 },
 };
-const OT_RULE_LABEL = { none:"上限なし", fixed:"固定残業20h込", approval:"申請制（+7分補正）" };
+const OT_RULE_LABEL = {
+  none:"特別処理なし",
+  round:"丸め処理",
+  fixed:"固定残業20h込",
+  approval:"申請制",
+  overtime_request:"時間外申請制",
+};
 const BREAK_MIN = 60;
 
 // 理学療法士の時間帯別在席人数定義
@@ -399,42 +407,83 @@ function getActiveBuckets(records,lvReqs,empId){
 }
 
 // ── Reconciliation ────────────────────────────────────────────────────────────
-const EARLY_APPROVAL_ROLES = {"理学療法士_パート":true};
+// 丸め処理（roundMin単位で切り捨て）
+function roundDownMin(min, roundMin){ return Math.floor(min/roundMin)*roundMin; }
 
 function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsData={}){
   const last=daysInMonth(year,month);
-  const hasEarlyRule=!!EARLY_APPROVAL_ROLES[emp.role+"_"+emp.type];
+  const rule=getOtRule(emp);
+  const isApprovalType=rule.type==="approval"; // 理学療法士パート
+  const isOvertimeRequest=rule.type==="overtime_request"; // 理学療法士正社員
+  const roundMin=rule.roundMin||0;
+
   return Array.from({length:last},(_,i)=>{
     const d=i+1, ds=`${year}-${pad(month)}-${pad(d)}`, dow=new Date(year,month-1,d).getDay();
     const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-    const _empDefs=getShiftDefsByRole(emp.role,shiftDefsData);const st=shiftRow?.shiftType||"off", def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off, isOff=!def.start;
+    const _empDefs=getShiftDefsByRole(emp.role,shiftDefsData);
+    const st=shiftRow?.shiftType||"off", def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off, isOff=!def.start;
     const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
-    // シフトキーが有休系の場合も有給扱い
     const isShiftLeave=isAnyLeaveShift(st);
     const isLeave=!!_lvMatch||isShiftLeave;
     const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
-    const approvedEarly=hasEarlyRule&&(otReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
-    let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
+
+    // 早出申請（全職種共通）：承認済みの早出申請
+    const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
+    // 残業申請（理学療法士パート）または時間外申請（理学療法士正社員）
+    const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
+
+    let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false;
+    let adj=punch?.adjusted||false,earlyAdj=false;
+
     if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+
     if(punch&&punch.out){
       const shiftStartMin=toMin(def.start||"00:00"), shiftEndMin=toMin(def.end||"00:00");
       const im=toMin(punch.in), om=toMin(punch.out);
       let imForWork=im;
-      if(hasEarlyRule&&!isOff&&def.start&&im<shiftStartMin&&!approvedEarly){ imForWork=shiftStartMin-7; earlyAdj=true; }
+
+      // 早出処理（全職種共通）
+      if(!isOff&&def.start&&im<shiftStartMin){
+        if(approvedEarlyReq){
+          // 早出申請あり → 早出分も実働に含める
+          imForWork=im;
+          earlyAdj=false;
+        } else {
+          // 早出申請なし → シフト開始時刻から計算
+          imForWork=shiftStartMin;
+          earlyAdj=true;
+        }
+      }
+
+      // 残業処理
+      let rawOtMin=Math.max(0,om-shiftEndMin);
+
+      if(isApprovalType){
+        // 理学療法士パート：申請がない残業は含めない・10分丸め
+        otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+      } else if(isOvertimeRequest){
+        // 理学療法士正社員：残業はそのままカウント（丸めなし）、時間外申請分を別途記録
+        otMin=rawOtMin;
+      } else if(roundMin>0&&!isOff){
+        // 丸め処理（その他職種）
+        otMin=roundDownMin(rawOtMin,roundMin);
+      } else {
+        otMin=rawOtMin;
+      }
+
       awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
       if(!isOff&&def.start){
         if(im>shiftStartMin+1) late=true;
         if(om<shiftEndMin-1) earlyLeave=true;
-        otMin=Math.max(0,om-shiftEndMin);
         diffMin=om-shiftEndMin;
-      } else { otMin=awMin; }
+      } else { otMin=isOff?awMin:otMin; }
     } else if(!isOff&&!isLeave) absent=true;
-    // 休日打刻は otMin を awMin にセットするが「シフト確認」フラグを立てる
+
     const isOffPunch=isOff&&!!punch?.out;
     const bg=isLeave?"#F0FAF5":absent?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg};
+    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
   });
 }
 
@@ -1465,27 +1514,42 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
 
 // ── OTApproval ────────────────────────────────────────────────────────────────
 function OTApproval({emps,otReqs,reload}){
-  const pending=otReqs.filter(r=>r.status==="pending"),done=otReqs.filter(r=>r.status!=="pending");
+  const [typeFilter,setTypeFilter]=useState("all");
+  const filteredReqs=typeFilter==="all"?otReqs:otReqs.filter(r=>r.type===typeFilter);
+  const pending=filteredReqs.filter(r=>r.status==="pending");
+  const done=filteredReqs.filter(r=>r.status!=="pending");
   const decide=async(id,status)=>{
     const req=otReqs.find(r=>r.id===id);if(!req)return;
     try{await gasSave("残業申請",convertTo({...req,status},OT_INV));await reload();}catch(e){alert("更新失敗："+e.message);}
   };
   const empName=id=>emps.find(e=>e.id===id)?.name||id;
+  const typeLabel=t=>t==="early"?"早出申請":t==="overtime"?"残業/時間外申請":"申請";
   const Sec=({title,items,showAct})=><div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
     <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>{title} <span style={{fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>{items.length}件</span></div>
     {items.length===0?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>該当なし</div>:
     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-      <thead><tr>{["従業員","日付","予定終了","申請終了","理由","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+      <thead><tr>{["従業員","日付","種別","シフト時刻","申請時刻","理由","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
       <tbody>{items.map(r=><tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-        <td style={tdS}>{empName(r.empId)}</td><td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.date}</td>
-        <td style={tdS}>{r.shiftEnd}</td><td style={{...tdS,fontWeight:500}}>{r.requestedEnd}</td>
+        <td style={tdS}>{empName(r.empId)}</td>
+        <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.date}</td>
+        <td style={tdS}>{r.type==="early"?<Badge label="早出" bg="#EAF3DE" color="#3B6D11"/>:r.type==="overtime"?<Badge label="残業/時間外" bg="#FAEEDA" color="#854F0B"/>:<Badge label="その他" bg="#E6F1FB" color="#185FA5"/>}</td>
+        <td style={tdS}>{r.shiftEnd}</td>
+        <td style={{...tdS,fontWeight:500}}>{r.requestedEnd}</td>
         <td style={{...tdS,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--color-text-secondary)"}}>{r.reason}</td>
         <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
         <td style={tdS}>{showAct&&<div style={{display:"flex",gap:6}}><button onClick={()=>decide(r.id,"approved")} style={{padding:"3px 10px",borderRadius:6,background:"#EAF3DE",color:"#3B6D11",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>承認</button><button onClick={()=>decide(r.id,"rejected")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button></div>}</td>
       </tr>)}</tbody>
     </table>}
   </div>;
-  return <div><Sec title="承認待ち" items={pending} showAct/><Sec title="処理済み" items={done} showAct={false}/></div>;
+  return <div>
+    <div style={{display:"flex",gap:6,marginBottom:"1rem",flexWrap:"wrap"}}>
+      {[["all","すべて"],["early","早出申請"],["overtime","残業/時間外申請"]].map(([v,l])=>(
+        <button key={v} onClick={()=>setTypeFilter(v)} style={{padding:"4px 12px",borderRadius:6,border:typeFilter===v?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:typeFilter===v?"#E6F1FB":"var(--color-background-primary)",color:typeFilter===v?"#185FA5":"var(--color-text-secondary)",fontSize:12,cursor:"pointer",fontWeight:typeFilter===v?600:400}}>{l}</button>
+      ))}
+    </div>
+    <Sec title="承認待ち" items={pending} showAct/>
+    <Sec title="処理済み" items={done} showAct={false}/>
+  </div>;
 }
 
 // ── LeaveManager ──────────────────────────────────────────────────────────────
@@ -1672,76 +1736,46 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
           <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
           <button onClick={nextPeriod} style={bS}>›</button>
           <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
-          {totalPending>0&&<span style={{padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:600,background:"#FAEEDA",color:"#854F0B"}}>⏳ 承認待ち {totalPending}件</span>}
         </div>
-        {/* 統合テーブル */}
+        {/* 付与履歴テーブル（申請承認はApprovalCenterへ移動） */}
         <div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>
-            付与・申請一覧 <span style={{fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>{allRows.length}件</span>
-            <span style={{fontSize:11,color:"var(--color-text-tertiary)",marginLeft:8}}>※承認済みの取消はシフトロックも解除されます</span>
+            付与・取消一覧 <span style={{fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>{allRows.filter(r=>r._type==="record").length}件</span>
           </div>
-          {allRows.length===0
-            ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>この期間の履歴・申請はありません</div>
+          {allRows.filter(r=>r._type==="record").length===0
+            ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>この期間の付与履歴はありません</div>
             :<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-              <thead><tr>{["日付","従業員","種別","内容","日数","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>{allRows.map((row,i)=>{
-                if(row._type==="record"){
-                  const rec=row.rec;
-                  const isGrant=rec.type==="grant";
-                  const isCancel=rec.type==="cancel";
-                  const isEditingThis=editBucket?.bucketId===(rec.id||rec.date);
-                  return <React.Fragment key={"rec"+i}>
-                    <tr style={{borderBottom:isEditingThis?"none":"0.5px solid var(--color-border-tertiary)",background:"#FAFBFF"}}>
-                      <td style={{...tdS,color:"var(--color-text-secondary)"}}>{rec.date||rec.grantedAt}</td>
-                      <td style={{...tdS,color:"var(--color-text-tertiary)",fontSize:11}}>—</td>
-                      <td style={tdS}>{isGrant?<Badge label="付与" bg="#E6F1FB" color="#185FA5"/>:<Badge label="取消" bg="#FCEBEB" color="#A32D2D"/>}</td>
-                      <td style={{...tdS,fontSize:11,color:"var(--color-text-secondary)"}}>{rec.note}{isGrant&&rec.expiresAt?<span style={{marginLeft:4,color:"var(--color-text-tertiary)"}}>（〜{rec.expiresAt}）</span>:null}</td>
-                      <td style={{...tdS,fontWeight:600,color:"#1251a3"}}>+{rec.days}日</td>
-                      <td style={tdS}>—</td>
-                      <td style={tdS}>
-                        {isGrant&&<div style={{display:"flex",gap:4}}>
-                          <button onClick={()=>setEditBucket(isEditingThis?null:{bucketId:rec.id||rec.date,days:String(rec.days),grantedAt:rec.grantedAt||rec.date,expiresAt:rec.expiresAt||addYears(rec.grantedAt||rec.date,2),note:rec.note||""})} style={{padding:"2px 8px",borderRadius:5,border:"1px solid var(--color-border-secondary)",background:isEditingThis?"#E6F1FB":"var(--color-background-primary)",color:isEditingThis?"#1251a3":"var(--color-text-secondary)",fontSize:10,cursor:"pointer"}}>編集</button>
-                          <button onClick={()=>deleteBucket(rec.id||rec.date)} style={{padding:"2px 8px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer"}}>削除</button>
-                        </div>}
-                      </td>
-                    </tr>
-                    {isEditingThis&&<tr style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-                      <td colSpan={7} style={{padding:"10px 14px",background:"#F0F4FF"}}>
-                        <div style={{fontSize:11,fontWeight:600,color:"#1251a3",marginBottom:6}}>付与レコードを編集</div>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                          <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>付与日数</div><input type="number" step="0.5" min="0.5" value={editBucket.days} onChange={e=>setEditBucket(p=>({...p,days:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
-                          <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>付与日</div><input type="date" value={editBucket.grantedAt} onChange={e=>setEditBucket(p=>({...p,grantedAt:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
-                          <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>有効期限</div><input type="date" value={editBucket.expiresAt} onChange={e=>setEditBucket(p=>({...p,expiresAt:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
-                          <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>備考</div><input value={editBucket.note} onChange={e=>setEditBucket(p=>({...p,note:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
-                        </div>
-                        <div style={{display:"flex",gap:6}}><button onClick={saveBucket} style={{...bP,padding:"4px 14px",fontSize:11}}>保存</button><button onClick={()=>setEditBucket(null)} style={{...bS,padding:"4px 10px",fontSize:11}}>取消</button></div>
-                      </td>
-                    </tr>}
-                  </React.Fragment>;
-                } else {
-                  const r=row.req;
-                  const lv2=leaves.find(l=>String(l.empId)===String(r.empId));
-                  const rem2=calcLeaveRemainingCompat(lv2,lvReqs,r.empId);
-                  const days2=r.half?0.5:1.0;
-                  const isPending=r.status==="pending";
-                  const isFutureApproved=r.status==="approved"&&r.date>today();
-                  return <tr key={"req"+r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:isPending?"#FFFCF5":isFutureApproved?"#F5F9FE":""}}>
-                    <td style={tdS}>{r.date}</td>
-                    <td style={tdS}>{empName(r.empId)}<span style={{fontSize:10,color:"var(--color-text-secondary)",marginLeft:4}}>（残{rem2}日）</span></td>
-                    <td style={tdS}>{r.half==="am"?<Badge label="午前" bg="#E1F5EE" color="#0F6E56"/>:r.half==="pm"?<Badge label="午後" bg="#E1F5EE" color="#0F6E56"/>:<Badge label="全日" bg="#E6F1FB" color="#185FA5"/>}</td>
-                    <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.reason}</td>
-                    <td style={{...tdS,fontWeight:600,color:"#A32D2D"}}>-{days2}日</td>
+              <thead><tr>{["日付","種別","内容","日数","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>{allRows.filter(r=>r._type==="record").map((row,i)=>{
+                const rec=row.rec;
+                const isGrant=rec.type==="grant";
+                const isEditingThis=editBucket?.bucketId===(rec.id||rec.date);
+                return <React.Fragment key={"rec"+i}>
+                  <tr style={{borderBottom:isEditingThis?"none":"0.5px solid var(--color-border-tertiary)",background:"#FAFBFF"}}>
+                    <td style={{...tdS,color:"var(--color-text-secondary)"}}>{rec.date||rec.grantedAt}</td>
+                    <td style={tdS}>{isGrant?<Badge label="付与" bg="#E6F1FB" color="#185FA5"/>:<Badge label="取消" bg="#FCEBEB" color="#A32D2D"/>}</td>
+                    <td style={{...tdS,fontSize:11,color:"var(--color-text-secondary)"}}>{rec.note}{isGrant&&rec.expiresAt?<span style={{marginLeft:4,color:"var(--color-text-tertiary)"}}>（〜{rec.expiresAt}）</span>:null}</td>
+                    <td style={{...tdS,fontWeight:600,color:"#1251a3"}}>+{rec.days}日</td>
                     <td style={tdS}>
-                      {isPending&&<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>}
-                      {isFutureApproved&&<Badge label="消化予定" bg="#E6F1FB" color="#185FA5"/>}
-                      {!isPending&&!isFutureApproved&&<Badge label="承認済み" bg="#E1F5EE" color="#0F6E56"/>}
+                      {isGrant&&<div style={{display:"flex",gap:4}}>
+                        <button onClick={()=>setEditBucket(isEditingThis?null:{bucketId:rec.id||rec.date,days:String(rec.days),grantedAt:rec.grantedAt||rec.date,expiresAt:rec.expiresAt||addYears(rec.grantedAt||rec.date,2),note:rec.note||""})} style={{padding:"2px 8px",borderRadius:5,border:"1px solid var(--color-border-secondary)",background:isEditingThis?"#E6F1FB":"var(--color-background-primary)",color:isEditingThis?"#1251a3":"var(--color-text-secondary)",fontSize:10,cursor:"pointer"}}>編集</button>
+                        <button onClick={()=>deleteBucket(rec.id||rec.date)} style={{padding:"2px 8px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer"}}>削除</button>
+                      </div>}
                     </td>
-                    <td style={tdS}><div style={{display:"flex",gap:4}}>
-                      {isPending&&<><button onClick={()=>decide(r.id,"approved")} disabled={rem2<days2} style={{padding:"3px 10px",borderRadius:6,background:rem2>=days2?"#EAF3DE":"#f3f4f6",color:rem2>=days2?"#3B6D11":"#9ca3af",border:"none",fontSize:11,cursor:rem2>=days2?"pointer":"not-allowed",fontWeight:500}}>承認</button><button onClick={()=>decide(r.id,"rejected")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button></>}
-                      {!isPending&&<button onClick={()=>cancelApproved(r.id)} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
-                    </div></td>
-                  </tr>;
-                }
+                  </tr>
+                  {isEditingThis&&<tr style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                    <td colSpan={5} style={{padding:"10px 14px",background:"#F0F4FF"}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#1251a3",marginBottom:6}}>付与レコードを編集</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
+                        <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>付与日数</div><input type="number" step="0.5" min="0.5" value={editBucket.days} onChange={e=>setEditBucket(p=>({...p,days:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
+                        <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>付与日</div><input type="date" value={editBucket.grantedAt} onChange={e=>setEditBucket(p=>({...p,grantedAt:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
+                        <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>有効期限</div><input type="date" value={editBucket.expiresAt} onChange={e=>setEditBucket(p=>({...p,expiresAt:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
+                        <div><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>備考</div><input value={editBucket.note} onChange={e=>setEditBucket(p=>({...p,note:e.target.value}))} style={{...iS,fontSize:12,padding:"4px 8px"}}/></div>
+                      </div>
+                      <div style={{display:"flex",gap:6}}><button onClick={saveBucket} style={{...bP,padding:"4px 14px",fontSize:11}}>保存</button><button onClick={()=>setEditBucket(null)} style={{...bS,padding:"4px 10px",fontSize:11}}>取消</button></div>
+                    </td>
+                  </tr>}
+                </React.Fragment>;
               })}</tbody>
             </table>}
         </div>
@@ -1848,6 +1882,254 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
   </div>;
 }
 
+// ── TimecardView ──────────────────────────────────────────────────────────────
+const CLINIC_NAME = "医）松口整形外科クリニック";
+
+function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null}){
+  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
+  const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
+  const [rf,setRf]=useState("");
+  const [empId,setEmpId]=useState("");
+  const [subTab,setSubTab]=useState(0);
+  const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
+  const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
+
+  // 表示対象の従業員（管理者：全員、責任者：担当のみ）
+  const targetEmps=leadRoles?emps.filter(e=>leadRoles.includes(e.role)):emps;
+  const filteredEmps=rf?targetEmps.filter(e=>e.role===rf):targetEmps;
+  const emp=filteredEmps.find(e=>String(e.id)===String(empId))||filteredEmps[0];
+  const isPTpart=emp&&emp.role==="理学療法士"&&emp.type==="パート";
+
+  // サブタブ定義
+  const subTabs=isPTpart?["生タイムカード","調整済＋照合レポート"]:["タイムカード＋照合レポート"];
+
+  // buildRowsで日別データ取得
+  const rows=emp?buildRows(emp,shifts,punches,otReqs,lvReqs,year,month,shiftDefsData):[];
+
+  // 調整済みの出退勤を計算（理学療法士パートのみ）
+  const getAdjustedTime=(row)=>{
+    if(!row.punch||!row.def.start) return {inT:row.punch?.in||"",outT:row.punch?.out||""};
+    const shiftStart=toMin(row.def.start);
+    const shiftEnd=toMin(row.def.end);
+    const punchIn=row.punch.in?toMin(row.punch.in):null;
+    const punchOut=row.punch.out?toMin(row.punch.out):null;
+    // 承認済み残業申請があれば丸めない
+    const hasApprovedOT=otReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===row.ds&&r.status==="approved");
+    let adjIn=punchIn,adjOut=punchOut;
+    if(!hasApprovedOT){
+      if(punchIn!==null&&shiftStart-punchIn>=5) adjIn=shiftStart;
+      if(punchOut!==null&&punchOut-shiftEnd>=5) adjOut=shiftEnd;
+    }
+    return {
+      inT:adjIn!==null?fmtTime(adjIn):"",
+      outT:adjOut!==null?fmtTime(adjOut):"",
+      adjusted:(adjIn!==punchIn||adjOut!==punchOut)
+    };
+  };
+
+  // 印刷用HTML生成
+  const printTimecard=(adjusted)=>{
+    if(!emp) return;
+    const title=adjusted?"調整済タイムカード":"生タイムカード";
+    const w=window.open("","_blank");
+    const tableRows=rows.map(r=>{
+      if(r.isOff&&!r.punch) return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>休日</td><td>―</td><td>―</td><td>―</td><td>―</td></tr>`;
+      if(r.isLeave) return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>${r.def.label||"有給"}</td><td colspan="4" style="text-align:center;color:#0F6E56">有給</td></tr>`;
+      const shiftLabel=r.def.start?`${r.def.label}（${r.def.start}〜${r.def.end}）`:"休日";
+      let inT="―",outT="―",workMin=0;
+      if(r.punch){
+        if(adjusted){
+          const adj=getAdjustedTime(r);
+          inT=adj.inT||"―"; outT=adj.outT||"―";
+          if(adj.inT&&adj.outT) workMin=Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0));
+        } else {
+          inT=r.punch.in||"―"; outT=r.punch.out||"未退勤";
+          if(r.punch.out) workMin=r.awMin;
+        }
+      }
+      const wH=workMin>0?toHStr(workMin):"―";
+      const diffMin=adjusted&&r.def.end&&outT!=="―"?toMin(outT)-toMin(r.def.end):r.diffMin;
+      const diffStr=r.punch?.out?(diffMin>=0?"+":"")+toHStr(diffMin):"―";
+      const status=r.absent?"欠勤":r.late&&r.earlyLeave?"遅刻・早退":r.late?"遅刻":r.earlyLeave?"早退":r.otMin>0?"残業":r.awMin>0?"正常":"―";
+      return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>${shiftLabel}</td><td>${inT}</td><td>${outT}</td><td>${wH}</td><td>${diffStr}</td>${adjusted?`<td>${status}</td>`:""}</tr>`;
+    }).join("");
+
+    // 合計計算
+    const totalWork=adjusted
+      ?rows.reduce((s,r)=>{
+        if(!r.punch?.out||r.isLeave) return s;
+        const adj=getAdjustedTime(r);
+        if(!adj.inT||!adj.outT) return s;
+        return s+Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0));
+      },0)
+      :rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0);
+    const totalOT=rows.reduce((s,r)=>s+r.otMin,0);
+    const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0);
+    const abC=rows.filter(r=>r.absent).length;
+    const lC=rows.filter(r=>r.late).length;
+    const eC=rows.filter(r=>r.earlyLeave).length;
+
+    const summaryHtml=adjusted?`
+      <div class="summary">
+        <span>所定：<strong>${toHStr(tS)}</strong></span>
+        <span>実働：<strong>${toHStr(totalWork)}</strong></span>
+        <span>残業：<strong>${toHStr(totalOT)}</strong></span>
+        <span>欠勤：<strong>${abC}日</strong></span>
+        <span>遅刻：<strong>${lC}回</strong></span>
+        <span>早退：<strong>${eC}回</strong></span>
+      </div>`:"";
+
+    const headers=adjusted
+      ?"<tr><th>日付</th><th>曜</th><th>シフト</th><th>出勤</th><th>退勤</th><th>実働</th><th>差異</th><th>状態</th></tr>"
+      :"<tr><th>日付</th><th>曜</th><th>シフト</th><th>出勤</th><th>退勤</th><th>実働</th><th>差異</th></tr>";
+
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>
+      body{font-family:"Hiragino Sans","Yu Gothic",sans-serif;font-size:12px;padding:20px;color:#111}
+      h2{font-size:16px;margin-bottom:4px}
+      .meta{font-size:12px;color:#555;margin-bottom:12px}
+      .summary{display:flex;gap:20px;padding:8px 12px;background:#f5f5f5;border-radius:6px;margin-bottom:12px;flex-wrap:wrap}
+      .summary span{font-size:12px;color:#374151}
+      .summary strong{color:#1251a3}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th{background:#f0f0f0;padding:5px 6px;border:1px solid #ccc;text-align:center;font-weight:600}
+      td{padding:4px 6px;border:1px solid #ddd;text-align:center}
+      tr:nth-child(even){background:#fafafa}
+      .total{margin-top:8px;text-align:right;font-size:12px;font-weight:600}
+      @media print{button{display:none}}
+    </style></head><body>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <h2>${CLINIC_NAME}</h2>
+          <div class="meta">${title}　${year}年${month}月分　${emp.name}（${emp.role}・${emp.type}）</div>
+        </div>
+        <button onclick="window.print()" style="padding:6px 16px;background:#1251a3;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 印刷</button>
+      </div>
+      ${summaryHtml}
+      <table><thead>${headers}</thead><tbody>${tableRows}</tbody></table>
+      <div class="total">実働合計：${toHStr(totalWork)}</div>
+    </body></html>`);
+    w.document.close();
+  };
+
+  return <div>
+    {/* ヘッダー操作 */}
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={prevM} style={bS}>‹</button>
+        <span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span>
+        <button onClick={nextM} style={bS}>›</button>
+      </div>
+      <select value={rf} onChange={e=>{setRf(e.target.value);setEmpId("");}} style={{...iS,width:"auto"}}>
+        <option value="">全職種</option>
+        {[...new Set(targetEmps.map(e=>e.role))].map(r=><option key={r}>{r}</option>)}
+      </select>
+      <select value={empId} onChange={e=>setEmpId(e.target.value)} style={{...iS,width:"auto"}}>
+        {filteredEmps.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}
+      </select>
+    </div>
+
+    {/* サブタブ */}
+    <div style={{display:"flex",gap:4,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)"}}>
+      {subTabs.map((t,i)=><button key={t} onClick={()=>setSubTab(i)} style={{padding:"8px 18px",border:"none",borderBottom:subTab===i?"2px solid #1251a3":"2px solid transparent",background:"transparent",color:subTab===i?"#1251a3":"var(--color-text-secondary)",fontWeight:subTab===i?600:400,fontSize:13,cursor:"pointer",marginBottom:"-2px"}}>{t}</button>)}
+    </div>
+
+    {/* 生タイムカード */}
+    {subTab===0&&<div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+        <div style={{fontSize:13,fontWeight:600}}>{isPTpart?"生タイムカード":"タイムカード＋照合レポート"}</div>
+        <button onClick={()=>printTimecard(false)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
+      </div>
+      {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
+        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{year}年{month}月</div>
+        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--color-text-secondary)"}}>
+          <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0))}</strong></span>
+          <span>残業：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+r.otMin,0))}</strong></span>
+          <span>欠勤：<strong style={{color:rows.filter(r=>r.absent).length>0?"#A32D2D":"var(--color-text-primary)"}}>{rows.filter(r=>r.absent).length}日</strong></span>
+        </div>
+      </div>}
+      <div style={{...crd,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>{rows.map(r=>{
+            const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+            return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
+              <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+              <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={tdS}>{r.punch?.in||"―"}</td>
+              <td style={tdS}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
+              <td style={{...tdS,fontWeight:500}}>{r.awMin>0?toHStr(r.awMin):"―"}</td>
+              <td style={{...tdS,color:r.diffMin>0?"#854F0B":r.diffMin<0?"#3B6D11":"var(--color-text-secondary)"}}>{r.punch?.out?(r.diffMin>=0?"+":"")+toHStr(r.diffMin):"―"}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* 調整済＋照合レポート（理学療法士パートのみサブタブ1、他職種はサブタブ0と同じだが照合レポートを含む） */}
+    {subTab===(isPTpart?1:0)&&isPTpart&&<div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+        <div style={{fontSize:13,fontWeight:600}}>調整済タイムカード＋照合レポート</div>
+        <button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
+      </div>
+      {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
+        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{year}年{month}月</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:8}}>
+          {[
+            ["出勤",rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+"日",""],
+            ["欠勤",rows.filter(r=>r.absent).length+"日",rows.filter(r=>r.absent).length>0?"#A32D2D":""],
+            ["遅刻",rows.filter(r=>r.late).length+"回",rows.filter(r=>r.late).length>0?"#854F0B":""],
+            ["早退",rows.filter(r=>r.earlyLeave).length+"回",rows.filter(r=>r.earlyLeave).length>0?"#854F0B":""],
+            ["有給",rows.filter(r=>r.isLeave).length+"日","#0F6E56"],
+            ["残業",rows.filter(r=>r.otMin>0).length+"日",""],
+          ].map(([l,v,c])=>(
+            <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+              <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+              <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--color-text-secondary)"}}>
+          <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0))}</strong></span>
+          <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>{
+            if(!r.punch?.out||r.isLeave) return s;
+            const adj=getAdjustedTime(r);
+            if(!adj.inT||!adj.outT) return s;
+            return s+Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0));
+          },0))}</strong></span>
+          <span>残業：<strong style={{color:rows.reduce((s,r)=>s+r.otMin,0)>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+r.otMin,0))}</strong></span>
+        </div>
+      </div>}
+      <div style={{...crd,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>{rows.map(r=>{
+            const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+            const adj=r.punch?getAdjustedTime(r):{inT:"",outT:"",adjusted:false};
+            const adjWorkMin=adj.inT&&adj.outT?Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0)):0;
+            const adjDiff=r.def.end&&adj.outT?toMin(adj.outT)-toMin(r.def.end):null;
+            return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
+              <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+              <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.inT||"―"}</td>
+              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.outT||(r.punch?"未退勤":"―")}</td>
+              <td style={{...tdS,fontWeight:500}}>{adjWorkMin>0?toHStr(adjWorkMin):"―"}</td>
+              <td style={{...tdS,color:adjDiff!=null&&adjDiff>0?"#854F0B":adjDiff!=null&&adjDiff<0?"#3B6D11":"var(--color-text-secondary)"}}>{adjDiff!=null?(adjDiff>=0?"+":"")+toHStr(adjDiff):"―"}</td>
+              <td style={tdS}>{statusBadge(r,true)}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* その他職種の照合レポート */}
+    {!isPTpart&&emp&&<div style={{marginTop:"1rem"}}>
+      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={true}/>
+    </div>}
+  </div>;
+}
+
 // ── ReportView ────────────────────────────────────────────────────────────────
 function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false}){
   const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
@@ -1857,7 +2139,38 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const rows=emp?buildRows(emp,shifts,punches,otReqs,lvReqs,year,month,shiftDefsData):[];
   const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tA=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
   const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
-  const diff=tA-tS,otAlert=rule.type==="fixed"&&tO>(rule.limitH||20)*60,issC=lC+eC+abC+(otAlert?1:0);
+
+  // 月20h超過アラート（fixed・overtime_requestの両方）
+  const isFixedOT=rule.type==="fixed"||rule.type==="overtime_request";
+  const otAlert=isFixedOT&&tO>(rule.limitH||20)*60;
+
+  // 理学療法士正社員：時間外申請済みの残業時間と未申請の残業時間を分離
+  const approvedOTMin=rule.type==="overtime_request"
+    ?rows.reduce((s,r)=>s+(r.approvedOTReq?r.otMin:0),0):0;
+  const unapprovedOTMin=rule.type==="overtime_request"
+    ?rows.reduce((s,r)=>s+(!r.approvedOTReq&&r.otMin>0?r.otMin:0),0):0;
+  const unapprovedAlert=rule.type==="overtime_request"&&unapprovedOTMin>(rule.limitH||20)*60;
+
+  // 週超過残業の計算（理学療法士正社員・週上限時間設定あり）
+  const weekLimit=emp?.weekLimit?Number(emp.weekLimit):null;
+  const weeklyOT=(()=>{
+    if(!weekLimit||rule.type!=="overtime_request") return 0;
+    // 週ごとにシフト合計を集計（月〜日）
+    const weekMap={};
+    rows.forEach(r=>{
+      const weekStart=new Date(year,month-1,r.d);
+      const dow=weekStart.getDay();
+      const diff=dow===0?-6:1-dow; // 月曜起算
+      weekStart.setDate(weekStart.getDate()+diff);
+      const wk=weekStart.toISOString().slice(0,10);
+      if(!weekMap[wk]) weekMap[wk]=0;
+      weekMap[wk]+=r.swMin;
+    });
+    // 週の所定がweekLimit*60を超えた分を合計
+    return Object.values(weekMap).reduce((s,min)=>s+Math.max(0,min-weekLimit*60),0);
+  })();
+
+  const diff=tA-tS;
   const disp=filter==="issues"?rows.filter(r=>r.absent||r.adjusted||r.earlyAdj||r.late||r.earlyLeave||r.otMin>0):rows;
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
@@ -1881,7 +2194,11 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
         <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>
         <span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>
+        {rule.type==="overtime_request"&&<span>時間外申請済：<strong style={{color:"#185FA5"}}>{toHStr(approvedOTMin)}</strong></span>}
+        {rule.type==="overtime_request"&&unapprovedOTMin>0&&<span>未申請残業：<strong style={{color:"#A32D2D"}}>{toHStr(unapprovedOTMin)}</strong></span>}
+        {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
+        {unapprovedAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 未申請残業が月{rule.limitH}h超過</span>}
       </div>
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
@@ -2225,20 +2542,419 @@ function LeaveRequest({emp,leaves,lvReqs,reload}){
   </div>;
 }
 
+// ── TransferRequest (Employee) ────────────────────────────────────────────────
+function TransferRequest({emp,shifts,transferReqs,shiftDefsData,reload}){
+  const [form,setForm]=useState({workDate:today(),workShift:"day",offDate:"",reason:""}),[sub,setSub]=useState(false);
+  const myReqs=(transferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.workDate<a.workDate?-1:1);
+  const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+  const shiftOptions=Object.entries(empDefs).filter(([k])=>k!=="off").map(([k,v])=>({key:k,label:v.label,start:v.start,end:v.end}));
+  const submit=async()=>{
+    if(!form.workDate||!form.offDate||!form.reason)return;
+    try{
+      const data=convertTo({id:newId(),empId:emp.id,workDate:form.workDate,workShift:form.workShift,offDate:form.offDate,reason:form.reason,status:"pending"},TRANSFER_INV);
+      await gasSave("振替申請",data);
+      setForm({workDate:today(),workShift:"day",offDate:"",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      await reload();
+    }catch(e){alert("申請失敗："+e.message);}
+  };
+  return <div>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:420}}>
+      <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>振替申請</div>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>振替出勤日</div>
+        <input type="date" value={form.workDate} onChange={e=>setForm(p=>({...p,workDate:e.target.value}))} style={iS}/>
+      </div>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>振替出勤シフト</div>
+        <select value={form.workShift} onChange={e=>setForm(p=>({...p,workShift:e.target.value}))} style={iS}>
+          {shiftOptions.map(s=><option key={s.key} value={s.key}>{s.label}{s.start?`（${s.start}〜${s.end}）`:""}</option>)}
+        </select>
+      </div>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>振替休日</div>
+        <input type="date" value={form.offDate} onChange={e=>setForm(p=>({...p,offDate:e.target.value}))} style={iS}/>
+      </div>
+      <div style={{marginBottom:"1rem"}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
+        <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={3} placeholder="例：〇月〇日の休日出勤の振替" style={{...iS,resize:"vertical"}}/>
+      </div>
+      <button onClick={submit} disabled={!form.workDate||!form.offDate||!form.reason} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:(!form.workDate||!form.offDate||!form.reason)?0.4:1}}>申請する</button>
+      {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
+    </div>
+    {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>{["振替出勤日","シフト","振替休日","理由","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{myReqs.map(r=>{
+          const def=empDefs[r.workShift]||empDefs.off;
+          return <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+            <td style={tdS}>{r.workDate}</td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:def.color,color:def.tc}}>{def.label}</span></td>
+            <td style={tdS}>{r.offDate}</td>
+            <td style={{...tdS,color:"var(--color-text-secondary)",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.reason}</td>
+            <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
+// ── TransferApproval (Admin/Lead) ─────────────────────────────────────────────
+function TransferApproval({emps,transferReqs,shifts,shiftDefsData,reload}){
+  const pending=(transferReqs||[]).filter(r=>r.status==="pending");
+  const done=(transferReqs||[]).filter(r=>r.status!=="pending");
+  const empName=id=>emps.find(e=>String(e.id)===String(id))?.name||id;
+  const decide=async(id,status)=>{
+    const req=(transferReqs||[]).find(r=>r.id===id);if(!req)return;
+    try{
+      await gasSave("振替申請",convertTo({...req,status},TRANSFER_INV));
+      if(status==="approved"){
+        // 振替出勤日のシフトを指定シフトに変更
+        const workExisting=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.workDate);
+        await gasSave("シフト",convertTo({id:workExisting?.id||newId(),empId:req.empId,date:req.workDate,shiftType:req.workShift},SHIFT_INV));
+        // 振替休日のシフトをoffに変更
+        const offExisting=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.offDate);
+        await gasSave("シフト",convertTo({id:offExisting?.id||newId(),empId:req.empId,date:req.offDate,shiftType:"off"},SHIFT_INV));
+      }
+      await reload();
+    }catch(e){alert("更新失敗："+e.message);}
+  };
+  const Sec=({title,items,showAct})=><div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
+    <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>{title} <span style={{fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>{items.length}件</span></div>
+    {items.length===0?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>該当なし</div>:
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+      <thead><tr>{["従業員","振替出勤日","シフト","振替休日","理由","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+      <tbody>{items.map(r=>{
+        const emp=emps.find(e=>String(e.id)===String(r.empId));
+        const empDefs=getShiftDefsByRole(emp?.role||"",shiftDefsData||{});
+        const def=empDefs[r.workShift]||empDefs.off||{label:r.workShift,color:"#f5f5f5",tc:"#333"};
+        return <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+          <td style={tdS}>{empName(r.empId)}</td>
+          <td style={tdS}>{r.workDate}</td>
+          <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:def.color,color:def.tc}}>{def.label}</span></td>
+          <td style={tdS}>{r.offDate}</td>
+          <td style={{...tdS,color:"var(--color-text-secondary)",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.reason}</td>
+          <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+          <td style={tdS}>{showAct&&<div style={{display:"flex",gap:6}}>
+            <button onClick={()=>decide(r.id,"approved")} style={{padding:"3px 10px",borderRadius:6,background:"#EAF3DE",color:"#3B6D11",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>承認</button>
+            <button onClick={()=>decide(r.id,"rejected")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
+          </div>}</td>
+        </tr>;
+      })}</tbody>
+    </table>}
+  </div>;
+  return <div><Sec title="承認待ち" items={pending} showAct/><Sec title="処理済み" items={done} showAct={false}/></div>;
+}
+
+// ── ApprovalCenter（申請許可タブ） ────────────────────────────────────────────
+function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[],shifts,shiftDefsData,leaves,reload,showOT=false}){
+  const [typeFilter,setTypeFilter]=useState("all");
+  const [statusFilter,setStatusFilter]=useState("pending");
+  const empName=id=>emps.find(e=>String(e.id)===String(id))?.name||id;
+
+  // 有休申請の承認・却下
+  const decideLv=async(id,status)=>{
+    const req=lvReqs.find(r=>r.id===id);if(!req)return;
+    try{
+      const td=today();
+      if(status==="approved"&&req.date>td){
+        await gasSave("有給申請",convertTo({...req,status:"approved"},LV_REQ_INV));
+        alert(`${req.date} は未来の日付のため、日付到達時に自動消化されます。`);
+      } else {
+        await gasSave("有給申請",convertTo({...req,status},LV_REQ_INV));
+      }
+      await reload();
+    }catch(e){alert("更新失敗："+e.message);}
+  };
+
+  const cancelLv=async(id)=>{
+    const req=lvReqs.find(r=>r.id===id);if(!req)return;
+    if(!confirm(`${req.date} の承認済み有休を取り消しますか？`))return;
+    try{
+      await gasSave("有給申請",convertTo({...req,status:"rejected"},LV_REQ_INV));
+      const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
+      if(shiftRow&&isAnyLeaveShift(shiftRow.shiftType)){
+        await gasSave("シフト",convertTo({...shiftRow,shiftType:"off"},SHIFT_INV));
+      }
+      await reload();
+    }catch(e){alert("取消失敗："+e.message);}
+  };
+
+  // 残業・早出申請の承認・却下
+  const decideOT=async(id,status)=>{
+    const req=otReqs.find(r=>r.id===id);if(!req)return;
+    try{await gasSave("残業申請",convertTo({...req,status},OT_INV));await reload();}
+    catch(e){alert("更新失敗："+e.message);}
+  };
+
+  // 振替申請の承認・却下
+  const decideTR=async(id,status)=>{
+    const req=transferReqs.find(r=>r.id===id);if(!req)return;
+    try{
+      await gasSave("振替申請",convertTo({...req,status},TRANSFER_INV));
+      if(status==="approved"){
+        const workExisting=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.workDate);
+        await gasSave("シフト",convertTo({id:workExisting?.id||newId(),empId:req.empId,date:req.workDate,shiftType:req.workShift},SHIFT_INV));
+        const offExisting=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.offDate);
+        await gasSave("シフト",convertTo({id:offExisting?.id||newId(),empId:req.empId,date:req.offDate,shiftType:"off"},SHIFT_INV));
+      }
+      await reload();
+    }catch(e){alert("更新失敗："+e.message);}
+  };
+
+  // 打刻修正申請の承認・却下
+  const decidePF=async(id,status)=>{
+    const req=punchFixReqs.find(r=>r.id===id);if(!req)return;
+    try{
+      if(status==="approved"&&(req.reqIn||req.reqOut)){
+        const existing=punches?.find(p=>String(p.empId)===String(req.empId)&&p.date===req.date);
+        const empObj=emps.find(e=>String(e.id)===String(req.empId));
+        const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
+        const empD=getShiftDefsByRole(empObj?.role||"理学療法士",shiftDefsData||{});
+        const def=empD[shiftRow?.shiftType||"off"]||empD.off||SHIFT_DEFS.off;
+        const data=convertTo({id:existing?.id||newId(),empId:req.empId,date:req.date,in:req.reqIn||existing?.in||"",out:req.reqOut||existing?.out||"",break:def.breakMin!=null?def.breakMin:BREAK_MIN,adjusted:true},PUNCH_INV);
+        await gasSave("打刻",data);
+      }
+      await gasSave("打刻修正申請",convertTo({...req,status},PUNCH_FIX_INV));
+      await reload();
+    }catch(e){alert("更新失敗："+e.message);}
+  };
+
+  // 全申請を統合してフィルタリング
+  const allItems=[
+    ...lvReqs.map(r=>({...r,_type:"leave"})),
+    ...(showOT?otReqs.filter(r=>r.type==="overtime"||r.type==="early").map(r=>({...r,_type:"ot"}))
+      :otReqs.filter(r=>r.type==="early").map(r=>({...r,_type:"ot"}))),
+    ...(transferReqs||[]).map(r=>({...r,_type:"transfer"})),
+    ...(punchFixReqs||[]).map(r=>({...r,_type:"punchfix"})),
+  ].sort((a,b)=>{
+    const da=a.date||a.workDate||""; const db=b.date||b.workDate||"";
+    return db<da?-1:1;
+  });
+
+  const typeOptions=[
+    {key:"all",label:"すべて"},
+    {key:"leave",label:"有休"},
+    {key:"punchfix",label:"打刻修正"},
+    {key:"transfer",label:"振替"},
+    {key:"early",label:"早出"},
+    ...(showOT?[{key:"overtime",label:"残業/時間外"}]:[]),
+  ];
+
+  const filtered=allItems.filter(r=>{
+    if(statusFilter==="pending"&&r.status!=="pending") return false;
+    if(typeFilter==="all") return true;
+    if(typeFilter==="leave") return r._type==="leave";
+    if(typeFilter==="punchfix") return r._type==="punchfix";
+    if(typeFilter==="transfer") return r._type==="transfer";
+    if(typeFilter==="early") return r._type==="ot"&&r.type==="early";
+    if(typeFilter==="overtime") return r._type==="ot"&&(r.type==="overtime");
+    return true;
+  });
+
+  const pendingCount=allItems.filter(r=>r.status==="pending").length;
+
+  const typeLabel=r=>{
+    if(r._type==="leave") return r.half==="am"?"有休（午前）":r.half==="pm"?"有休（午後）":"有休";
+    if(r._type==="punchfix") return "打刻修正";
+    if(r._type==="transfer") return "振替";
+    if(r._type==="ot") return r.type==="early"?"早出":"残業/時間外";
+    return "その他";
+  };
+  const typeBg=r=>{
+    if(r._type==="leave") return {bg:"#E1F5EE",color:"#0F6E56"};
+    if(r._type==="punchfix") return {bg:"#EEEDFE",color:"#3C3489"};
+    if(r._type==="transfer") return {bg:"#E6F1FB",color:"#185FA5"};
+    if(r._type==="ot"&&r.type==="early") return {bg:"#EAF3DE",color:"#3B6D11"};
+    if(r._type==="ot") return {bg:"#FAEEDA",color:"#854F0B"};
+    return {bg:"#f5f5f5",color:"#333"};
+  };
+
+  const summary=r=>{
+    if(r._type==="leave") return `${r.date}（${r.reason||"―"}）`;
+    if(r._type==="punchfix") return `${r.date}　${r.reqIn||"―"}→${r.reqOut||"―"}`;
+    if(r._type==="transfer") return `出勤:${r.workDate}　休日:${r.offDate}`;
+    if(r._type==="ot") return `${r.date}　→${r.requestedEnd||"―"}`;
+    return "―";
+  };
+
+  return <div>
+    {/* フィルターバー */}
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
+      <div style={{display:"flex",gap:4}}>
+        {[["pending","承認待ち"],["all","全件"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setStatusFilter(v)} style={{padding:"5px 12px",borderRadius:6,border:statusFilter===v?"2px solid #1251a3":"0.5px solid var(--color-border-secondary)",background:statusFilter===v?"#E6F1FB":"var(--color-background-primary)",color:statusFilter===v?"#1251a3":"var(--color-text-secondary)",fontSize:12,cursor:"pointer",fontWeight:statusFilter===v?600:400}}>{l}</button>
+        ))}
+      </div>
+      <div style={{width:"1px",height:20,background:"var(--color-border-secondary)"}}/>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {typeOptions.map(({key,label})=>(
+          <button key={key} onClick={()=>setTypeFilter(key)} style={{padding:"5px 12px",borderRadius:6,border:typeFilter===key?"2px solid #854F0B":"0.5px solid var(--color-border-secondary)",background:typeFilter===key?"#FAEEDA":"var(--color-background-primary)",color:typeFilter===key?"#854F0B":"var(--color-text-secondary)",fontSize:12,cursor:"pointer",fontWeight:typeFilter===key?600:400}}>{label}</button>
+        ))}
+      </div>
+      {pendingCount>0&&<span style={{marginLeft:"auto",padding:"3px 10px",borderRadius:99,fontSize:12,fontWeight:600,background:"#FAEEDA",color:"#854F0B"}}>承認待ち {pendingCount}件</span>}
+    </div>
+
+    {/* 申請一覧 */}
+    <div style={{...crd,overflow:"hidden"}}>
+      {filtered.length===0
+        ?<div style={{padding:"2rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>該当する申請はありません</div>
+        :<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr>{["従業員","種別","内容","理由","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>{filtered.map((r,i)=>{
+            const {bg,color}=typeBg(r);
+            const isPending=r.status==="pending";
+            const isApproved=r.status==="approved";
+            return <tr key={r.id+r._type} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+              <td style={tdS}>{empName(r.empId||r["従業員id"])}</td>
+              <td style={tdS}><Badge label={typeLabel(r)} bg={bg} color={color}/></td>
+              <td style={{...tdS,fontSize:11,color:"var(--color-text-secondary)"}}>{summary(r)}</td>
+              <td style={{...tdS,maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--color-text-secondary)"}}>{r.reason||"―"}</td>
+              <td style={tdS}>
+                {isPending?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>
+                :isApproved?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>
+                :<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}
+              </td>
+              <td style={tdS}>
+                <div style={{display:"flex",gap:4}}>
+                  {isPending&&<>
+                    <button onClick={()=>{
+                      if(r._type==="leave") decideLv(r.id,"approved");
+                      else if(r._type==="ot") decideOT(r.id,"approved");
+                      else if(r._type==="transfer") decideTR(r.id,"approved");
+                      else if(r._type==="punchfix") decidePF(r.id,"approved");
+                    }} style={{padding:"3px 10px",borderRadius:6,background:"#EAF3DE",color:"#3B6D11",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>承認</button>
+                    <button onClick={()=>{
+                      if(r._type==="leave") decideLv(r.id,"rejected");
+                      else if(r._type==="ot") decideOT(r.id,"rejected");
+                      else if(r._type==="transfer") decideTR(r.id,"rejected");
+                      else if(r._type==="punchfix") decidePF(r.id,"rejected");
+                    }} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
+                  </>}
+                  {isApproved&&r._type==="leave"&&<button onClick={()=>cancelLv(r.id)} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
+                </div>
+              </td>
+            </tr>;
+          })}</tbody>
+        </table>}
+    </div>
+  </div>;
+}
+
+// ── EarlyRequest (Employee) ───────────────────────────────────────────────────
+function EarlyRequest({emp,shifts,otReqs,shiftDefsData,reload}){
+  const [form,setForm]=useState({date:today(),requestedStart:"",reason:""}),[sub,setSub]=useState(false);
+  const _defs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+  const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===form.date);
+  const def=_defs[shiftRow?.shiftType||"off"]||_defs.off||SHIFT_DEFS.off;
+  const myReqs=(otReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.type==="early");
+  const submit=async()=>{
+    if(!form.requestedStart||!form.reason)return;
+    try{
+      const data=convertTo({id:newId(),empId:emp.id,date:form.date,shiftEnd:def.start||"―",requestedEnd:form.requestedStart,reason:form.reason,status:"pending",type:"early"},OT_INV);
+      await gasSave("残業申請",data);
+      setForm({date:today(),requestedStart:"",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      await reload();
+    }catch(e){alert("申請失敗："+e.message);}
+  };
+  return <div>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:420}}>
+      <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>早出申請</div>
+      <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>対象日</div><input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>シフト開始：<strong>{def.start||"―"}</strong> → 早出開始時刻</div>
+        <input type="time" value={form.requestedStart} onChange={e=>setForm(p=>({...p,requestedStart:e.target.value}))} style={iS}/>
+      </div>
+      <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>早出理由</div>
+        <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={3} placeholder="例：患者対応のため" style={{...iS,resize:"vertical"}}/></div>
+      <button onClick={submit} disabled={!form.requestedStart||!form.reason} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:(!form.requestedStart||!form.reason)?0.4:1}}>申請する</button>
+      {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
+    </div>
+    {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>{["日付","早出開始","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{myReqs.sort((a,b)=>b.date<a.date?-1:1).map(r=><tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+          <td style={tdS}>{r.date}</td>
+          <td style={tdS}>{r.requestedEnd}</td>
+          <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
+// ── OvertimeRequest (理学療法士正社員向け時間外申請) ──────────────────────────
+function OvertimeRequest({emp,shifts,otReqs,shiftDefsData,reload}){
+  const [form,setForm]=useState({date:today(),requestedEnd:"",reason:""}),[sub,setSub]=useState(false);
+  const _defs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+  const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===form.date);
+  const def=_defs[shiftRow?.shiftType||"off"]||_defs.off||SHIFT_DEFS.off;
+  const myReqs=(otReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.type==="overtime");
+  const submit=async()=>{
+    if(!form.requestedEnd||!form.reason)return;
+    try{
+      const data=convertTo({id:newId(),empId:emp.id,date:form.date,shiftEnd:def.end||"―",requestedEnd:form.requestedEnd,reason:form.reason,status:"pending",type:"overtime"},OT_INV);
+      await gasSave("残業申請",data);
+      setForm({date:today(),requestedEnd:"",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      await reload();
+    }catch(e){alert("申請失敗："+e.message);}
+  };
+  return <div>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:420}}>
+      <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>時間外申請</div>
+      <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>対象日</div><input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>シフト終了：<strong>{def.end||"―"}</strong> → 申請退勤時刻</div>
+        <input type="time" value={form.requestedEnd} onChange={e=>setForm(p=>({...p,requestedEnd:e.target.value}))} style={iS}/>
+      </div>
+      <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>時間外理由</div>
+        <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={3} placeholder="例：患者対応のため" style={{...iS,resize:"vertical"}}/></div>
+      <button onClick={submit} disabled={!form.requestedEnd||!form.reason} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:(!form.requestedEnd||!form.reason)?0.4:1}}>申請する</button>
+      {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
+    </div>
+    {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>{["日付","申請退勤","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{myReqs.sort((a,b)=>b.date<a.date?-1:1).map(r=><tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+          <td style={tdS}>{r.date}</td>
+          <td style={tdS}>{r.requestedEnd}</td>
+          <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
 // ── RequestTab ────────────────────────────────────────────────────────────────
-function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,reload}){
+function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,transferReqs,reload}){
+  const rule=getOtRule(emp);
   const hasLeave=(()=>{const lv=leaves.find(l=>String(l.empId)===String(emp.id));if(!lv) return false; return calcLeaveRemainingCompat(lv,lvReqs,emp.id)>0||safeParseJSON(lv.records,[]).some(r=>r.type==="grant");})();
-  const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
-  const sections=[...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),...(isOTTarget?[{key:"overtime",label:"残業申請"}]:[]),{key:"punchfix",label:"打刻修正申請"}];
+  const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート"; // 残業申請
+  const isOvertimeRequestTarget=rule.type==="overtime_request"; // 時間外申請（理学療法士正社員）
+  const isSeishain=emp.type==="正社員"; // 振替申請は正社員のみ
+  const sections=[
+    ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
+    ...(isOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
+    ...(isOvertimeRequestTarget?[{key:"overtime_request",label:"時間外申請"}]:[]),
+    {key:"early",label:"早出申請"},
+    ...(isSeishain?[{key:"transfer",label:"振替申請"}]:[]),
+    {key:"punchfix",label:"打刻修正申請"},
+  ];
   const firstKey=sections[0]?.key||"punchfix";
   const [section,setSection]=useState(firstKey);
   const validSection=sections.find(s=>s.key===section)?section:firstKey;
   return <div>
-    {sections.length>1&&<div style={{display:"flex",gap:0,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)"}}>
+    {sections.length>1&&<div style={{display:"flex",gap:0,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)",flexWrap:"wrap"}}>
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
   </div>;
 }
@@ -2297,7 +3013,7 @@ function PunchFixRequest({emp,punches,punchFixReqs,shifts,shiftDefsData,reload})
 }
 
 // ── MyShift (Employee) ────────────────────────────────────────────────────────
-function MyShift({emp,shifts,lvReqs,shiftDefsData}){
+function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
   const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
   const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
   const first=firstDow(year,month),last=daysInMonth(year,month);
@@ -2306,9 +3022,36 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData}){
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   const td=today();
+  const isPTpart=emp.role==="理学療法士"&&emp.type==="パート";
+
+  // 勤務状況バッジを計算
+  const getStatusBadges=(ds,def)=>{
+    if(!isPTpart||ds>td||!def.start) return [];
+    const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+    const badges=[];
+    if(!punch){
+      badges.push({label:"欠勤",bg:"#FCEBEB",color:"#A32D2D"});
+      return badges;
+    }
+    const shiftStart=toMin(def.start);
+    const shiftEnd=toMin(def.end);
+    const punchIn=punch.in?toMin(punch.in):null;
+    const punchOut=punch.out?toMin(punch.out):null;
+    let isLate=false,isEarly=false;
+    if(punchIn!==null&&punchIn>shiftStart) isLate=true;
+    if(punchOut!==null&&punchOut<shiftEnd) isEarly=true;
+    if(!isLate&&!isEarly) badges.push({label:"勤務済",bg:"#EAF3DE",color:"#3B6D11"});
+    if(isLate) badges.push({label:"遅刻",bg:"#FAEEDA",color:"#854F0B"});
+    if(isEarly) badges.push({label:"早退",bg:"#FAEEDA",color:"#854F0B"});
+    // 承認済み残業申請
+    const ot=otReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+    if(ot) badges.push({label:"残業",bg:"#EEEDFE",color:"#3C3489"});
+    return badges;
+  };
+
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>{DOW_JP.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,color:i===0?"#A32D2D":i===6?"#185FA5":"var(--color-text-secondary)",padding:"4px 0"}}>{d}</div>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>{DOW_JP.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:13,color:i===0?"#A32D2D":i===6?"#185FA5":"var(--color-text-secondary)",padding:"4px 0",fontWeight:500}}>{d}</div>)}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{cells.map((d,i)=>{
       if(!d) return <div key={i}/>;
       const ds=`${year}-${pad(month)}-${pad(d)}`;
@@ -2319,11 +3062,26 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData}){
       const def=_myDefs[(isLeave&&!leaveHalf)?"off":shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off;
       const dow=new Date(year,month-1,d).getDay(),isToday=ds===td,hol=isHoliday(ds);
       const leaveLabel=leaveHalf==="am"?"午前有給":leaveHalf==="pm"?"午後有給":"有給";
-      return <div key={i} style={{borderRadius:8,padding:"6px 4px",textAlign:"center",background:isLeave&&!leaveHalf?"#E1F5EE":def.color,border:isToday?"2px solid #185FA5":"0.5px solid transparent",minHeight:52}}>
-        <div style={{fontSize:11,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":def.tc,marginBottom:2}}>{d}{hol&&<span style={{fontSize:8,marginLeft:2,color:"#A32D2D"}}>祝</span>}</div>
-        {isLeave?<div style={{fontSize:9,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:9,color:def.tc,fontWeight:500}}>{def.label}</div>}
-        {!isLeave&&def.start&&<div style={{fontSize:8,color:def.tc,opacity:0.8}}>{def.start}</div>}
-        {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:8,color:def.tc,opacity:0.8}}>{def.start}〜{def.end}</div>}
+      const statusBadges=getStatusBadges(ds,def);
+      return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:isLeave&&!leaveHalf?"#E1F5EE":def.color,border:isToday?"2px solid #185FA5":"0.5px solid transparent",minHeight:72}}>
+        {/* 日付：左上大きく */}
+        <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":def.tc,marginBottom:4}}>
+          {d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}
+        </div>
+        {/* シフト名とバッジを横並び */}
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
+          <div>
+            {isLeave
+              ?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>
+              :<div style={{fontSize:13,color:def.tc,fontWeight:600}}>{def.label}</div>}
+            {!isLeave&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
+            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
+          </div>
+          {/* バッジ：縦に並べる */}
+          {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
+            {statusBadges.map((b,bi)=><span key={bi} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:b.bg,color:b.color,whiteSpace:"nowrap"}}>{b.label}</span>)}
+          </div>}
+        </div>
       </div>;
     })}</div>
   </div>;
@@ -2457,22 +3215,24 @@ export default function App(){
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState(null);
   const [loginId,setLoginId]=useState(null);
-  const [tab,setTab]=useState(0);
+  const [tabName,setTabName]=useState("");
   const [showPwChange,setShowPwChange]=useState(false);
   const [shiftDefSaving,setShiftDefSaving]=useState(false);
   const [punchFixReqs,setPunchFixReqs]=useState([]);
   const [weekPatterns,setWeekPatterns]=useState([]);
+  const [transferReqs,setTransferReqs]=useState([]);
 
   const loadAll=useCallback(async()=>{
     try{
       const cy=new Date().getFullYear();
       await Promise.all([fetchHolidays(cy),fetchHolidays(cy+1)]);
-      const [e,s,p,o,lv,lr,pw,sd,pfr,wp]=await Promise.all([
+      const [e,s,p,o,lv,lr,pw,sd,pfr,wp,tr]=await Promise.all([
         gasGet("従業員"),gasGet("シフト"),gasGet("打刻"),
         gasGet("残業申請"),gasGet("有給"),gasGet("有給申請"),gasGet("パスワード"),
         gasGet("シフト定義").catch(()=>[]),
         gasGet("打刻修正申請").catch(()=>[]),
         gasGet("週間パターン").catch(()=>[]),
+        gasGet("振替申請").catch(()=>[]),
       ]);
       setEmps(e.map(r=>convertFrom(r,EMP_MAP)));
       setShifts(s.map(r=>convertFrom(r,SHIFT_MAP)));
@@ -2483,6 +3243,7 @@ export default function App(){
       setPasswords(pw.map(r=>convertFrom(r,PW_MAP)));
       setPunchFixReqs(pfr.map(r=>convertFrom(r,PUNCH_FIX_MAP)));
       setWeekPatterns(wp.map(r=>convertFrom(r,WEEK_PAT_MAP)));
+      setTransferReqs(tr.map(r=>convertFrom(r,TRANSFER_MAP)));
       // シフト定義を部署別オブジェクトに変換
       if(sd.length>0){
         const byDept={};
@@ -2560,7 +3321,7 @@ export default function App(){
   if(loading) return <Loading/>;
   if(error) return <Err msg={error}/>;
 
-  if(!loginId) return <LoginScreen emps={emps} passwords={passwords} onLogin={id=>{setLoginId(id);setTab(0);}}/>;
+  if(!loginId) return <LoginScreen emps={emps} passwords={passwords} onLogin={id=>{setLoginId(id);setTabName("");}}/>;
 
   const isAdmin=loginId==="admin";
   const cur=emps.find(e=>String(e.id)===String(loginId));
@@ -2571,11 +3332,15 @@ export default function App(){
   const leadPendOT=isLead?otReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0;
   const leadPendLV=isLead?lvReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0;
   const leadPendPF=isLead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0;
+  const leadPendTR=isLead?transferReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0;
   const pendOT=otReqs.filter(r=>r.status==="pending").length;
   const pendLV=lvReqs.filter(r=>r.status==="pending").length;
-  const aTabs=["従業員管理","シフト設定","シフト","残業申請","有給管理","照合レポート","打刻修正"];
-  const lTabs=["打刻","申請","マイシフト","打刻履歴","シフト管理","シフト設定","残業申請","有給管理","打刻修正"];
-  const eTabs=["打刻","申請","マイシフト","打刻履歴"];
+  const pendTR=transferReqs.filter(r=>r.status==="pending").length;
+  const aTabs=["従業員管理","シフト設定","シフト","申請許可","有給管理","タイムカード","打刻修正"];
+  const isPTpart=cur&&cur.role==="理学療法士"&&cur.type==="パート";
+  // 責任者タブ："---"はセパレーター
+  const lTabs=["打刻","申請","マイシフト","打刻履歴","---","シフト管理","シフト設定","申請許可","有給管理","タイムカード","打刻修正"];
+  const eTabs=isPTpart?["打刻","申請","マイシフト"]:["打刻","申請","マイシフト","打刻履歴"];
   const tabs=isAdmin?aTabs:isLead?lTabs:eTabs;
 
   return <div style={{fontFamily:"var(--font-sans)",padding:"0 0 2rem"}}>
@@ -2587,7 +3352,7 @@ export default function App(){
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         {!isAdmin&&!isLead&&cur&&<button onClick={()=>setShowPwChange(true)} style={{...bS,fontSize:12,padding:"6px 12px"}}>PW変更</button>}
         <button onClick={()=>{if(shiftDefSaving)return;loadAll();}} disabled={shiftDefSaving||loading} title="データを最新の状態に更新" style={{...bS,fontSize:15,padding:"6px 10px",opacity:shiftDefSaving||loading?0.4:1,cursor:shiftDefSaving||loading?"not-allowed":"pointer",minWidth:36}}>↻</button>
-        <button onClick={()=>{if(shiftDefSaving)return;setLoginId(null);setTab(0);setShowPwChange(false);}} disabled={shiftDefSaving} style={{...bS,opacity:shiftDefSaving?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>ログアウト</button>
+        <button onClick={()=>{if(shiftDefSaving)return;setLoginId(null);setTabName("");setShowPwChange(false);}} disabled={shiftDefSaving} style={{...bS,opacity:shiftDefSaving?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>ログアウト</button>
       </div>
     </div>
 
@@ -2595,40 +3360,58 @@ export default function App(){
       <ChangePw emp={cur} passwords={passwords} reload={loadAll} onClose={()=>setShowPwChange(false)}/>
     </div>}
 
-    <div style={{display:"flex",gap:4,padding:4,borderRadius:12,...crd,marginBottom:"1rem",flexWrap:"wrap"}}>
-      {tabs.map((t,i)=><button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTab(i);setShowPwChange(false);}} style={{...nB(tab===i),opacity:shiftDefSaving&&tab!==i?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>
-        {t}
-        {isAdmin&&t==="残業申請"&&pendOT>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{pendOT}</span>}
-        {isAdmin&&t==="有給管理"&&pendLV>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#1D9E75",color:"white"}}>{pendLV}</span>}
-        {isLead&&t==="残業申請"&&leadPendOT>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendOT}</span>}
-        {isLead&&t==="有給管理"&&leadPendLV>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#1D9E75",color:"white"}}>{leadPendLV}</span>}
-        {isLead&&t==="打刻修正"&&leadPendPF>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendPF}</span>}
-      </button>)}
+    <div style={{display:"flex",gap:4,padding:4,borderRadius:12,...crd,marginBottom:"1rem",flexWrap:"wrap",alignItems:"center"}}>
+      {tabs.map((t,i)=>{
+        if(t==="---") return <div key="sep" style={{width:"1px",height:24,background:"var(--color-border-secondary)",margin:"0 4px"}}/>;
+        const pendAll=pendOT+pendLV+pendTR+(punchFixReqs.filter(r=>r.status==="pending").length);
+        const leadPendAll=leadPendOT+leadPendLV+leadPendTR+(punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length);
+        return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{...nB(tabName===t||(tabName===""&&i===0&&t!=="---")),opacity:shiftDefSaving&&tab!==i?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>
+          {t}
+          {isAdmin&&t==="申請許可"&&pendAll>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{pendAll}</span>}
+          {isLead&&t==="申請許可"&&leadPendAll>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendAll}</span>}
+        </button>;
+      })}
     </div>
     <div>
       {isAdmin&&(()=>{
-        const t=aTabs[tab];
+        const t=tabName||aTabs[0];
         if(t==="従業員管理") return <EmpManager emps={emps} passwords={passwords} reload={loadAll}/>;
         if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving}/>;
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs}/>;
-        if(t==="残業申請") return <OTApproval emps={emps} otReqs={otReqs} reload={loadAll}/>;
+        if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
-        if(t==="照合レポート") return <ReportView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true}/>;
+        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true}/>;
         if(t==="打刻修正") return <PunchEditor emps={emps} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs} reload={loadAll}/>;
         return null;
       })()}
       {!isAdmin&&cur&&(()=>{
-        const t=tabs[tab];
+        const t=tabName||(tabs.find(x=>x!=="---")||"");
         if(t==="打刻") return <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} onPunchesUpdate={setPunches}/>;
-        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} reload={loadAll}/>;
-        if(t==="マイシフト") return <MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData}/>;
+        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} reload={loadAll}/>;
+        if(t==="マイシフト") return <MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
         if(t==="シフト管理"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs}/>;
         if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving}/>;
-        // 責任者の承認系タブ（担当部署の従業員のみ）
-        if(t==="残業申請"&&isLead) return <OTApproval emps={emps.filter(e=>leadRolesList.includes(e.role))} otReqs={otReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} reload={loadAll}/>;
+        if(t==="申請許可"&&isLead){
+          const isOTLead=leadRolesList.includes("理学療法士");
+          const leadEmps=emps.filter(e=>leadRolesList.includes(e.role));
+          return <ApprovalCenter
+            emps={leadEmps}
+            otReqs={otReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
+            lvReqs={lvReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
+            transferReqs={transferReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
+            punchFixReqs={punchFixReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
+            punches={punches}
+            shifts={shifts}
+            shiftDefsData={shiftDefsData}
+            leaves={leaves}
+            reload={loadAll}
+            showOT={isOTLead}
+          />;
+        }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
         if(t==="打刻修正"&&isLead) return <PunchEditor emps={emps.filter(e=>leadRolesList.includes(e.role))} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} reload={loadAll}/>;
+        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList}/>;
         return null;
       })()}
     </div>
