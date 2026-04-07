@@ -2253,17 +2253,84 @@ function PunchEditor({emps,punches:punchesFromProps,shifts,shiftDefsData,punchFi
   const [empId,setEmpId]=useState(emps[0]?.id||""),[year,setYear]=useState(CY),[month,setMonth]=useState(CM),[editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""});
   const [localPunches,setLocalPunches]=useState(null);
   const [pfTab,setPfTab]=useState("editor");
+  // 一括入力モード
+  const [bulkMode,setBulkMode]=useState(false);
+  const [bulkData,setBulkData]=useState({}); // {ds: {in:"", out:""}}
+  const [bulkSaving,setBulkSaving]=useState(false);
+  const [bulkMsg,setBulkMsg]=useState("");
   const punches=localPunches||punchesFromProps;
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   const last=daysInMonth(year,month);
+  const empObj=emps.find(e=>String(e.id)===String(empId));
+  const empD=getShiftDefsByRole(empObj?.role||"理学療法士",shiftDefsData||{});
   const rows=Array.from({length:last},(_,i)=>{
     const d=i+1,ds=`${year}-${pad(month)}-${pad(d)}`;
-    const punch=punches.find(p=>p.empId===empId&&p.date===ds);
-    const shiftRow=shifts.find(s=>s.empId===empId&&s.date===ds);
-    const empD=getShiftDefsByRole(emps.find(e=>String(e.id)===String(empId))?.role||"理学療法士",shiftDefsData||{});
+    const punch=punches.find(p=>String(p.empId)===String(empId)&&p.date===ds);
+    const shiftRow=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds);
     return {d,dow:new Date(year,month-1,d).getDay(),ds,punch,def:empD[shiftRow?.shiftType||"off"]||empD.off||SHIFT_DEFS.off};
   });
+
+  // 一括入力モード開始：既存打刻を初期値として読み込む
+  const startBulk=()=>{
+    const init={};
+    rows.forEach(r=>{
+      init[r.ds]={in:r.punch?.in||"", out:r.punch?.out||""};
+    });
+    setBulkData(init);
+    setBulkMsg("");
+    setBulkMode(true);
+  };
+  // 一括入力：シフトから出退勤時刻を一括セット
+  const fillFromShift=()=>{
+    const next={...bulkData};
+    rows.forEach(r=>{
+      if(r.def.start&&r.def.end){
+        next[r.ds]={in:r.def.start, out:r.def.end};
+      }
+    });
+    setBulkData(next);
+  };
+  // 一括入力：休日をクリア
+  const clearOff=()=>{
+    const next={...bulkData};
+    rows.forEach(r=>{
+      if(!r.def.start) next[r.ds]={in:"",out:""};
+    });
+    setBulkData(next);
+  };
+  // 一括保存
+  const saveBulk=async()=>{
+    const toSave=rows.filter(r=>{
+      const b=bulkData[r.ds];
+      return b&&b.in; // 出勤時刻があるものだけ保存
+    });
+    const toDelete=rows.filter(r=>{
+      const b=bulkData[r.ds];
+      return (!b||!b.in)&&r.punch; // 出勤時刻なし＋既存打刻あり→削除
+    });
+    if(toSave.length===0&&toDelete.length===0){setBulkMsg("変更なし");return;}
+    if(!confirm(`${toSave.length}件を保存、${toDelete.length}件を削除します。よろしいですか？`))return;
+    setBulkSaving(true);setBulkMsg("");
+    try{
+      // 保存
+      const saveList=toSave.map(r=>{
+        const b=bulkData[r.ds];
+        const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
+        return convertTo({id:r.punch?.id||newId(),empId,date:r.ds,in:b.in,out:b.out||"",break:breakMin,adjusted:false},PUNCH_INV);
+      });
+      if(saveList.length>0) await gasSaveMany("打刻",saveList);
+      // 削除（1件ずつ）
+      for(const r of toDelete){
+        await gasDelete("打刻",r.punch.id);
+      }
+      await reload();
+      setBulkMode(false);
+      setBulkMsg(`${toSave.length}件保存、${toDelete.length}件削除しました`);
+      setTimeout(()=>setBulkMsg(""),4000);
+    }catch(e){alert("一括保存失敗："+e.message);}
+    setBulkSaving(false);
+  };
   const saveEdit=async ds=>{
     if(!editForm.in){
       const punch=punches.find(p=>p.empId===empId&&p.date===ds);
@@ -2314,8 +2381,63 @@ function PunchEditor({emps,punches:punchesFromProps,shifts,shiftDefsData,punchFi
     {pfTab==="editor"&&<>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
-        <select value={empId} onChange={e=>setEmpId(e.target.value)} style={{...iS,width:"auto"}}>{emps.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}）</option>)}</select>
+        <select value={empId} onChange={e=>{setEmpId(e.target.value);setBulkMode(false);}} style={{...iS,width:"auto"}}>{emps.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}）</option>)}</select>
+        {!bulkMode
+          ?<button onClick={startBulk} style={{...bP,padding:"8px 16px",fontSize:13}}>一括入力</button>
+          :<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={fillFromShift} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:12,cursor:"pointer",fontWeight:500}}>シフトから自動入力</button>
+            <button onClick={clearOff} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-secondary)",fontSize:12,cursor:"pointer"}}>休日をクリア</button>
+            <button onClick={saveBulk} disabled={bulkSaving} style={{...bP,padding:"8px 16px",fontSize:13,opacity:bulkSaving?0.5:1}}>{bulkSaving?"保存中...":"まとめて保存"}</button>
+            <button onClick={()=>setBulkMode(false)} disabled={bulkSaving} style={{...bS,padding:"8px 12px",fontSize:13}}>キャンセル</button>
+          </div>
+        }
+        {bulkMsg&&<span style={{fontSize:12,color:"#3B6D11",padding:"4px 10px",background:"#EAF3DE",borderRadius:6}}>{bulkMsg}</span>}
       </div>
+
+      {/* 一括入力モード */}
+      {bulkMode&&<div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
+        <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-secondary)",background:"#F5F9FE"}}>
+          出勤時刻を入力した日が保存されます。空欄の日は打刻なし（既存打刻がある場合は削除）になります。
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead><tr>
+            <th style={thS}>日</th><th style={thS}>曜</th><th style={thS}>シフト</th>
+            <th style={thS}>出勤</th><th style={thS}>退勤</th><th style={{...thS,color:"var(--color-text-tertiary)"}}>実働(参考)</th>
+          </tr></thead>
+          <tbody>{rows.map(r=>{
+            const b=bulkData[r.ds]||{in:"",out:""};
+            const dc=r.dow===0?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+            const isOff=!r.def.start;
+            const wm=b.in&&b.out?Math.max(0,toMin(b.out)-toMin(b.in)-(r.def.breakMin!=null?r.def.breakMin:BREAK_MIN)):null;
+            const hasExisting=!!r.punch;
+            const willDelete=hasExisting&&!b.in;
+            return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:willDelete?"#FFF5F5":isOff&&b.in?"#FFFCF5":b.in?"":""}}>
+              <td style={tdS}>{month}/{r.d}{hasExisting&&<span style={{marginLeft:4,fontSize:9,padding:"1px 4px",borderRadius:3,background:"#E6F1FB",color:"#185FA5"}}>既存</span>}</td>
+              <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+              <td style={tdS}><span style={{fontSize:11,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={{padding:"4px 6px"}}>
+                <input type="time" value={b.in} onChange={e=>setBulkData(p=>({...p,[r.ds]:{...p[r.ds],in:e.target.value}}))}
+                  style={{...iS,width:110,fontSize:13,padding:"5px 8px",background:b.in?"#fff":"var(--color-background-secondary)"}}/>
+              </td>
+              <td style={{padding:"4px 6px"}}>
+                <input type="time" value={b.out} onChange={e=>setBulkData(p=>({...p,[r.ds]:{...p[r.ds],out:e.target.value}}))}
+                  disabled={!b.in}
+                  style={{...iS,width:110,fontSize:13,padding:"5px 8px",opacity:b.in?1:0.4,background:b.out?"#fff":"var(--color-background-secondary)"}}/>
+              </td>
+              <td style={{...tdS,color:wm!=null?"var(--color-text-primary)":"var(--color-text-tertiary)",fontWeight:wm!=null?500:400}}>
+                {wm!=null?toHStr(wm):willDelete?"― (削除)":"―"}
+              </td>
+            </tr>;
+          })}</tbody>
+        </table>
+        <div style={{padding:"10px 14px",borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={saveBulk} disabled={bulkSaving} style={{...bP,padding:"10px 24px",opacity:bulkSaving?0.5:1}}>{bulkSaving?"保存中...":"まとめて保存"}</button>
+          <button onClick={()=>setBulkMode(false)} disabled={bulkSaving} style={bS}>キャンセル</button>
+        </div>
+      </div>}
+
+      {/* 通常の1日ずつ編集テーブル（一括モード中は非表示） */}
+      {!bulkMode&&<>
       <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8,padding:"6px 10px",background:"var(--color-background-secondary)",borderRadius:8,display:"inline-block"}}>打刻がない日も「追加」で登録できます。休憩時間はシフト定義の設定が自動適用されます。</div>
       <div style={{...crd,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -2348,6 +2470,7 @@ function PunchEditor({emps,punches:punchesFromProps,shifts,shiftDefsData,punchFi
           })}</tbody>
         </table>
       </div>
+      </>}{/* end !bulkMode */}
     </>}
     {pfTab==="requests"&&<div>
       {pendingPFR.length===0&&donePFR.length===0&&<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>申請はありません</div>}
