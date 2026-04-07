@@ -1977,6 +1977,47 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     });
   })();
 
+  // ── 一括入力モード ────────────────────────────────────────────────────────
+  const [bulkMode,setBulkMode]=useState(false);
+  const [bulkData,setBulkData]=useState({});
+  const [bulkSaving,setBulkSaving]=useState(false);
+  const [bulkMsg,setBulkMsg]=useState("");
+  const startBulk=()=>{
+    const init={};
+    rows.forEach(r=>{ init[r.ds]={in:r.punch?.in||"",out:r.punch?.out||""}; });
+    setBulkData(init); setBulkMsg(""); setBulkMode(true); setEditKey(null);
+  };
+  const fillFromShift=()=>{
+    const next={...bulkData};
+    rows.forEach(r=>{ if(r.def.start&&r.def.end) next[r.ds]={in:r.def.start,out:r.def.end}; });
+    setBulkData(next);
+  };
+  const clearOff=()=>{
+    const next={...bulkData};
+    rows.forEach(r=>{ if(!r.def.start) next[r.ds]={in:"",out:""}; });
+    setBulkData(next);
+  };
+  const saveBulk=async()=>{
+    const toSave=rows.filter(r=>{ const b=bulkData[r.ds]; return b&&b.in; });
+    const toDelete=rows.filter(r=>{ const b=bulkData[r.ds]; return (!b||!b.in)&&r.punch; });
+    if(toSave.length===0&&toDelete.length===0){setBulkMsg("変更なし");return;}
+    if(!confirm(`${toSave.length}件を保存、${toDelete.length}件を削除します。よろしいですか？`))return;
+    setBulkSaving(true); setBulkMsg("");
+    try{
+      const saveList=toSave.map(r=>{
+        const b=bulkData[r.ds];
+        return convertTo({id:r.punch?.id||newId(),empId:emp.id,date:r.ds,in:b.in,out:b.out||"",break:r.def.breakMin!=null?r.def.breakMin:BREAK_MIN,adjusted:false},PUNCH_INV);
+      });
+      if(saveList.length>0) await gasSaveMany("打刻",saveList);
+      for(const r of toDelete) await gasDelete("打刻",r.punch.id);
+      await reload();
+      setBulkMode(false);
+      setBulkMsg(`${toSave.length}件保存、${toDelete.length}件削除しました`);
+      setTimeout(()=>setBulkMsg(""),4000);
+    }catch(e){alert("一括保存失敗："+e.message);}
+    setBulkSaving(false);
+  };
+
   // ── インライン打刻修正 ──────────────────────────────────────────────────────
   const [editKey,setEditKey]=useState(null);
   const [editForm,setEditForm]=useState({in:"",out:""});
@@ -2140,14 +2181,54 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <button onClick={nextM} style={bS}>›</button>
         <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
       </div>
-      {!selfView&&<select value={rf} onChange={e=>{setRf(e.target.value);setEmpId("");}} style={{...iS,width:"auto"}}>
+      {!selfView&&<select value={rf} onChange={e=>{setRf(e.target.value);setEmpId("");setBulkMode(false);}} style={{...iS,width:"auto"}}>
         <option value="">全職種</option>
         {[...new Set(targetEmps.map(e=>e.role))].map(r=><option key={r}>{r}</option>)}
       </select>}
-      {!selfView&&<select value={empId} onChange={e=>setEmpId(e.target.value)} style={{...iS,width:"auto"}}>
+      {!selfView&&<select value={empId} onChange={e=>{setEmpId(e.target.value);setBulkMode(false);}} style={{...iS,width:"auto"}}>
         {filteredEmps.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}
       </select>}
+      {isAdmin&&emp&&!bulkMode&&<button onClick={startBulk} style={{...bP,padding:"8px 16px",fontSize:13}}>一括入力</button>}
+      {isAdmin&&emp&&bulkMode&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <button onClick={fillFromShift} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:12,cursor:"pointer",fontWeight:500}}>シフトから自動入力</button>
+        <button onClick={clearOff} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-secondary)",fontSize:12,cursor:"pointer"}}>休日をクリア</button>
+        <button onClick={saveBulk} disabled={bulkSaving} style={{...bP,padding:"8px 16px",fontSize:13,opacity:bulkSaving?0.5:1}}>{bulkSaving?"保存中...":"まとめて保存"}</button>
+        <button onClick={()=>setBulkMode(false)} disabled={bulkSaving} style={{...bS,padding:"8px 12px",fontSize:13}}>キャンセル</button>
+      </div>}
+      {bulkMsg&&<span style={{fontSize:12,color:"#3B6D11",padding:"4px 10px",background:"#EAF3DE",borderRadius:6}}>{bulkMsg}</span>}
     </div>
+
+    {/* 一括入力モード */}
+    {isAdmin&&bulkMode&&emp&&<div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
+      <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-secondary)",background:"#F5F9FE"}}>
+        出勤時刻を入力した日が保存されます。空欄の日は打刻なし（既存打刻がある場合は削除）になります。
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+        <thead><tr>
+          <th style={thS}>日</th><th style={thS}>曜</th><th style={thS}>シフト</th>
+          <th style={thS}>出勤</th><th style={thS}>退勤</th><th style={{...thS,color:"var(--color-text-tertiary)"}}>実働(参考)</th>
+        </tr></thead>
+        <tbody>{rows.map(r=>{
+          const b=bulkData[r.ds]||{in:"",out:""};
+          const dc=r.dow===0?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+          const isOff=!r.def.start;
+          const wm=b.in&&b.out?Math.max(0,toMin(b.out)-toMin(b.in)-(r.def.breakMin!=null?r.def.breakMin:BREAK_MIN)):null;
+          const willDelete=!!r.punch&&!b.in;
+          return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:willDelete?"#FFF5F5":isOff&&b.in?"#FFFCF5":""}}>
+            <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.punch&&<span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:"#E6F1FB",color:"#185FA5",marginLeft:3}}>既存</span>}</td>
+            <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+            <td style={tdS}><span style={{fontSize:11,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={b.in} onChange={e=>setBulkData(p=>({...p,[r.ds]:{...p[r.ds],in:e.target.value}}))} style={{...iS,width:110,fontSize:13,padding:"5px 8px",background:b.in?"#fff":"var(--color-background-secondary)"}}/></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={b.out} onChange={e=>setBulkData(p=>({...p,[r.ds]:{...p[r.ds],out:e.target.value}}))} disabled={!b.in} style={{...iS,width:110,fontSize:13,padding:"5px 8px",opacity:b.in?1:0.4,background:b.out?"#fff":"var(--color-background-secondary)"}}/></td>
+            <td style={{...tdS,color:wm!=null?"var(--color-text-primary)":"var(--color-text-tertiary)",fontWeight:wm!=null?500:400}}>{wm!=null?toHStr(wm):willDelete?"― (削除)":"―"}</td>
+          </tr>;
+        })}</tbody>
+      </table>
+      <div style={{padding:"10px 14px",borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={saveBulk} disabled={bulkSaving} style={{...bP,padding:"10px 24px",opacity:bulkSaving?0.5:1}}>{bulkSaving?"保存中...":"まとめて保存"}</button>
+        <button onClick={()=>setBulkMode(false)} disabled={bulkSaving} style={bS}>キャンセル</button>
+      </div>
+    </div>}
 
     {/* サブタブ（理学療法士パートのみ） */}
     {subTabs.length>0&&<div style={{display:"flex",gap:4,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)"}}>
@@ -3805,13 +3886,13 @@ export default function App(){
   const pendOT=otReqs.filter(r=>r.status==="pending").length;
   const pendLV=lvReqs.filter(r=>r.status==="pending").length;
   const pendTR=transferReqs.filter(r=>r.status==="pending").length;
-  const aTabs=["従業員管理","シフト","申請許可","有給管理","タイムカード","打刻修正"];
+  const aTabs=["従業員管理","シフト","申請許可","有給管理","タイムカード"];
   const isPTpart=cur&&cur.role==="理学療法士"&&cur.type==="パート";
   // 責任者タブ："---"はセパレーター
   const isPTlead=isLead&&cur&&cur.role==="理学療法士";
   const lTabs=isPTlead
     // 理学療法士責任者：自分の勤怠＋月次集計 | 部署管理
-    ?["打刻","申請","マイシフト","打刻履歴","月次集計","---","シフト作成","申請許可","有給管理","タイムカード","打刻修正"]
+    ?["打刻","申請","マイシフト","打刻履歴","月次集計","---","シフト作成","申請許可","有給管理","タイムカード"]
     // その他責任者：自分の勤怠＋月次レポート | 部署管理（タイムカードなし）
     :["打刻","申請","マイシフト","月次レポート","---","シフト作成","申請許可"];
   const eTabs=isPTpart
@@ -3857,7 +3938,6 @@ export default function App(){
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
         if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll}/>;
-        if(t==="打刻修正") return <PunchEditor emps={emps} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs} reload={loadAll}/>;
         return null;
       })()}
       {!isAdmin&&cur&&(()=>{
@@ -3890,7 +3970,6 @@ export default function App(){
           />;
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
-        if(t==="打刻修正"&&isLead) return <PunchEditor emps={emps.filter(e=>leadRolesList.includes(e.role))} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} reload={loadAll}/>;
         if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll}/>;
         return null;
       })()}
