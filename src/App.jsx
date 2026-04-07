@@ -1889,9 +1889,9 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
 // ── TimecardView ──────────────────────────────────────────────────────────────
 const CLINIC_NAME = "医）松口整形外科クリニック";
 
-function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false}){
-  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
-  const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
+function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{}}){
+  const cur0=getCurrentPeriod();
+  const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month);
   const [rf,setRf]=useState("");
   const [empId,setEmpId]=useState("");
   const [subTab,setSubTab]=useState(0);
@@ -1905,13 +1905,126 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   const isPTpart=emp&&emp.role==="理学療法士"&&emp.type==="パート";
   const isSeishain=emp&&emp.type==="正社員";
 
+  // 15日締め期間を生成（前月16日〜当月15日）
+  const period=getPeriodRange(year,month);
+  const periodDays=(()=>{
+    const days=[];
+    let cur=new Date(period.start);
+    const end=new Date(period.end);
+    while(cur<=end){
+      days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
+      cur.setDate(cur.getDate()+1);
+    }
+    return days;
+  })();
+
   // サブタブ定義：理学療法士パートは生+調整済、正社員は調整済のみ、その他はタイムカードのみ
   const subTabs=isPTpart
     ?["生タイムカード","調整済＋照合レポート"]
     :[];
 
-  // buildRowsで日別データ取得
-  const rows=emp?buildRows(emp,shifts,punches,otReqs,lvReqs,year,month,shiftDefsData):[];
+  // buildRowsの代わりに期間日付でrows生成
+  const rows=(()=>{
+    if(!emp) return [];
+    const rule=getOtRule(emp);
+    const isApprovalType=rule.type==="approval";
+    const isOvertimeRequest=rule.type==="overtime_request";
+    const roundMin=rule.roundMin||0;
+    const _empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    return periodDays.map(ds=>{
+      const dow=new Date(ds).getDay();
+      const d=parseInt(ds.slice(8));
+      const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+      const st=shiftRow?.shiftType||"off";
+      const def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off;
+      const isOff=!def.start;
+      const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
+      const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+      const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+      const isShiftLeave=isAnyLeaveShift(st);
+      const isLeave=!!_lvMatch||isShiftLeave;
+      const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
+      const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
+      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false;
+      let adj=punch?.adjusted||false,earlyAdj=false;
+      const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
+      const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
+      if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+      if(punch&&punch.out&&punch.in){
+        const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00");
+        const im=toMin(punch.in),om=toMin(punch.out);
+        let imForWork=im;
+        if(!isOff&&def.start&&im<shiftStartMin){
+          if(approvedEarlyReq){imForWork=im;earlyAdj=false;}
+          else{imForWork=shiftStartMin;earlyAdj=true;}
+        }
+        let rawOtMin=Math.max(0,om-shiftEndMin);
+        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+        else if(isOvertimeRequest) otMin=rawOtMin;
+        else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
+        else otMin=rawOtMin;
+        awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
+        if(!isOff&&def.start){
+          if(im>shiftStartMin+1) late=true;
+          if(om<shiftEndMin-1) earlyLeave=true;
+          diffMin=om-shiftEndMin;
+        } else { otMin=isOff?awMin:otMin; }
+      } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
+      const isOffPunch=isOff&&!!punch?.out;
+      const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+    });
+  })();
+
+  // ── インライン打刻修正 ──────────────────────────────────────────────────────
+  const [editKey,setEditKey]=useState(null);
+  const [editForm,setEditForm]=useState({in:"",out:""});
+  const [editSaving,setEditSaving]=useState(false);
+  const startEdit=(r)=>{
+    setEditKey(r.ds);
+    setEditForm({in:r.punch?.in||"",out:r.punch?.out||""});
+  };
+  const cancelEdit=()=>{ setEditKey(null); setEditForm({in:"",out:""}); };
+  const saveEdit=async(r)=>{
+    setEditSaving(true);
+    try{
+      if(!editForm.in){
+        // 出勤時刻なし → 削除
+        if(r.punch) await gasDelete("打刻",r.punch.id);
+      } else {
+        const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
+        const data=convertTo({id:r.punch?.id||newId(),empId:emp.id,date:r.ds,in:editForm.in,out:editForm.out||"",break:breakMin,adjusted:false},PUNCH_INV);
+        await gasSave("打刻",data);
+      }
+      await reload();
+      setEditKey(null);
+    }catch(e){alert("保存失敗："+e.message);}
+    setEditSaving(false);
+  };
+  const delPunch=async(r)=>{
+    if(!confirm(`${r.ds.slice(5).replace("-","/")} の打刻を削除しますか？`))return;
+    try{ await gasDelete("打刻",r.punch.id); await reload(); }catch(e){alert("削除失敗："+e.message);}
+  };
+  // 編集行のUI（各テーブルで共用）
+  const EditRow=({r,colSpan=7})=>{
+    const wm=editForm.in&&editForm.out?Math.max(0,toMin(editForm.out)-toMin(editForm.in)-(r.def.breakMin!=null?r.def.breakMin:BREAK_MIN)):null;
+    return <tr style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
+      <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
+      <td style={tdS}>{DOW_JP[r.dow]}</td>
+      <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+      <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
+      <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
+      <td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>
+      <td colSpan={colSpan-5} style={tdS}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{...bP,padding:"4px 12px",fontSize:12,opacity:editSaving?0.5:1}}>{editSaving?"保存中...":"保存"}</button>
+          <button onClick={cancelEdit} disabled={editSaving} style={{...bS,padding:"4px 10px",fontSize:12}}>取消</button>
+          {r.punch&&<button onClick={()=>delPunch(r)} disabled={editSaving} style={{...bD,padding:"4px 10px",fontSize:12}}>削除</button>}
+        </div>
+      </td>
+    </tr>;
+  };
 
   // 調整済みの出退勤を計算（理学療法士パートのみ）
   const getAdjustedTime=(row)=>{
@@ -1940,8 +2053,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     const title=adjusted?"月次レポート":"生タイムカード";
     const w=window.open("","_blank");
     const tableRows=rows.map(r=>{
-      if(r.isOff&&!r.punch) return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>休日</td><td>―</td><td>―</td><td>―</td><td>―</td></tr>`;
-      if(r.isLeave) return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>${r.def.label||"有給"}</td><td colspan="4" style="text-align:center;color:#0F6E56">有給</td></tr>`;
+      if(r.isOff&&!r.punch) return `<tr><td>${r.ds.slice(5).replace("-","/")} </td><td>${DOW_JP[r.dow]}</td><td>休日</td><td>―</td><td>―</td><td>―</td><td>―</td></tr>`;
+      if(r.isLeave) return `<tr><td>${r.ds.slice(5).replace("-","/")} </td><td>${DOW_JP[r.dow]}</td><td>${r.def.label||"有給"}</td><td colspan="4" style="text-align:center;color:#0F6E56">有給</td></tr>`;
       const shiftLabel=r.def.start?`${r.def.label}（${r.def.start}〜${r.def.end}）`:"休日";
       let inT="―",outT="―",workMin=0;
       if(r.punch){
@@ -1958,7 +2071,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const diffMin=adjusted&&r.def.end&&outT!=="―"?toMin(outT)-toMin(r.def.end):r.diffMin;
       const diffStr=r.punch?.out?(diffMin>=0?"+":"")+toHStr(diffMin):"―";
       const status=r.absent?"欠勤":r.late&&r.earlyLeave?"遅刻・早退":r.late?"遅刻":r.earlyLeave?"早退":r.otMin>0?"残業":r.awMin>0?"正常":"―";
-      return `<tr><td>${month}/${r.d}</td><td>${DOW_JP[r.dow]}</td><td>${shiftLabel}</td><td>${inT}</td><td>${outT}</td><td>${wH}</td><td>${diffStr}</td>${adjusted?`<td>${status}</td>`:""}</tr>`;
+      return `<tr><td>${r.ds.slice(5).replace("-","/")} </td><td>${DOW_JP[r.dow]}</td><td>${shiftLabel}</td><td>${inT}</td><td>${outT}</td><td>${wH}</td><td>${diffStr}</td>${adjusted?`<td>${status}</td>`:""}</tr>`;
     }).join("");
 
     // 合計計算
@@ -2007,7 +2120,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
           <h2>${CLINIC_NAME}</h2>
-          <div class="meta">${title}　${year}年${month}月分　${emp.name}（${emp.role}・${emp.type}）</div>
+          <div class="meta">${title}　${period.label}　${emp.name}（${emp.role}・${emp.type}）</div>
         </div>
         <button onclick="window.print()" style="padding:6px 16px;background:#1251a3;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 印刷</button>
       </div>
@@ -2023,8 +2136,9 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:6}}>
         <button onClick={prevM} style={bS}>‹</button>
-        <span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span>
+        <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
         <button onClick={nextM} style={bS}>›</button>
+        <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
       </div>
       {!selfView&&<select value={rf} onChange={e=>{setRf(e.target.value);setEmpId("");}} style={{...iS,width:"auto"}}>
         <option value="">全職種</option>
@@ -2047,7 +2161,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <button onClick={()=>printTimecard(false)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
       </div>
       {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{year}年{month}月</div>
+        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{period.label}</div>
         <div style={{display:"flex",gap:12,fontSize:12,color:"var(--color-text-secondary)"}}>
           <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0))}</strong></span>
           <span>残業：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+r.otMin,0))}</strong></span>
@@ -2056,17 +2170,20 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>}
       <div style={{...crd,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>{rows.map(r=>{
             const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+            const isEditing=editKey===r.ds;
+            if(isEditing) return <EditRow key={r.ds} r={r} colSpan={8}/>;
             return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
-              <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+              <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
               <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
               <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
               <td style={tdS}>{r.punch?.in||"―"}</td>
-              <td style={tdS}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
+              <td style={tdS}>{r.punch?.out||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
               <td style={{...tdS,fontWeight:500}}>{r.awMin>0?toHStr(r.awMin):"―"}</td>
               <td style={{...tdS,color:r.diffMin>0?"#854F0B":r.diffMin<0?"#3B6D11":"var(--color-text-secondary)"}}>{r.punch?.out?(r.diffMin>=0?"+":"")+toHStr(r.diffMin):"―"}</td>
+              <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
             </tr>;
           })}</tbody>
         </table>
@@ -2080,7 +2197,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
       </div>
       {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{year}年{month}月</div>
+        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{period.label}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:8}}>
           {[
             ["出勤",rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+"日",""],
@@ -2109,21 +2226,24 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>}
       <div style={{...crd,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>{rows.map(r=>{
             const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
             const adj=r.punch?getAdjustedTime(r):{inT:"",outT:"",adjusted:false};
             const adjWorkMin=adj.inT&&adj.outT?Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0)):0;
             const adjDiff=r.def.end&&adj.outT?toMin(adj.outT)-toMin(r.def.end):null;
+            const isEditing=editKey===r.ds;
+            if(isEditing) return <EditRow key={r.ds} r={r} colSpan={9}/>;
             return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
-              <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+              <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
               <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
               <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
               <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.inT||"―"}</td>
-              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.outT||(r.punch?"未退勤":"―")}</td>
+              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
               <td style={{...tdS,fontWeight:500}}>{adjWorkMin>0?toHStr(adjWorkMin):"―"}</td>
               <td style={{...tdS,color:adjDiff!=null&&adjDiff>0?"#854F0B":adjDiff!=null&&adjDiff<0?"#3B6D11":"var(--color-text-secondary)"}}>{adjDiff!=null?(adjDiff>=0?"+":"")+toHStr(adjDiff):"―"}</td>
               <td style={tdS}>{statusBadge(r,true)}</td>
+              <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
             </tr>;
           })}</tbody>
         </table>
@@ -2136,18 +2256,33 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
         <button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
       </div>
-      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={true}/>
+      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={true} reload={reload}/>
     </div>}
   </div>;
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
-function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false}){
+function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{}}){
   const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
   const [year,setYear]=useState(CY),[month,setMonth]=useState(CM),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
+  const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
   const filtered=rf?emps.filter(e=>e.role===rf):emps;
   const emp=emps.find(e=>e.id===empId)||emps[0],rule=emp?getOtRule(emp):{type:"none"};
   const rows=emp?buildRows(emp,shifts,punches,otReqs,lvReqs,year,month,shiftDefsData):[];
+  const saveEdit=async(r)=>{
+    setEditSaving(true);
+    try{
+      if(!editForm.in){
+        if(r.punch) await gasDelete("打刻",r.punch.id);
+      } else {
+        const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
+        const data=convertTo({id:r.punch?.id||newId(),empId:emp.id,date:r.ds,in:editForm.in,out:editForm.out||"",break:breakMin,adjusted:false},PUNCH_INV);
+        await gasSave("打刻",data);
+      }
+      await reload(); setEditKey(null);
+    }catch(e){alert("保存失敗："+e.message);}
+    setEditSaving(false);
+  };
   const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tA=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
   const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
 
@@ -2214,9 +2349,26 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>{["日","曜","シフト","出勤","退勤","実働","勤務状況"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <thead><tr>{["日","曜","シフト","出勤","退勤","実働","勤務状況",isAdmin?"操作":""].map(h=>h?<th key={h} style={thS}>{h}</th>:null)}</tr></thead>
         <tbody>{disp.map(r=>{
           const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+          const isEditing=editKey===r.ds;
+          if(isAdmin&&isEditing){
+            const wm=editForm.in&&editForm.out?Math.max(0,toMin(editForm.out)-toMin(editForm.in)-(r.def.breakMin!=null?r.def.breakMin:BREAK_MIN)):null;
+            return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
+              <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
+              <td style={tdS}>{DOW_JP[r.dow]}</td>
+              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
+              <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
+              <td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>
+              <td colSpan={2} style={tdS}><div style={{display:"flex",gap:6}}>
+                <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{...bP,padding:"4px 12px",fontSize:12,opacity:editSaving?0.5:1}}>{editSaving?"保存中...":"保存"}</button>
+                <button onClick={()=>setEditKey(null)} disabled={editSaving} style={{...bS,padding:"4px 10px",fontSize:12}}>取消</button>
+                {r.punch&&<button onClick={async()=>{if(!confirm(`${r.ds.slice(5).replace("-","/")} の打刻を削除しますか？`))return;try{await gasDelete("打刻",r.punch.id);await reload();setEditKey(null);}catch(e){alert(e.message);}}} disabled={editSaving} style={{...bD,padding:"4px 10px",fontSize:12}}>削除</button>}
+              </div></td>
+            </tr>;
+          }
           // 勤務状況バッジ生成
           const badges=[];
           if(r.absent) badges.push(<Badge key="absent" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
@@ -2233,13 +2385,14 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             if(badges.length===0&&r.isOff&&r.punch) badges.push(<Badge key="offpunch" label="休日出勤" bg="#FAEEDA" color="#854F0B"/>);
           }
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
-            <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+            <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:r.punch?.adjusted||r.earlyAdj?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
             <td style={{...tdS,fontWeight:500}}>{r.awMin>0?toHStr(r.awMin):"―"}</td>
             <td style={{...tdS}}><div style={{display:"flex",flexWrap:"wrap",gap:2,alignItems:"center"}}>{badges}</div></td>
+            {isAdmin&&<td style={tdS}><button onClick={()=>{setEditKey(r.ds);setEditForm({in:r.punch?.in||"",out:r.punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>}
           </tr>;
         })}</tbody>
       </table>
@@ -3465,7 +3618,7 @@ function PunchHistory({emp,punches,shifts,otReqs,lvReqs,shiftDefsData,isAdmin=fa
           const displayOT=r.otMin+(r.weekOT||0);
           const rowBg=r.isOffPunch&&r.weekOT>0?"#FFFCF5":r.rowBg;
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
-            <td style={tdS}>{month}/{r.d}{isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+            <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
@@ -3703,7 +3856,7 @@ export default function App(){
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>setTabName("シフト設定")}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
-        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true}/>;
+        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll}/>;
         if(t==="打刻修正") return <PunchEditor emps={emps} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs} reload={loadAll}/>;
         return null;
       })()}
@@ -3715,7 +3868,7 @@ export default function App(){
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
         if(t==="月次集計") return <MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
-        if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true}/>;
+        if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll}/>;
         if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>setTabName("シフト設定")}/>;
         if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving}/>;
         if(t==="申請許可"&&isLead){
@@ -3738,7 +3891,7 @@ export default function App(){
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
         if(t==="打刻修正"&&isLead) return <PunchEditor emps={emps.filter(e=>leadRolesList.includes(e.role))} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} punchFixReqs={punchFixReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} reload={loadAll}/>;
-        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList}/>;
+        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll}/>;
         return null;
       })()}
     </div>
