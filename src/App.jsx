@@ -2356,7 +2356,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     {/* 月次レポート（正社員・その他パート）：照合レポートのみ */}
     {!isPTpart&&emp&&(()=>{
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
-      if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData}/>;
+      if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month}/>;
       return <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
@@ -2436,18 +2436,23 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     setEditSaving(false);
   };
   const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
-  // 調整済み実働合計（±5分丸め適用）
+  // 実働合計（roundタイプはシフト内時間、その他は±5分丸め）
   const tA=rows.reduce((s,r)=>{
-    if(!r.punch?.out||!r.punch?.in||r.isLeave) return s;
+    if(!r.punch?.out||!r.punch?.in||r.isLeave||r.isOff) return s;
     const shiftStart=toMin(r.def.start||"00:00"),shiftEnd=toMin(r.def.end||"00:00");
     const pIn=toMin(r.punch.in),pOut=toMin(r.punch.out);
+    const breakMin=r.def.breakMin!=null?Number(r.def.breakMin):BREAK_MIN;
+    if(rule.type==="round"&&emp?.type==="正社員"){
+      const workIn=Math.max(pIn,shiftStart);
+      const workOut=Math.min(pOut,shiftEnd);
+      return s+Math.max(0,workOut-workIn-breakMin);
+    }
     const hasApprovedOT=(otReqs||[]).some(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved");
     let adjIn=pIn,adjOut=pOut;
     if(r.def.start&&r.def.end&&!hasApprovedOT){
       if(shiftStart-pIn>=5) adjIn=shiftStart;
       if(pOut-shiftEnd>=5) adjOut=shiftEnd;
     }
-    const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
     return s+Math.max(0,adjOut-adjIn-breakMin);
   },0);
   const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
@@ -2556,18 +2561,27 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
-            <td style={{...tdS,color:r.punch?.adjusted||r.earlyAdj?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
+            <td style={{...tdS,color:(r.punch?.adjusted||r.earlyAdj)&&!(rule.type==="round"&&emp?.type==="正社員")?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
             <td style={{...tdS,fontWeight:500}}>{(()=>{
               if(!r.punch?.out||!r.punch?.in) return "―";
               const shiftStart=toMin(r.def.start||"00:00"),shiftEnd=toMin(r.def.end||"00:00");
               const pIn=toMin(r.punch.in),pOut=toMin(r.punch.out);
+              const breakMin=r.def.breakMin!=null?Number(r.def.breakMin):BREAK_MIN;
+              const _rule=getOtRule(emp);
+              if(_rule.type==="round"&&emp?.type==="正社員"){
+                // roundタイプ正社員：実働＝シフト内時間
+                const workIn=Math.max(pIn,shiftStart);
+                const workOut=Math.min(pOut,shiftEnd);
+                const adjWork=Math.max(0,workOut-workIn-breakMin);
+                return adjWork>0?toHStr(adjWork):"―";
+              }
+              // その他：±5分丸め
               const hasApprovedOT=(otReqs||[]).some(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved");
               let adjIn=pIn,adjOut=pOut;
               if(r.def.start&&r.def.end&&!hasApprovedOT){
                 if(shiftStart-pIn>=5) adjIn=shiftStart;
                 if(pOut-shiftEnd>=5) adjOut=shiftEnd;
               }
-              const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
               const adjWork=Math.max(0,adjOut-adjIn-breakMin);
               return adjWork>0?toHStr(adjWork):"―";
             })()}</td>
@@ -3775,10 +3789,15 @@ function calcNurseSlots(pIn,pOut,hasBreak){
   return {amMin,pm1Min,pm2Min};
 }
 
-function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
+function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,outerMonth=null}){
   const cur0=getCurrentPeriod();
-  const [periodYear,setPeriodYear]=useState(cur0.year);
-  const [periodMonth,setPeriodMonth]=useState(cur0.month);
+  const [periodYear,setPeriodYear]=useState(outerYear||cur0.year);
+  const [periodMonth,setPeriodMonth]=useState(outerMonth||cur0.month);
+  // outerYear/outerMonthが変わったら同期
+  useEffect(()=>{
+    if(outerYear!==null&&outerMonth!==null){setPeriodYear(outerYear);setPeriodMonth(outerMonth);}
+  },[outerYear,outerMonth]);
+  const showNav=outerYear===null; // TimecardViewから呼ばれる場合はナビゲーター非表示
   const period=getPeriodRange(periodYear,periodMonth);
   const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
   const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
@@ -3843,13 +3862,13 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
   });
 
   return <div>
-    {/* 期間ナビゲーター */}
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
+    {/* 期間ナビゲーター（単独表示時のみ） */}
+    {showNav&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
       <button onClick={prevPeriod} style={bS}>‹</button>
       <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
       <button onClick={nextPeriod} style={bS}>›</button>
       <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
-    </div>
+    </div>}
 
     {/* サマリー上段：合計・出勤日数 */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:"0.75rem"}}>
