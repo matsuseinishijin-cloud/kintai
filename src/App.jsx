@@ -3783,18 +3783,28 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
     const isOff=!def.start||isHol;
     const attended=!!punch?.in&&!!punch?.out;
 
-    if(isOff||!attended) return {ds,dow,isSunday,isHol,def,isOff,attended:false,amMin:0,pm1Min:0,pm2Min:0,sunMin:0,workMin:0};
+    if(isOff||!attended) return {ds,dow,isSunday,isHol,def,isOff,attended:false,amMin:0,pm1Min:0,pm2Min:0,sunMin:0,workMin:0,pIn:null,pOut:null};
 
-    const pIn=toMin(punch.in),pOut=toMin(punch.out);
+    const pInRaw=toMin(punch.in),pOutRaw=toMin(punch.out);
+    const shiftStart=toMin(def.start||"00:00"),shiftEnd=toMin(def.end||"00:00");
     const hasBreak=(def.breakMin!=null?def.breakMin:0)>0;
+
+    // 10分丸め調整
+    let pIn=pInRaw,pOut=pOutRaw;
+    // 出勤：切り上げ（例 8:23→8:30、8:31→8:40）
+    pIn=Math.ceil(pInRaw/10)*10;
+    // 退勤：切り捨て（例 17:08→17:00、17:19→17:10）
+    pOut=Math.floor(pOutRaw/10)*10;
+
     const actualWork=Math.max(0,pOut-pIn-(def.breakMin!=null?def.breakMin:0));
+    const isAdj=pIn!==pInRaw||pOut!==pOutRaw;
 
     if(isSunday){
       // 日曜は時間帯区別なく全実働
       totalSunDays++;
       totalSunMin+=actualWork;
       totalWorkMin+=actualWork;
-      return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin:0,pm1Min:0,pm2Min:0,sunMin:actualWork,workMin:actualWork};
+      return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin:0,pm1Min:0,pm2Min:0,sunMin:actualWork,workMin:actualWork,adjIn:pIn,adjOut:pOut,isAdj};
     }
 
     // 平日・土曜
@@ -3803,7 +3813,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
     totalPm1Min+=pm1Min;
     totalPm2Min+=pm2Min;
     totalWorkMin+=amMin+pm1Min+pm2Min;
-    return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin,pm1Min,pm2Min,sunMin:0,workMin:amMin+pm1Min+pm2Min};
+    return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin,pm1Min,pm2Min,sunMin:0,workMin:amMin+pm1Min+pm2Min,adjIn:pIn,adjOut:pOut,isAdj};
   });
 
   return <div>
@@ -3856,8 +3866,8 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
-            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
-            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
+            <td style={{...tdS,color:r.isAdj?"#534AB7":r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?fmtTime(r.adjIn):"―"}</td>
+            <td style={{...tdS,color:r.isAdj?"#534AB7":r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?fmtTime(r.adjOut):"―"}</td>
             <td style={{...tdS,color:r.amMin>0?"#185FA5":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
             <td style={{...tdS,color:r.pm1Min>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pm1Min>0?600:400}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
             <td style={{...tdS,color:r.pm2Min>0?"#993C1D":"var(--color-text-tertiary)",fontWeight:r.pm2Min>0?600:400}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
