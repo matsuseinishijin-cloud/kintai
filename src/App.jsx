@@ -818,8 +818,12 @@ function WeekPatternManager({weekPatterns,emps,shifts,lvReqs,shiftDefsData,reloa
     }
     if(entries.length===0){setApplyMsg("適用できる日がありません");return;}
     try{
-      // 一括保存（1回のリクエストで全件送信）
-      await gasSaveMany("シフト",entries.map(e=>convertTo(e,SHIFT_INV)));
+      let done=0;
+      for(const e of entries){
+        await gasSaveRaw("シフト",convertTo(e,SHIFT_INV));
+        done++;
+        if(entries.length>5) setApplyMsg(`保存中... ${done}/${entries.length}日`);
+      }
       await reload();
       setApplyMsg(`${entries.length}日分のシフトを適用しました`);
       setTimeout(()=>setApplyMsg(""),4000);
@@ -1179,6 +1183,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   // localEdits: ローカルで編集中の差分 key:"empId_date" → shiftType
   const [localEdits,setLocalEdits]=useState({});
   const [saving,setSaving]=useState(false);
+  const [saveMsg,setSaveMsg]=useState("");
   const hasEdits=Object.keys(localEdits).length>0;
   // shiftsFromPropsとlocalEditsをマージして表示
   const shifts=shiftsFromProps.map(s=>{
@@ -1239,15 +1244,17 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     setSaving(true);
     try{
       const entries=Object.entries(localEdits);
-      // 一括保存（1回のリクエストで全件送信）
-      const dataList=entries.map(([key,shiftType])=>{
+      let done=0;
+      for(const [key,shiftType] of entries){
         const sepIdx=key.indexOf("_");
         const empId=key.slice(0,sepIdx), date=key.slice(sepIdx+1);
         const existing=shiftsFromProps.find(s=>String(s.empId)===String(empId)&&s.date===date);
         const entry={id:existing?.id||newId(),empId,date,shiftType};
-        return convertTo(entry,SHIFT_INV);
-      });
-      await gasSaveMany("シフト",dataList);
+        await gasSaveRaw("シフト",convertTo(entry,SHIFT_INV));
+        done++;
+        if(entries.length>5) setSaveMsg(`保存中... ${done}/${entries.length}`);
+      }
+      setSaveMsg("");
       setLocalEdits({});
       await reload();
       // 保存後：過去・当日の有休シフトを即時消化
@@ -1362,7 +1369,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     </div>}
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1rem",flexWrap:"wrap"}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:15,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
-      {hasEdits&&<button onClick={saveAll} disabled={saving} style={{...bP,padding:"8px 18px",background:saving?"#6b7280":"#1251a3",opacity:saving?0.7:1}}>{saving?"保存中...":"シフト保存 ("+Object.keys(localEdits).length+"件)"}</button>}
+      {hasEdits&&<button onClick={saveAll} disabled={saving} style={{...bP,padding:"8px 18px",background:saving?"#6b7280":"#1251a3",opacity:saving?0.7:1}}>{saving?(saveMsg||"保存中..."):"シフト保存 ("+Object.keys(localEdits).length+"件)"}</button>}
       {hasEdits&&<button onClick={()=>setLocalEdits({})} style={{...bS,color:"#A32D2D",borderColor:"#F09595"}}>変更を破棄</button>}
       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
         {!initLeadRoles&&<button onClick={()=>{setRoleFilter(null);setTypeFilter(null);}} style={{padding:"4px 10px",borderRadius:6,border:!roleFilter?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:!roleFilter?"#E6F1FB":"var(--color-background-primary)",color:!roleFilter?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:!roleFilter?500:400}}>全職種</button>}
