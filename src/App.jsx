@@ -3770,7 +3770,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
   const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
 
   // 集計変数
-  let totalAmMin=0,totalPm1Min=0,totalPm2Min=0,totalSunDays=0,totalSunMin=0,totalWorkMin=0;
+  let totalAmMin=0,totalPm1Min=0,totalPm2Min=0,totalSunDays=0,totalSunMin=0,totalWorkMin=0,totalDays=0;
 
   const rows=days.map(ds=>{
     const dow=new Date(ds).getDay(); // 0=日
@@ -3801,6 +3801,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
 
     if(isSunday){
       // 日曜は時間帯区別なく全実働
+      totalDays++;
       totalSunDays++;
       totalSunMin+=actualWork;
       totalWorkMin+=actualWork;
@@ -3809,6 +3810,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
 
     // 平日・土曜
     const {amMin,pm1Min,pm2Min}=calcNurseSlots(pIn,pOut,hasBreak);
+    totalDays++;
     totalAmMin+=amMin;
     totalPm1Min+=pm1Min;
     totalPm2Min+=pm2Min;
@@ -3825,25 +3827,25 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
       <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
     </div>
 
-    {/* サマリー */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:"0.75rem"}}>
+    {/* サマリー上段：合計・出勤日数 */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:"0.75rem"}}>
       {[
         ["合計就労時間", totalWorkMin>0?toHStr(totalWorkMin):"―", ""],
-        ["日曜出勤", totalSunDays+"日", totalSunDays>0?"#854F0B":""],
-        ["日曜就労時間", totalSunMin>0?toHStr(totalSunMin):"―", totalSunMin>0?"#854F0B":""],
+        ["出勤日数", totalDays+"日", ""],
       ].map(([l,v,c])=>(
         <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
           <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
-          <div style={{fontSize:16,fontWeight:600,color:c||"var(--color-text-primary)"}}>{v}</div>
+          <div style={{fontSize:18,fontWeight:700,color:c||"var(--color-text-primary)"}}>{v}</div>
         </div>
       ))}
     </div>
-    {/* 時間帯別合計 */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:"1rem"}}>
+    {/* サマリー下段：時間帯内訳 */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:"1rem"}}>
       {[
         ["①午前（8:30〜14:00）", totalAmMin>0?toHStr(totalAmMin):"―", "#185FA5"],
         ["②午後前半（〜17:00）", totalPm1Min>0?toHStr(totalPm1Min):"―", "#854F0B"],
         ["③午後後半（〜20:00）", totalPm2Min>0?toHStr(totalPm2Min):"―", "#993C1D"],
+        ["④日曜", totalSunMin>0?toHStr(totalSunMin):"―", "#A32D2D"],
       ].map(([l,v,c])=>(
         <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8,border:"1px solid var(--color-border-tertiary)"}}>
           <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
