@@ -3718,7 +3718,156 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
   </div>;
 }
 
-// ── PunchHistory (Employee) ───────────────────────────────────────────────────
+// ── NurseMonthlyReport (看護師パート) ────────────────────────────────────────
+// 時間帯区分：
+//   ① 午前  8:30〜14:00（平日・土曜、日曜除く）※休憩ありは13:30〜14:00を除外
+//   ② 午後前半 14:00〜17:00（休憩ありは14:30〜17:00）（平日・土曜、日曜除く）
+//   ③ 午後後半 17:00〜20:00（平日・土曜、日曜除く）
+//   ④ 日曜  全実働時間（祝日でも日曜なら計上）
+const NURSE_AM_START=toMin("08:30"),NURSE_AM_END=toMin("14:00");
+const NURSE_PM1_END=toMin("17:00"),NURSE_PM2_END=toMin("20:00");
+const NURSE_BREAK_START=toMin("13:30"),NURSE_BREAK_END=toMin("14:30");
+
+function calcNurseSlots(pIn,pOut,hasBreak){
+  // 打刻時間と各時間帯の重複を計算するヘルパー
+  const overlap=(s,e,rs,re)=>Math.max(0,Math.min(e,re)-Math.max(s,rs));
+
+  let amMin=0,pm1Min=0,pm2Min=0;
+
+  if(hasBreak){
+    // 午前：8:30〜14:00 から 休憩13:30〜14:00(30分)を除く → 実質8:30〜13:30
+    amMin=overlap(pIn,pOut,NURSE_AM_START,NURSE_BREAK_START);
+    // 午後前半：14:30〜17:00（休憩後）
+    pm1Min=overlap(pIn,pOut,NURSE_BREAK_END,NURSE_PM1_END);
+    // 午後後半：17:00〜20:00
+    pm2Min=overlap(pIn,pOut,NURSE_PM1_END,NURSE_PM2_END);
+  } else {
+    // 午前：8:30〜14:00
+    amMin=overlap(pIn,pOut,NURSE_AM_START,NURSE_AM_END);
+    // 午後前半：14:00〜17:00
+    pm1Min=overlap(pIn,pOut,NURSE_AM_END,NURSE_PM1_END);
+    // 午後後半：17:00〜20:00
+    pm2Min=overlap(pIn,pOut,NURSE_PM1_END,NURSE_PM2_END);
+  }
+  return {amMin,pm1Min,pm2Min};
+}
+
+function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
+  const cur0=getCurrentPeriod();
+  const [periodYear,setPeriodYear]=useState(cur0.year);
+  const [periodMonth,setPeriodMonth]=useState(cur0.month);
+  const period=getPeriodRange(periodYear,periodMonth);
+  const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
+  const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
+
+  const days=[];
+  let cur=new Date(period.start);
+  const end=new Date(period.end);
+  while(cur<=end){
+    days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
+    cur.setDate(cur.getDate()+1);
+  }
+
+  const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+
+  // 集計変数
+  let totalAmMin=0,totalPm1Min=0,totalPm2Min=0,totalSunDays=0,totalSunMin=0,totalWorkMin=0;
+
+  const rows=days.map(ds=>{
+    const dow=new Date(ds).getDay(); // 0=日
+    const isSunday=dow===0;
+    const isHol=isHoliday(ds)&&!isSunday; // 日曜以外の祝日
+    const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+    const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+    const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+    const isOff=!def.start||isHol;
+    const attended=!!punch?.in&&!!punch?.out;
+
+    if(isOff||!attended) return {ds,dow,isSunday,isHol,def,isOff,attended:false,amMin:0,pm1Min:0,pm2Min:0,sunMin:0,workMin:0};
+
+    const pIn=toMin(punch.in),pOut=toMin(punch.out);
+    const hasBreak=(def.breakMin!=null?def.breakMin:0)>0;
+    const actualWork=Math.max(0,pOut-pIn-(def.breakMin!=null?def.breakMin:0));
+
+    if(isSunday){
+      // 日曜は時間帯区別なく全実働
+      totalSunDays++;
+      totalSunMin+=actualWork;
+      totalWorkMin+=actualWork;
+      return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin:0,pm1Min:0,pm2Min:0,sunMin:actualWork,workMin:actualWork};
+    }
+
+    // 平日・土曜
+    const {amMin,pm1Min,pm2Min}=calcNurseSlots(pIn,pOut,hasBreak);
+    totalAmMin+=amMin;
+    totalPm1Min+=pm1Min;
+    totalPm2Min+=pm2Min;
+    totalWorkMin+=amMin+pm1Min+pm2Min;
+    return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin,pm1Min,pm2Min,sunMin:0,workMin:amMin+pm1Min+pm2Min};
+  });
+
+  return <div>
+    {/* 期間ナビゲーター */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
+      <button onClick={prevPeriod} style={bS}>‹</button>
+      <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
+      <button onClick={nextPeriod} style={bS}>›</button>
+      <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
+    </div>
+
+    {/* サマリー */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:"0.75rem"}}>
+      {[
+        ["合計就労時間", totalWorkMin>0?toHStr(totalWorkMin):"―", ""],
+        ["日曜出勤", totalSunDays+"日", totalSunDays>0?"#854F0B":""],
+        ["日曜就労時間", totalSunMin>0?toHStr(totalSunMin):"―", totalSunMin>0?"#854F0B":""],
+      ].map(([l,v,c])=>(
+        <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+          <div style={{fontSize:16,fontWeight:600,color:c||"var(--color-text-primary)"}}>{v}</div>
+        </div>
+      ))}
+    </div>
+    {/* 時間帯別合計 */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:"1rem"}}>
+      {[
+        ["①午前（8:30〜14:00）", totalAmMin>0?toHStr(totalAmMin):"―", "#185FA5"],
+        ["②午後前半（〜17:00）", totalPm1Min>0?toHStr(totalPm1Min):"―", "#854F0B"],
+        ["③午後後半（〜20:00）", totalPm2Min>0?toHStr(totalPm2Min):"―", "#993C1D"],
+      ].map(([l,v,c])=>(
+        <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8,border:"1px solid var(--color-border-tertiary)"}}>
+          <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+          <div style={{fontSize:16,fontWeight:600,color:c}}>{v}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* 日別テーブル */}
+    <div style={{...crd,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+        <thead><tr>
+          {["日付","曜","シフト","出勤","退勤","①午前","②午後前半","③午後後半","④日曜"].map(h=><th key={h} style={thS}>{h}</th>)}
+        </tr></thead>
+        <tbody>{rows.map(r=>{
+          const dc=r.isSunday?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+          const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
+          const bg=r.isSunday&&r.attended?"#FFF5F0":r.isHol?"#F5F9FE":"";
+          return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
+            <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
+            <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
+            <td style={{...tdS,color:r.amMin>0?"#185FA5":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
+            <td style={{...tdS,color:r.pm1Min>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pm1Min>0?600:400}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
+            <td style={{...tdS,color:r.pm2Min>0?"#993C1D":"var(--color-text-tertiary)",fontWeight:r.pm2Min>0?600:400}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
+            <td style={{...tdS,color:r.sunMin>0?"#A32D2D":"var(--color-text-tertiary)",fontWeight:r.sunMin>0?600:400}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+  </div>;
+}
 function PunchHistory({emp,punches,shifts,otReqs,lvReqs,shiftDefsData,isAdmin=false}){
   const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
   const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
@@ -3974,7 +4123,10 @@ export default function App(){
     ?["打刻","申請","マイシフト","打刻履歴","月次集計","---","シフト作成","申請許可","有給管理","タイムカード"]
     // その他責任者：自分の勤怠＋月次レポート | 部署管理（タイムカードなし）
     :["打刻","申請","マイシフト","月次レポート","---","シフト作成","申請許可"];
+  const isNursepart=cur&&cur.role==="看護師"&&cur.type==="パート";
   const eTabs=isPTpart
+    ?["打刻","申請","マイシフト","月次集計"]
+    :isNursepart
     ?["打刻","申請","マイシフト","月次集計"]
     :["打刻","申請","マイシフト","月次レポート"];
   const tabs=isAdmin?aTabs:isLead?lTabs:eTabs;
@@ -4055,7 +4207,9 @@ export default function App(){
         if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} reload={loadAll}/>;
         if(t==="マイシフト") return <MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
-        if(t==="月次集計") return <MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
+        if(t==="月次集計") return isNursepart
+          ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData}/>
+          :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll}/>;
         if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>setTabName("シフト設定")}/>;
