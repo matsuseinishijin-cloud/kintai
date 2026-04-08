@@ -2441,18 +2441,16 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const weekLimit=emp?.weekLimit?Number(emp.weekLimit):null;
   const weeklyOT=(()=>{
     if(!weekLimit||rule.type!=="overtime_request") return 0;
-    // 週ごとにシフト合計を集計（月〜日）
     const weekMap={};
     rows.forEach(r=>{
-      const weekStart=new Date(year,month-1,r.d);
+      const weekStart=new Date(r.ds); // r.dsから直接生成（月ズレ防止）
       const dow=weekStart.getDay();
-      const diff=dow===0?-6:1-dow; // 月曜起算
+      const diff=dow===0?-6:1-dow;
       weekStart.setDate(weekStart.getDate()+diff);
       const wk=weekStart.toISOString().slice(0,10);
       if(!weekMap[wk]) weekMap[wk]=0;
       weekMap[wk]+=r.swMin;
     });
-    // 週の所定がweekLimit*60を超えた分を合計
     return Object.values(weekMap).reduce((s,min)=>s+Math.max(0,min-weekLimit*60),0);
   })();
 
