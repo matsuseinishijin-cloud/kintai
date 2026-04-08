@@ -2510,7 +2510,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       </div>
       <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap"}}>
         <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
-        <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>
+        {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
         <span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>
         {rule.type==="overtime_request"&&<span>時間外申請済：<strong style={{color:"#185FA5"}}>{toHStr(approvedOTMin)}</strong></span>}
         {rule.type==="overtime_request"&&unapprovedOTMin>0&&<span>未申請残業：<strong style={{color:"#A32D2D"}}>{toHStr(unapprovedOTMin)}</strong></span>}
@@ -2521,7 +2521,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>{["日","曜","シフト","出勤","退勤","実働","勤務状況",isAdmin?"操作":""].map(h=>h?<th key={h} style={thS}>{h}</th>:null)}</tr></thead>
+        <thead><tr>{["日","曜","シフト","出勤","退勤",...(emp?.type!=="正社員"?["実働"]:[""]),"勤務状況",isAdmin?"操作":""].map(h=>h?<th key={h} style={thS}>{h}</th>:null)}</tr></thead>
         <tbody>{disp.map(r=>{
           const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           const isEditing=editKey===r.ds;
@@ -2533,8 +2533,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
               <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
               <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
-              <td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>
-              <td colSpan={2} style={tdS}><div style={{display:"flex",gap:6}}>
+              {emp?.type!=="正社員"&&<td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>}
+              <td colSpan={emp?.type!=="正社員"?2:3} style={tdS}><div style={{display:"flex",gap:6}}>
                 <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{...bP,padding:"4px 12px",fontSize:12,opacity:editSaving?0.5:1}}>{editSaving?"保存中...":"保存"}</button>
                 <button onClick={()=>setEditKey(null)} disabled={editSaving} style={{...bS,padding:"4px 10px",fontSize:12}}>取消</button>
                 {r.punch&&<button onClick={async()=>{if(!confirm(`${r.ds.slice(5).replace("-","/")} の打刻を削除しますか？`))return;try{await gasDelete("打刻",r.punch.id);await reload();setEditKey(null);}catch(e){alert(e.message);}}} disabled={editSaving} style={{...bD,padding:"4px 10px",fontSize:12}}>削除</button>}
@@ -2562,20 +2562,18 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:(r.punch?.adjusted||r.earlyAdj)&&!(rule.type==="round"&&emp?.type==="正社員")?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
-            <td style={{...tdS,fontWeight:500}}>{(()=>{
+            {emp?.type!=="正社員"&&<td style={{...tdS,fontWeight:500}}>{(()=>{
               if(!r.punch?.out||!r.punch?.in) return "―";
               const shiftStart=toMin(r.def.start||"00:00"),shiftEnd=toMin(r.def.end||"00:00");
               const pIn=toMin(r.punch.in),pOut=toMin(r.punch.out);
               const breakMin=r.def.breakMin!=null?Number(r.def.breakMin):BREAK_MIN;
               const _rule=getOtRule(emp);
               if(_rule.type==="round"&&emp?.type==="正社員"){
-                // roundタイプ正社員：実働＝シフト内時間
                 const workIn=Math.max(pIn,shiftStart);
                 const workOut=Math.min(pOut,shiftEnd);
                 const adjWork=Math.max(0,workOut-workIn-breakMin);
                 return adjWork>0?toHStr(adjWork):"―";
               }
-              // その他：±5分丸め
               const hasApprovedOT=(otReqs||[]).some(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved");
               let adjIn=pIn,adjOut=pOut;
               if(r.def.start&&r.def.end&&!hasApprovedOT){
@@ -2584,7 +2582,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               }
               const adjWork=Math.max(0,adjOut-adjIn-breakMin);
               return adjWork>0?toHStr(adjWork):"―";
-            })()}</td>
+            })()}</td>}
             <td style={{...tdS}}><div style={{display:"flex",flexWrap:"wrap",gap:2,alignItems:"center"}}>{badges}</div></td>
             {isAdmin&&<td style={tdS}><button onClick={()=>{setEditKey(r.ds);setEditForm({in:r.punch?.in||"",out:r.punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>}
           </tr>;
