@@ -296,6 +296,7 @@ async function fetchHolidays(year) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2,"0");
 const toMin = t => { if(!t) return 0; const [h,m]=t.split(":"); return +h*60+ +m; };
+const fmtTime = m => { if(m===null||m===undefined) return "―"; return pad(Math.floor(m/60))+":"+pad(m%60); };
 const toHStr = m => { if(!m||m===0) return "0h"; const h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return h+"h"+(mn>0?pad(mn)+"m":""); };
 const getOtRule = emp => OT_RULES[emp.role+"_"+emp.type] || { type:"none" };
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
