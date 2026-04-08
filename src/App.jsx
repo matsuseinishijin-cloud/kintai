@@ -2335,17 +2335,17 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     {!isPTpart&&emp&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
         <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
-        <button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
+        {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
       </div>
-      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={true} reload={reload}/>
+      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload}/>
     </div>}
   </div>;
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
 function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{}}){
-  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
-  const [year,setYear]=useState(CY),[month,setMonth]=useState(CM),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
+  const cur0=getCurrentPeriod();
+  const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
   const filtered=rf?emps.filter(e=>e.role===rf):emps;
   const emp=emps.find(e=>e.id===empId)||emps[0],rule=emp?getOtRule(emp):{type:"none"};
@@ -2881,38 +2881,42 @@ function LeaveRequest({emp,leaves,lvReqs,reload}){
   };
   const activeBuckets=getActiveBuckets(leave?.records,lvReqs,emp.id);
   return <div>
-    <div style={{...crd,padding:"1rem",marginBottom:"1rem"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:activeBuckets.length>0?10:0}}>
-        <span style={{fontSize:13,fontWeight:600}}>有効残日数</span>
-        <span style={{fontSize:22,fontWeight:700,color:rem<3?"#A32D2D":"#3B6D11"}}>{rem}日</span>
-      </div>
-      {activeBuckets.map((b,i)=>(
-        <div key={b.id||i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
-          <span style={{color:"var(--color-text-secondary)"}}>{b.grantedAt}付与
-            <span style={{marginLeft:6,color:b.expiresAt<addDays(today(),30)?"#A32D2D":"var(--color-text-tertiary)"}}>（{b.expiresAt}まで）</span>
-          </span>
-          <span style={{fontWeight:600,color:"#1251a3"}}>{b.remaining}日</span>
+    <div style={{display:"flex",gap:"1rem",alignItems:"flex-start",flexWrap:"wrap",marginBottom:"1rem"}}>
+      {/* 左：有給申請フォーム */}
+      <div style={{...crd,padding:"1.25rem",flex:"1 1 320px",maxWidth:420}}>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>有給申請</div>
+        {rem<=0&&<div style={{marginBottom:10,padding:"8px 12px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>有給残日数がありません</div>}
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:4}}>種別</div>
+          <div style={{display:"flex",gap:6}}>
+            {[["full","全日（1日）"],["am","午前（0.5日）"],["pm","午後（0.5日）"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setForm(p=>({...p,half:v}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:form.half===v?"2px solid #1251a3":"1px solid var(--color-border-secondary)",background:form.half===v?"#E6F1FB":"var(--color-background-primary)",color:form.half===v?"#1251a3":"var(--color-text-secondary)",fontSize:12,fontWeight:form.half===v?600:400,cursor:"pointer"}}>{l}</button>
+            ))}
+          </div>
         </div>
-      ))}
-      {activeBuckets.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>有給が付与されていません</div>}
-    </div>
-    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:420}}>
-      <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>有給申請</div>
-      {rem<=0&&<div style={{marginBottom:10,padding:"8px 12px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>有給残日数がありません</div>}
-      <div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:4}}>種別</div>
-        <div style={{display:"flex",gap:6}}>
-          {[["full","全日（1日）"],["am","午前（0.5日）"],["pm","午後（0.5日）"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setForm(p=>({...p,half:v}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:form.half===v?"2px solid #1251a3":"1px solid var(--color-border-secondary)",background:form.half===v?"#E6F1FB":"var(--color-background-primary)",color:form.half===v?"#1251a3":"var(--color-text-secondary)",fontSize:12,fontWeight:form.half===v?600:400,cursor:"pointer"}}>{l}</button>
-          ))}
-        </div>
+        <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
+          <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
+        <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
+          <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={2} placeholder="例：私用のため" style={{...iS,resize:"vertical"}}/></div>
+        <button onClick={submit} disabled={!canSubmit} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:canSubmit?1:0.4}}>申請する</button>
+        {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。</div>}
       </div>
-      <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
-        <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
-      <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
-        <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={2} placeholder="例：私用のため" style={{...iS,resize:"vertical"}}/></div>
-      <button onClick={submit} disabled={!canSubmit} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:canSubmit?1:0.4}}>申請する</button>
-      {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。</div>}
+      {/* 右：有給残日数 */}
+      <div style={{...crd,padding:"1rem",flex:"1 1 200px",minWidth:200}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:activeBuckets.length>0?10:0}}>
+          <span style={{fontSize:13,fontWeight:600}}>有効残日数</span>
+          <span style={{fontSize:22,fontWeight:700,color:rem<3?"#A32D2D":"#3B6D11"}}>{rem}日</span>
+        </div>
+        {activeBuckets.map((b,i)=>(
+          <div key={b.id||i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+            <span style={{color:"var(--color-text-secondary)"}}>{b.grantedAt}付与
+              <span style={{marginLeft:6,color:b.expiresAt<addDays(today(),30)?"#A32D2D":"var(--color-text-tertiary)"}}>（{b.expiresAt}まで）</span>
+            </span>
+            <span style={{fontWeight:600,color:"#1251a3"}}>{b.remaining}日</span>
+          </div>
+        ))}
+        {activeBuckets.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>有給が付与されていません</div>}
+      </div>
     </div>
     {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
       <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
@@ -3922,7 +3926,7 @@ export default function App(){
         {/* 自分用タブグループ */}
         <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
           <span style={{fontSize:9,fontWeight:700,color:"#1251a3",letterSpacing:"0.08em",paddingLeft:8,paddingBottom:1}}>MY</span>
-          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#EBF2FF",alignItems:"center",height:"100%"}}>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"transparent",alignItems:"center",height:"100%"}}>
             {tabs.slice(0,tabs.indexOf("---")).map((t,i)=>{
               const isActive=tabName===t||(tabName===""&&i===0);
               return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:isActive?"#1251a3":"transparent",color:isActive?"white":"#1251a3",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s",textAlign:"center"}}>
@@ -3938,7 +3942,7 @@ export default function App(){
         {/* 責任者用タブグループ */}
         <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
           <span style={{fontSize:9,fontWeight:700,color:"#185FA5",letterSpacing:"0.08em",paddingLeft:8,paddingBottom:1}}>STAFF</span>
-          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#DCEEFF",alignItems:"center",height:"100%"}}>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#ffffff",alignItems:"center",height:"100%",border:"1.5px solid #DCEEFF"}}>
             {tabs.slice(tabs.indexOf("---")+1).map((t,i)=>{
               const isActive=tabName===t;
               const leadPendAll2=leadPendOT+leadPendLV+leadPendTR+(isPTlead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0);
