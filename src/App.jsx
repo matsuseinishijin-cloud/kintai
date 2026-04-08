@@ -3776,16 +3776,16 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
     const isSunday=dow===0;
     const isHol=isHoliday(ds)&&!isSunday; // 日曜以外の祝日
     const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-    const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+    const def=empDefs[shiftRow?.shiftType||"off"]||empDefs["off"]||DEFAULT_SHIFT_DEFS_BY_DEPT["看護師"]?.off||{label:"休日",start:null,end:null,color:"var(--color-background-secondary)",tc:"var(--color-text-tertiary)",breakMin:0};
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
-    const isOff=!def.start||isHol;
-    const attended=!!punch?.in&&!!punch?.out;
+    const isOff=!def||!def.start||isHol;
+    const attended=!!(punch?.in)&&!!(punch?.out);
 
     if(isOff||!attended) return {ds,dow,isSunday,isHol,def,isOff,attended:false,amMin:0,pm1Min:0,pm2Min:0,sunMin:0,workMin:0,pIn:null,pOut:null};
 
-    const pInRaw=toMin(punch.in),pOutRaw=toMin(punch.out);
+    const pInRaw=toMin(punch.in||"00:00"),pOutRaw=toMin(punch.out||"00:00");
     const shiftStart=toMin(def.start||"00:00"),shiftEnd=toMin(def.end||"00:00");
-    const hasBreak=(def.breakMin!=null?def.breakMin:0)>0;
+    const hasBreak=(def.breakMin!=null?Number(def.breakMin):0)>0;
 
     // 10分丸め調整
     let pIn=pInRaw,pOut=pOutRaw;
@@ -3794,7 +3794,8 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
     // 退勤：切り捨て（例 17:08→17:00、17:19→17:10）
     pOut=Math.floor(pOutRaw/10)*10;
 
-    const actualWork=Math.max(0,pOut-pIn-(def.breakMin!=null?def.breakMin:0));
+    const breakMinNum=def.breakMin!=null?Number(def.breakMin):0;
+    const actualWork=Math.max(0,pOut-pIn-breakMinNum);
     const isAdj=pIn!==pInRaw||pOut!==pOutRaw;
 
     if(isSunday){
