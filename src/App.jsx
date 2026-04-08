@@ -2337,16 +2337,20 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
         {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
       </div>
-      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload}/>
+      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month}/>
     </div>}
   </div>;
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
-function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{}}){
+function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null}){
   const cur0=getCurrentPeriod();
-  const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
+  const [year,setYear]=useState(outerYear||cur0.year),[month,setMonth]=useState(outerMonth||cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
+  // outerYear/outerMonthが変わったら同期
+  useEffect(()=>{
+    if(outerYear!==null&&outerMonth!==null){setYear(outerYear);setMonth(outerMonth);}
+  },[outerYear,outerMonth]);
   const filtered=rf?emps.filter(e=>e.role===rf):emps;
   const emp=emps.find(e=>e.id===empId)||emps[0],rule=emp?getOtRule(emp):{type:"none"};
   // 15日締め期間
@@ -2443,11 +2447,14 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   return <div>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
+    {!initEmpId&&<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:6}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span><button onClick={nextM} style={bS}>›</button><span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span></div>
       {!initEmpId&&<><select value={rf} onChange={e=>setRf(e.target.value)} style={{...iS,width:"auto"}}><option value="">全職種</option>{ROLES.map(r=><option key={r}>{r}</option>)}</select><select value={empId} onChange={e=>setEmpId(e.target.value)} style={{...iS,width:"auto"}}>{filtered.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}</select></>}
       <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...iS,width:"auto"}}><option value="all">全日</option><option value="issues">問題のある日のみ</option></select>
-    </div>
+    </div>}
+    {initEmpId&&<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
+      <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...iS,width:"auto"}}><option value="all">全日</option><option value="issues">問題のある日のみ</option></select>
+    </div>}
     {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
         <div style={{width:36,height:36,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:500}}>{emp.name[0]}</div>
