@@ -2354,13 +2354,17 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     </div>}
 
     {/* 月次レポート（正社員・その他パート）：照合レポートのみ */}
-    {!isPTpart&&emp&&<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
-        {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
-      </div>
-      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month}/>
-    </div>}
+    {!isPTpart&&emp&&(()=>{
+      const isNursePart=emp.role==="看護師"&&emp.type==="パート";
+      if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData}/>;
+      return <div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+          <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
+          {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
+        </div>
+        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month}/>
+      </div>;
+    })()}
   </div>;
 }
 
@@ -3883,7 +3887,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
         <tbody>{rows.map(r=>{
           const dc=r.isSunday?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
-          const bg=r.isSunday&&r.attended?"#FFF5F0":r.isHol?"#F5F9FE":"";
+          const bg=r.isHol?"#F5F9FE":"";
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
