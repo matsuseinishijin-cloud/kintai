@@ -2005,12 +2005,26 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     if(!confirm(`${toSave.length}件を保存、${toDelete.length}件を削除します。よろしいですか？`))return;
     setBulkSaving(true); setBulkMsg("");
     try{
+      // 既存打刻のidを確実に引き継いでupsert
       const saveList=toSave.map(r=>{
         const b=bulkData[r.ds];
-        return convertTo({id:r.punch?.id||newId(),empId:emp.id,date:r.ds,in:b.in,out:b.out||"",break:r.def.breakMin!=null?r.def.breakMin:BREAK_MIN,adjusted:false},PUNCH_INV);
+        // r.punchは15日締め期間のrows生成時点のデータなので最新のpunchesから再取得
+        const existingPunch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
+        return convertTo({
+          id:existingPunch?.id||r.punch?.id||newId(),
+          empId:emp.id,
+          date:r.ds,
+          in:b.in,
+          out:b.out||"",
+          break:r.def.breakMin!=null?Number(r.def.breakMin):BREAK_MIN,
+          adjusted:false
+        },PUNCH_INV);
       });
-      if(saveList.length>0) await gasSaveMany("打刻",saveList);
-      for(const r of toDelete) await gasDelete("打刻",r.punch.id);
+      await gasSaveMany("打刻",saveList);
+      for(const r of toDelete){
+        const existingPunch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
+        if(existingPunch) await gasDelete("打刻",existingPunch.id);
+      }
       await reload();
       setBulkMode(false);
       setBulkMsg(`${toSave.length}件保存、${toDelete.length}件削除しました`);
@@ -3724,29 +3738,28 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
 //   ③ 午後後半 17:00〜20:00（平日・土曜、日曜除く）
 //   ④ 日曜  全実働時間（祝日でも日曜なら計上）
 const NURSE_AM_START=toMin("08:30"),NURSE_AM_END=toMin("14:00");
-const NURSE_PM1_END=toMin("17:00"),NURSE_PM2_END=toMin("20:00");
+const NURSE_PM1_END=toMin("17:00");
 const NURSE_BREAK_START=toMin("13:30"),NURSE_BREAK_END=toMin("14:30");
 
 function calcNurseSlots(pIn,pOut,hasBreak){
-  // 打刻時間と各時間帯の重複を計算するヘルパー
   const overlap=(s,e,rs,re)=>Math.max(0,Math.min(e,re)-Math.max(s,rs));
 
   let amMin=0,pm1Min=0,pm2Min=0;
 
   if(hasBreak){
-    // 午前：8:30〜14:00 から 休憩13:30〜14:00(30分)を除く → 実質8:30〜13:30
+    // 午前：8:30〜13:30（休憩13:30〜14:30を除く）
     amMin=overlap(pIn,pOut,NURSE_AM_START,NURSE_BREAK_START);
-    // 午後前半：14:30〜17:00（休憩後）
+    // 午後前半：14:30〜17:00
     pm1Min=overlap(pIn,pOut,NURSE_BREAK_END,NURSE_PM1_END);
-    // 午後後半：17:00〜20:00
-    pm2Min=overlap(pIn,pOut,NURSE_PM1_END,NURSE_PM2_END);
+    // 午後後半：17:00〜退勤（上限なし）
+    pm2Min=Math.max(0,pOut-Math.max(pIn,NURSE_PM1_END));
   } else {
     // 午前：8:30〜14:00
     amMin=overlap(pIn,pOut,NURSE_AM_START,NURSE_AM_END);
     // 午後前半：14:00〜17:00
     pm1Min=overlap(pIn,pOut,NURSE_AM_END,NURSE_PM1_END);
-    // 午後後半：17:00〜20:00
-    pm2Min=overlap(pIn,pOut,NURSE_PM1_END,NURSE_PM2_END);
+    // 午後後半：17:00〜退勤（上限なし）
+    pm2Min=Math.max(0,pOut-Math.max(pIn,NURSE_PM1_END));
   }
   return {amMin,pm1Min,pm2Min};
 }
@@ -3868,8 +3881,8 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData}){
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
-            <td style={{...tdS,color:r.isAdj?"#534AB7":r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?fmtTime(r.adjIn):"―"}</td>
-            <td style={{...tdS,color:r.isAdj?"#534AB7":r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?fmtTime(r.adjOut):"―"}</td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?(punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds)?.in||"―"):"―"}</td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?(punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds)?.out||"―"):"―"}</td>
             <td style={{...tdS,color:r.amMin>0?"#185FA5":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
             <td style={{...tdS,color:r.pm1Min>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pm1Min>0?600:400}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
             <td style={{...tdS,color:r.pm2Min>0?"#993C1D":"var(--color-text-tertiary)",fontWeight:r.pm2Min>0?600:400}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
