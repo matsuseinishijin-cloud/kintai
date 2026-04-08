@@ -2975,16 +2975,18 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 
 // ── LeaveRequest (Employee) ───────────────────────────────────────────────────
 function LeaveRequest({emp,leaves,lvReqs,reload}){
+  const isPartt=emp.type==="パート";
   const [form,setForm]=useState({date:"",half:"full",reason:""}),[sub,setSub]=useState(false);
   const leave=leaves.find(l=>String(l.empId)===String(emp.id))||{granted:0,used:0,records:"[]"};
   const rem=calcLeaveRemainingCompat(leave,lvReqs,emp.id);
   const myReqs=lvReqs.filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.date<a.date?-1:1);
-  const days=form.half==="full"?1:0.5;
+  const days=isPartt?1:(form.half==="full"?1:0.5);
   const canSubmit=!!(form.date&&form.reason&&rem>=days);
   const submit=async()=>{
     if(!canSubmit)return;
     try{
-      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half:form.half==="full"?null:form.half},LV_REQ_INV);
+      const half=isPartt?null:(form.half==="full"?null:form.half);
+      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half},LV_REQ_INV);
       await gasSave("有給申請",data);
       setForm({date:"",half:"full",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
@@ -2997,14 +2999,15 @@ function LeaveRequest({emp,leaves,lvReqs,reload}){
       <div style={{...crd,padding:"1.25rem",flex:"1 1 320px",maxWidth:420}}>
         <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>有給申請</div>
         {rem<=0&&<div style={{marginBottom:10,padding:"8px 12px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>有給残日数がありません</div>}
-        <div style={{marginBottom:10}}>
+        {/* 正社員のみ種別選択 */}
+        {!isPartt&&<div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:4}}>種別</div>
           <div style={{display:"flex",gap:6}}>
             {[["full","全日（1日）"],["am","午前（0.5日）"],["pm","午後（0.5日）"]].map(([v,l])=>(
               <button key={v} onClick={()=>setForm(p=>({...p,half:v}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:form.half===v?"2px solid #1251a3":"1px solid var(--color-border-secondary)",background:form.half===v?"#E6F1FB":"var(--color-background-primary)",color:form.half===v?"#1251a3":"var(--color-text-secondary)",fontSize:12,fontWeight:form.half===v?600:400,cursor:"pointer"}}>{l}</button>
             ))}
           </div>
-        </div>
+        </div>}
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
           <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
         <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
