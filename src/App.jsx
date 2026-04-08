@@ -2349,7 +2349,48 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
   const filtered=rf?emps.filter(e=>e.role===rf):emps;
   const emp=emps.find(e=>e.id===empId)||emps[0],rule=emp?getOtRule(emp):{type:"none"};
-  const rows=emp?buildRows(emp,shifts,punches,otReqs,lvReqs,year,month,shiftDefsData):[];
+  // 15日締め期間
+  const period=getPeriodRange(year,month);
+  const periodDays=(()=>{
+    const days=[];let cur=new Date(period.start);const end=new Date(period.end);
+    while(cur<=end){days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);cur.setDate(cur.getDate()+1);}
+    return days;
+  })();
+  const rows=(()=>{
+    if(!emp) return [];
+    const _rule=getOtRule(emp),isApprovalType=_rule.type==="approval",isOvertimeRequest=_rule.type==="overtime_request",roundMin=_rule.roundMin||0;
+    const _empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    return periodDays.map(ds=>{
+      const dow=new Date(ds).getDay(),d=parseInt(ds.slice(8));
+      const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+      const st=shiftRow?.shiftType||"off",def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off,isOff=!def.start;
+      const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
+      const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+      const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+      const isShiftLeave=isAnyLeaveShift(st),isLeave=!!_lvMatch||isShiftLeave,leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
+      const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
+      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
+      const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
+      if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+      if(punch&&punch.out&&punch.in){
+        const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00"),im=toMin(punch.in),om=toMin(punch.out);
+        let imForWork=im;
+        if(!isOff&&def.start&&im<shiftStartMin){if(approvedEarlyReq){imForWork=im;earlyAdj=false;}else{imForWork=shiftStartMin;earlyAdj=true;}}
+        let rawOtMin=Math.max(0,om-shiftEndMin);
+        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+        else if(isOvertimeRequest) otMin=rawOtMin;
+        else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
+        else otMin=rawOtMin;
+        awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
+        if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1) earlyLeave=true;diffMin=om-shiftEndMin;}
+        else{otMin=isOff?awMin:otMin;}
+      } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
+      const isOffPunch=isOff&&!!punch?.out;
+      const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+    });
+  })();
   const saveEdit=async(r)=>{
     setEditSaving(true);
     try{
@@ -2403,7 +2444,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   return <div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
-      <div style={{display:"flex",alignItems:"center",gap:6}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span><button onClick={nextM} style={bS}>›</button><span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span></div>
       {!initEmpId&&<><select value={rf} onChange={e=>setRf(e.target.value)} style={{...iS,width:"auto"}}><option value="">全職種</option>{ROLES.map(r=><option key={r}>{r}</option>)}</select><select value={empId} onChange={e=>setEmpId(e.target.value)} style={{...iS,width:"auto"}}>{filtered.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}</select></>}
       <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...iS,width:"auto"}}><option value="all">全日</option><option value="issues">問題のある日のみ</option></select>
     </div>
@@ -3942,7 +3983,7 @@ export default function App(){
         {/* 責任者用タブグループ */}
         <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
           <span style={{fontSize:9,fontWeight:700,color:"#185FA5",letterSpacing:"0.08em",paddingLeft:8,paddingBottom:1}}>STAFF</span>
-          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#ffffff",alignItems:"center",height:"100%",border:"1.5px solid #DCEEFF"}}>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#ffffff",alignItems:"center",height:"100%"}}>
             {tabs.slice(tabs.indexOf("---")+1).map((t,i)=>{
               const isActive=tabName===t;
               const leadPendAll2=leadPendOT+leadPendLV+leadPendTR+(isPTlead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0);
