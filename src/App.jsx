@@ -2409,7 +2409,21 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     }catch(e){alert("保存失敗："+e.message);}
     setEditSaving(false);
   };
-  const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tA=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
+  const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
+  // 調整済み実働合計（±5分丸め適用）
+  const tA=rows.reduce((s,r)=>{
+    if(!r.punch?.out||!r.punch?.in||r.isLeave) return s;
+    const shiftStart=toMin(r.def.start||"00:00"),shiftEnd=toMin(r.def.end||"00:00");
+    const pIn=toMin(r.punch.in),pOut=toMin(r.punch.out);
+    const hasApprovedOT=(otReqs||[]).some(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved");
+    let adjIn=pIn,adjOut=pOut;
+    if(r.def.start&&r.def.end&&!hasApprovedOT){
+      if(shiftStart-pIn>=5) adjIn=shiftStart;
+      if(pOut-shiftEnd>=5) adjOut=shiftEnd;
+    }
+    const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
+    return s+Math.max(0,adjOut-adjIn-breakMin);
+  },0);
   const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
 
   // 月20h超過アラート（fixed・overtime_requestの両方）
@@ -2519,7 +2533,20 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:r.punch?.adjusted||r.earlyAdj?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
-            <td style={{...tdS,fontWeight:500}}>{r.awMin>0?toHStr(r.awMin):"―"}</td>
+            <td style={{...tdS,fontWeight:500}}>{(()=>{
+              if(!r.punch?.out||!r.punch?.in) return "―";
+              const shiftStart=toMin(r.def.start||"00:00"),shiftEnd=toMin(r.def.end||"00:00");
+              const pIn=toMin(r.punch.in),pOut=toMin(r.punch.out);
+              const hasApprovedOT=(otReqs||[]).some(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved");
+              let adjIn=pIn,adjOut=pOut;
+              if(r.def.start&&r.def.end&&!hasApprovedOT){
+                if(shiftStart-pIn>=5) adjIn=shiftStart;
+                if(pOut-shiftEnd>=5) adjOut=shiftEnd;
+              }
+              const breakMin=r.def.breakMin!=null?r.def.breakMin:BREAK_MIN;
+              const adjWork=Math.max(0,adjOut-adjIn-breakMin);
+              return adjWork>0?toHStr(adjWork):"―";
+            })()}</td>
             <td style={{...tdS}}><div style={{display:"flex",flexWrap:"wrap",gap:2,alignItems:"center"}}>{badges}</div></td>
             {isAdmin&&<td style={tdS}><button onClick={()=>{setEditKey(r.ds);setEditForm({in:r.punch?.in||"",out:r.punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>}
           </tr>;
