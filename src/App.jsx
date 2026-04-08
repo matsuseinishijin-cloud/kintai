@@ -3917,15 +3917,15 @@ export default function App(){
       <ChangePw emp={cur} passwords={passwords} reload={loadAll} onClose={()=>setShowPwChange(false)}/>
     </div>}
 
-    <div style={{display:"flex",gap:6,padding:5,borderRadius:14,...crd,marginBottom:"1rem",flexWrap:"wrap",alignItems:"stretch"}}>
+    <div style={{display:"flex",gap:6,padding:5,borderRadius:14,...crd,marginBottom:"1rem",alignItems:"stretch"}}>
       {isLead&&<>
         {/* 自分用タブグループ */}
-        <div style={{display:"flex",flexDirection:"column",gap:2}}>
-          <span style={{fontSize:9,fontWeight:700,color:"#1251a3",letterSpacing:"0.08em",paddingLeft:6,paddingBottom:1}}>MY</span>
-          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#EBF2FF",alignItems:"center"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
+          <span style={{fontSize:9,fontWeight:700,color:"#1251a3",letterSpacing:"0.08em",paddingLeft:8,paddingBottom:1}}>MY</span>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#EBF2FF",alignItems:"center",height:"100%"}}>
             {tabs.slice(0,tabs.indexOf("---")).map((t,i)=>{
               const isActive=tabName===t||(tabName===""&&i===0);
-              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:isActive?"#1251a3":"transparent",color:isActive?"white":"#1251a3",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s"}}>
+              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:isActive?"#1251a3":"transparent",color:isActive?"white":"#1251a3",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s",textAlign:"center"}}>
                 {t}
               </button>;
             })}
@@ -3936,13 +3936,13 @@ export default function App(){
           <div style={{width:1,height:36,background:"var(--color-border-secondary)",borderRadius:1}}/>
         </div>
         {/* 責任者用タブグループ */}
-        <div style={{display:"flex",flexDirection:"column",gap:2}}>
-          <span style={{fontSize:9,fontWeight:700,color:"#185FA5",letterSpacing:"0.08em",paddingLeft:6,paddingBottom:1}}>STAFF</span>
-          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#DCEEFF",alignItems:"center"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
+          <span style={{fontSize:9,fontWeight:700,color:"#185FA5",letterSpacing:"0.08em",paddingLeft:8,paddingBottom:1}}>STAFF</span>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#DCEEFF",alignItems:"center",height:"100%"}}>
             {tabs.slice(tabs.indexOf("---")+1).map((t,i)=>{
               const isActive=tabName===t;
               const leadPendAll2=leadPendOT+leadPendLV+leadPendTR+(isPTlead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0);
-              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:isActive?"#185FA5":"transparent",color:isActive?"white":"#185FA5",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s"}}>
+              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:isActive?"#185FA5":"transparent",color:isActive?"white":"#185FA5",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s",textAlign:"center"}}>
                 {t}
                 {t==="申請許可"&&leadPendAll2>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendAll2}</span>}
               </button>;
