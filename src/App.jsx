@@ -3917,31 +3917,41 @@ export default function App(){
       <ChangePw emp={cur} passwords={passwords} reload={loadAll} onClose={()=>setShowPwChange(false)}/>
     </div>}
 
-    <div style={{display:"flex",gap:4,padding:4,borderRadius:12,...crd,marginBottom:"1rem",flexWrap:"wrap",alignItems:"center"}}>
-      {isLead&&<div style={{display:"flex",gap:4,padding:"3px 6px",borderRadius:8,background:"#EAF3DE",alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#3B6D11",fontWeight:600,paddingRight:4,whiteSpace:"nowrap"}}>自分</span>
-        {tabs.slice(0,tabs.indexOf("---")).map((t,i)=>{
-          const isActive=tabName===t||(tabName===""&&i===0);
-          return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"10px 4px",minWidth:80,borderRadius:8,border:"none",background:isActive?"#3B6D11":"transparent",color:isActive?"white":"#3B6D11",fontSize:15,fontWeight:isActive?700:400,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1}}>
-            {t}
-          </button>;
-        })}
-      </div>}
-      {isLead&&<div style={{width:"1px",height:28,background:"var(--color-border-secondary)",margin:"0 2px"}}/>}
-      {isLead&&<div style={{display:"flex",gap:4,padding:"3px 6px",borderRadius:8,background:"#FAEEDA",alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#854F0B",fontWeight:600,paddingRight:4,whiteSpace:"nowrap"}}>責任者</span>
-        {tabs.slice(tabs.indexOf("---")+1).map((t,i)=>{
-          const isActive=tabName===t;
-          const pendAll2=pendOT+pendLV+pendTR+(punchFixReqs.filter(r=>r.status==="pending").length);
-          const leadPendAll2=leadPendOT+leadPendLV+leadPendTR+(isPTlead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0);
-          return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"10px 4px",minWidth:80,borderRadius:8,border:"none",background:isActive?"#854F0B":"transparent",color:isActive?"white":"#854F0B",fontSize:15,fontWeight:isActive?700:400,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1}}>
-            {t}
-            {t==="申請許可"&&leadPendAll2>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendAll2}</span>}
-          </button>;
-        })}
-      </div>}
+    <div style={{display:"flex",gap:6,padding:5,borderRadius:14,...crd,marginBottom:"1rem",flexWrap:"wrap",alignItems:"stretch"}}>
+      {isLead&&<>
+        {/* 自分用タブグループ */}
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:9,fontWeight:700,color:"#1251a3",letterSpacing:"0.08em",paddingLeft:6,paddingBottom:1}}>MY</span>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#EBF2FF",alignItems:"center"}}>
+            {tabs.slice(0,tabs.indexOf("---")).map((t,i)=>{
+              const isActive=tabName===t||(tabName===""&&i===0);
+              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:isActive?"#1251a3":"transparent",color:isActive?"white":"#1251a3",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s"}}>
+                {t}
+              </button>;
+            })}
+          </div>
+        </div>
+        {/* 区切り */}
+        <div style={{display:"flex",alignItems:"center",padding:"0 2px"}}>
+          <div style={{width:1,height:36,background:"var(--color-border-secondary)",borderRadius:1}}/>
+        </div>
+        {/* 責任者用タブグループ */}
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:9,fontWeight:700,color:"#185FA5",letterSpacing:"0.08em",paddingLeft:6,paddingBottom:1}}>STAFF</span>
+          <div style={{display:"flex",gap:3,padding:"4px 6px",borderRadius:10,background:"#DCEEFF",alignItems:"center"}}>
+            {tabs.slice(tabs.indexOf("---")+1).map((t,i)=>{
+              const isActive=tabName===t;
+              const leadPendAll2=leadPendOT+leadPendLV+leadPendTR+(isPTlead?punchFixReqs.filter(r=>r.status==="pending"&&emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role))).length:0);
+              return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:isActive?"#185FA5":"transparent",color:isActive?"white":"#185FA5",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s"}}>
+                {t}
+                {t==="申請許可"&&leadPendAll2>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendAll2}</span>}
+              </button>;
+            })}
+          </div>
+        </div>
+      </>}
       {!isLead&&tabs.map((t,i)=>{
-        if(t==="---") return <div key="sep" style={{width:"1px",height:24,background:"var(--color-border-secondary)",margin:"0 4px"}}/>;
+        if(t==="---") return <div key="sep" style={{width:"1px",height:24,background:"var(--color-border-secondary)",margin:"0 4px",alignSelf:"center"}}/>;
         const pendAll=pendOT+pendLV+pendTR+(punchFixReqs.filter(r=>r.status==="pending").length);
         return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{...nB(tabName===t||(tabName===""&&i===0&&t!=="---")),opacity:shiftDefSaving&&tabName!==t?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>
           {t}
