@@ -2360,7 +2360,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
       const isRehaPart=emp.role==="リハマネ"&&emp.type==="パート";
       if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
-      if(isRehaPart) return <RehaMonthlyReport emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
+      if(isRehaPart) return <RehaMonthlyReport emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
       return <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
@@ -3997,7 +3997,7 @@ function calcRehaSlots(pIn,pOut,hasBreak,approvedEarly){
   return {amMin,pmMin,nightMin};
 }
 
-function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear=null,outerMonth=null,reload=()=>{}}){
+function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData,outerYear=null,outerMonth=null,reload=()=>{}}){
   const cur0=getCurrentPeriod();
   const [periodYear,setPeriodYear]=useState(outerYear||cur0.year);
   const [periodMonth,setPeriodMonth]=useState(outerMonth||cur0.month);
@@ -4084,13 +4084,16 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
     {/* サマリー */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-        {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
-          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
-            <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
-            <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
-          </div>
-        ))}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+        {(()=>{
+          const lvDays=(lvReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&days.includes(r.date)).reduce((s,r)=>s+(r.half?0.5:1),0);
+          return [["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"],["有給",lvDays>0?lvDays+"日":"―"]].map(([l,v])=>(
+            <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+              <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+            </div>
+          ));
+        })()}
       </div>
       <div style={{display:"flex",gap:6}}>
         {[
@@ -4492,7 +4495,7 @@ export default function App(){
         if(t==="月次集計") return isNursepart
           ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :isRehapart
-          ?<RehaMonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={loadAll}/>
+          ?<RehaMonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll}/>;
