@@ -2351,22 +2351,24 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <div style={{fontSize:13,fontWeight:700,marginBottom:"0.5rem",color:"#111"}}>タイムカード</div>
         <div style={{...crd,overflow:"hidden"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <thead><tr>{["日","曜","シフト","出勤","退勤","勤務時間","勤務状況","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
             <tbody>{adjRows.map(r=>{
               const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
-              const adjDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
+              // 差異（10分丸め）：adjustedOut - shiftEnd を10分単位で
+              const rawDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
+              const diffRounded=rawDiff!==null?Math.round(rawDiff/10)*10:null;
               const isEditing=editKey===r.ds;
-              if(isEditing) return <EditRow key={r.ds} r={r} colSpan={9}/>;
+              if(isEditing) return <EditRow key={r.ds} r={r} colSpan={8}/>;
               const badges=[];
               if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.missingOut) badges.push(<Badge key="mo" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
               else {
-                if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
-                if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{r.lateMin>0?"-"+r.lateMin+"分":""}</span></span>);
-                if(r.isEarly) badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/></span>);
-                if(r.approvedEarlyReq){const em=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(em>0) badges.push(<span key="ey" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{em}分</span></span>);}
+                if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded!==null&&diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
+                if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
+                if(r.isEarly){const earlyDiff=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{earlyDiff>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(earlyDiff)}</span>}</span>);}
+                if(r.approvedEarlyReq){const em=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(em>0) badges.push(<span key="ey" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{toHStr(Math.round(em/10)*10)}</span></span>);}
                 if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
               }
               const rowBg=r.absent||r.missingOut?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
@@ -2377,7 +2379,6 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 <td style={tdS}>{r.punch?.in||"―"}</td>
                 <td style={tdS}>{r.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
                 <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
-                <td style={{...tdS,color:adjDiff!=null&&adjDiff>0?"#854F0B":adjDiff!=null&&adjDiff<0?"#3B6D11":"var(--color-text-secondary)"}}>{adjDiff!=null?(adjDiff>=0?"+":"")+toHStr(adjDiff):"―"}</td>
                 <td style={tdS}><div style={{display:"flex",flexWrap:"wrap",gap:2}}>{badges}</div></td>
                 <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
               </tr>;
