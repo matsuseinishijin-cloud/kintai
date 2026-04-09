@@ -2238,7 +2238,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           const isOff=!r.def.start;
           const wm=b.in&&b.out?Math.max(0,toMin(b.out)-toMin(b.in)-(r.def.breakMin!=null?r.def.breakMin:BREAK_MIN)):null;
           const willDelete=!!r.punch&&!b.in;
-          return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:willDelete?"#FFF5F5":isOff&&b.in?"#FFFCF5":""}}>
+          return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:willDelete?"#FFF5F5":!isOff?"#F0F6FF":""}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.punch&&<span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:"#E6F1FB",color:"#185FA5",marginLeft:3}}>既存</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:11,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
@@ -3951,10 +3951,10 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
-            <td style={{...tdS,color:r.amMin>0?"#1251a3":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
-            <td style={{...tdS,color:r.pm1Min>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pm1Min>0?600:400}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
-            <td style={{...tdS,color:r.pm2Min>0?"#993C1D":"var(--color-text-tertiary)",fontWeight:r.pm2Min>0?600:400}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
-            <td style={{...tdS,color:r.sunMin>0?"#A32D2D":"var(--color-text-tertiary)",fontWeight:r.sunMin>0?600:400}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
+            <td style={{...tdS,color:r.amMin>0?"#111":"var(--color-text-tertiary)"}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
+            <td style={{...tdS,color:r.pm1Min>0?"#111":"var(--color-text-tertiary)"}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
+            <td style={{...tdS,color:r.pm2Min>0?"#111":"var(--color-text-tertiary)"}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
+            <td style={{...tdS,color:r.sunMin>0?"#111":"var(--color-text-tertiary)"}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
             <td style={tdS}><button onClick={()=>{setEditKey(r.ds);setEditForm({in:punch?.in||"",out:punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{punch?"修正":"追加"}</button></td>
           </tr>;
         })}</tbody>
@@ -4137,10 +4137,10 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
-            <td style={{...tdS,color:r.amMin>0?"#1251a3":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
-            <td style={{...tdS,color:r.pmMin>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pmMin>0?600:400}}>{r.pmMin>0?toHStr(r.pmMin):"―"}</td>
-            <td style={{...tdS,color:r.nightMin>0?"#5B3A8E":"var(--color-text-tertiary)",fontWeight:r.nightMin>0?600:400}}>{r.nightMin>0?toHStr(r.nightMin):"―"}</td>
-            <td style={{...tdS,color:r.sunMin>0?"#A32D2D":"var(--color-text-tertiary)",fontWeight:r.sunMin>0?600:400}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
+            <td style={{...tdS,color:r.amMin>0?"#111":"var(--color-text-tertiary)"}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
+            <td style={{...tdS,color:r.pmMin>0?"#111":"var(--color-text-tertiary)"}}>{r.pmMin>0?toHStr(r.pmMin):"―"}</td>
+            <td style={{...tdS,color:r.nightMin>0?"#111":"var(--color-text-tertiary)"}}>{r.nightMin>0?toHStr(r.nightMin):"―"}</td>
+            <td style={{...tdS,color:r.sunMin>0?"#111":"var(--color-text-tertiary)"}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
             <td style={tdS}><button onClick={()=>{setEditKeyR(r.ds);setEditFormR({in:punch?.in||"",out:punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{punch?"修正":"追加"}</button></td>
           </tr>;
         })}</tbody>
