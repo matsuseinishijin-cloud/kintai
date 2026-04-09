@@ -2044,6 +2044,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   const [editKey,setEditKey]=useState(null);
   const [editForm,setEditForm]=useState({in:"",out:""});
   const [editSaving,setEditSaving]=useState(false);
+  // 月・従業員切り替え時にbulkMode・editKeyをリセット
+  useEffect(()=>{setBulkMode(false);setEditKey(null);setBulkMsg("");},[year,month,empId]);
   const startEdit=(r)=>{
     setEditKey(r.ds);
     setEditForm({in:r.punch?.in||"",out:r.punch?.out||""});
@@ -2357,8 +2359,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     {!isPTpart&&emp&&(()=>{
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
       const isRehaPart=emp.role==="リハマネ"&&emp.type==="パート";
-      if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month}/>;
-      if(isRehaPart) return <RehaMonthlyReport emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month}/>;
+      if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
+      if(isRehaPart) return <RehaMonthlyReport emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
       return <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
@@ -3792,7 +3794,7 @@ function calcNurseSlots(pIn,pOut,hasBreak){
   return {amMin,pm1Min,pm2Min};
 }
 
-function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,outerMonth=null}){
+function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,outerMonth=null,reload=()=>{}}){
   const cur0=getCurrentPeriod();
   const [periodYear,setPeriodYear]=useState(outerYear||cur0.year);
   const [periodMonth,setPeriodMonth]=useState(outerMonth||cur0.month);
@@ -3801,6 +3803,24 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
     if(outerYear!==null&&outerMonth!==null){setPeriodYear(outerYear);setPeriodMonth(outerMonth);}
   },[outerYear,outerMonth]);
   const showNav=outerYear===null; // TimecardViewから呼ばれる場合はナビゲーター非表示
+  const [editKey,setEditKey]=useState(null);
+  const [editForm,setEditForm]=useState({in:"",out:""});
+  const [editSaving,setEditSaving]=useState(false);
+  const saveEdit=async(ds,def)=>{
+    setEditSaving(true);
+    try{
+      const existing=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+      if(!editForm.in){
+        if(existing) await gasDelete("打刻",existing.id);
+      } else {
+        const breakMin=def.breakMin!=null?Number(def.breakMin):BREAK_MIN;
+        const data=convertTo({id:existing?.id||newId(),empId:emp.id,date:ds,in:editForm.in,out:editForm.out||"",break:breakMin,adjusted:false},PUNCH_INV);
+        await gasSave("打刻",data);
+      }
+      await reload(); setEditKey(null);
+    }catch(e){alert("保存失敗："+e.message);}
+    setEditSaving(false);
+  };
   const period=getPeriodRange(periodYear,periodMonth);
   const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
   const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
@@ -3874,7 +3894,8 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
     </div>}
 
     {/* サマリー */}
-    <div style={{...crd,padding:"14px 16px",marginBottom:"1rem"}}>
+    <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--color-text-primary)"}}>月次レポート</div>
       {/* 上段：合計・出勤日数 */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
         {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
@@ -3887,39 +3908,54 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
       {/* 下段：時間帯内訳 */}
       <div style={{display:"flex",gap:6}}>
         {[
-          ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3","#E8F0FB"],
-          ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―","#854F0B","#FDF3E7"],
-          ["③午後後半（17:00〜）",totalPm2Min>0?toHStr(totalPm2Min):"―","#993C1D","#FAEEE9"],
-          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D","#FBEAEA"],
-        ].map(([l,v,c,bg])=>(
-          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:bg,textAlign:"center"}}>
-            <div style={{fontSize:10,color:c,marginBottom:3,fontWeight:600,opacity:0.8}}>{l}</div>
+          ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3"],
+          ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―","#854F0B"],
+          ["③午後後半（17:00〜）",totalPm2Min>0?toHStr(totalPm2Min):"―","#993C1D"],
+          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D"],
+        ].map(([l,v,c])=>(
+          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:"#fff",border:`1.5px solid ${c}22`,textAlign:"center"}}>
+            <div style={{fontSize:10,color:c,marginBottom:3,fontWeight:600}}>{l}</div>
             <div style={{fontSize:17,fontWeight:700,color:c}}>{v}</div>
           </div>
         ))}
       </div>
     </div>
 
-    {/* 日別テーブル */}
+    {/* タイムカード */}
+    <div style={{fontSize:13,fontWeight:700,marginBottom:"0.5rem",color:"var(--color-text-primary)"}}>タイムカード</div>
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
         <thead><tr>
-          {["日付","曜","シフト","出勤","退勤","①午前","②午後前半","③午後後半","④日曜"].map(h=><th key={h} style={thS}>{h}</th>)}
+          {["日付","曜","シフト","出勤","退勤","①午前","②午後前半","③午後後半","④日曜","操作"].map(h=><th key={h} style={thS}>{h}</th>)}
         </tr></thead>
         <tbody>{rows.map(r=>{
           const dc=r.isSunday?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
           const bg=r.isHol?"#F5F9FE":"";
+          const isEditing=editKey===r.ds;
+          if(isEditing) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
+            <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
+            <td style={tdS}>{DOW_JP[r.dow]}</td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
+            <td colSpan={5} style={tdS}><div style={{display:"flex",gap:6}}>
+              <button onClick={()=>saveEdit(r.ds,r.def)} disabled={editSaving} style={{...bP,padding:"4px 12px",fontSize:12,opacity:editSaving?0.5:1}}>{editSaving?"保存中...":"保存"}</button>
+              <button onClick={()=>setEditKey(null)} disabled={editSaving} style={{...bS,padding:"4px 10px",fontSize:12}}>取消</button>
+              {punch&&<button onClick={async()=>{if(!confirm("削除しますか？"))return;try{await gasDelete("打刻",punch.id);await reload();setEditKey(null);}catch(e){alert(e.message);}}} disabled={editSaving} style={{...bD,padding:"4px 10px",fontSize:12}}>削除</button>}
+            </div></td>
+          </tr>;
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
             <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
-            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?(punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds)?.in||"―"):"―"}</td>
-            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.attended?(punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds)?.out||"―"):"―"}</td>
-            <td style={{...tdS,color:r.amMin>0?"#185FA5":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
+            <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
+            <td style={{...tdS,color:r.amMin>0?"#1251a3":"var(--color-text-tertiary)",fontWeight:r.amMin>0?600:400}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
             <td style={{...tdS,color:r.pm1Min>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pm1Min>0?600:400}}>{r.pm1Min>0?toHStr(r.pm1Min):"―"}</td>
             <td style={{...tdS,color:r.pm2Min>0?"#993C1D":"var(--color-text-tertiary)",fontWeight:r.pm2Min>0?600:400}}>{r.pm2Min>0?toHStr(r.pm2Min):"―"}</td>
             <td style={{...tdS,color:r.sunMin>0?"#A32D2D":"var(--color-text-tertiary)",fontWeight:r.sunMin>0?600:400}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
+            <td style={tdS}><button onClick={()=>{setEditKey(r.ds);setEditForm({in:punch?.in||"",out:punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{punch?"修正":"追加"}</button></td>
           </tr>;
         })}</tbody>
       </table>
@@ -3961,7 +3997,7 @@ function calcRehaSlots(pIn,pOut,hasBreak,approvedEarly){
   return {amMin,pmMin,nightMin};
 }
 
-function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear=null,outerMonth=null}){
+function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear=null,outerMonth=null,reload=()=>{}}){
   const cur0=getCurrentPeriod();
   const [periodYear,setPeriodYear]=useState(outerYear||cur0.year);
   const [periodMonth,setPeriodMonth]=useState(outerMonth||cur0.month);
@@ -3969,6 +4005,24 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
     if(outerYear!==null&&outerMonth!==null){setPeriodYear(outerYear);setPeriodMonth(outerMonth);}
   },[outerYear,outerMonth]);
   const showNav=outerYear===null;
+  const [editKeyR,setEditKeyR]=useState(null);
+  const [editFormR,setEditFormR]=useState({in:"",out:""});
+  const [editSavingR,setEditSavingR]=useState(false);
+  const saveEditR=async(ds,def)=>{
+    setEditSavingR(true);
+    try{
+      const existing=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+      if(!editFormR.in){
+        if(existing) await gasDelete("打刻",existing.id);
+      } else {
+        const breakMin=def.breakMin!=null?Number(def.breakMin):BREAK_MIN;
+        const data=convertTo({id:existing?.id||newId(),empId:emp.id,date:ds,in:editFormR.in,out:editFormR.out||"",break:breakMin,adjusted:false},PUNCH_INV);
+        await gasSave("打刻",data);
+      }
+      await reload(); setEditKeyR(null);
+    }catch(e){alert("保存失敗："+e.message);}
+    setEditSavingR(false);
+  };
   const period=getPeriodRange(periodYear,periodMonth);
   const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
   const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
@@ -4019,14 +4073,6 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
     return {ds,dow,isSunday,isHol,def,isOff:false,attended:true,amMin,pmMin,nightMin,sunMin:0,workMin,pInRaw,pOutRaw};
   });
 
-  // 共通サマリーカードスタイル
-  const slotCard=(label,value,color,bg)=>(
-    <div key={label} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:bg,textAlign:"center"}}>
-      <div style={{fontSize:10,color,marginBottom:3,fontWeight:600,opacity:0.8}}>{label}</div>
-      <div style={{fontSize:17,fontWeight:700,color}}>{value}</div>
-    </div>
-  );
-
   return <div>
     {showNav&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
       <button onClick={prevPeriod} style={bS}>‹</button>
@@ -4036,35 +4082,55 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
     </div>}
 
     {/* サマリー */}
-    <div style={{...crd,padding:"14px 16px",marginBottom:"1rem"}}>
-      {/* 上段：合計・出勤日数 */}
+    <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--color-text-primary)"}}>月次レポート</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-        {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―",""],["出勤日数",totalDays+"日",""]].map(([l,v])=>(
+        {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
           <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
             <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
             <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{v}</div>
           </div>
         ))}
       </div>
-      {/* 下段：時間帯内訳 */}
       <div style={{display:"flex",gap:6}}>
-        {slotCard("①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3","#E8F0FB")}
-        {slotCard("②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―","#854F0B","#FDF3E7")}
-        {slotCard("③夜勤（18:00〜）",totalNightMin>0?toHStr(totalNightMin):"―","#5B3A8E","#F0EAF8")}
-        {slotCard("④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D","#FBEAEA")}
+        {[
+          ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3"],
+          ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―","#854F0B"],
+          ["③夜勤（18:00〜）",totalNightMin>0?toHStr(totalNightMin):"―","#5B3A8E"],
+          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D"],
+        ].map(([l,v,c])=>(
+          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:"#fff",border:`1.5px solid ${c}22`,textAlign:"center"}}>
+            <div style={{fontSize:10,color:c,marginBottom:3,fontWeight:600}}>{l}</div>
+            <div style={{fontSize:17,fontWeight:700,color:c}}>{v}</div>
+          </div>
+        ))}
       </div>
     </div>
 
-    {/* 日別テーブル */}
+    {/* タイムカード */}
+    <div style={{fontSize:13,fontWeight:700,marginBottom:"0.5rem",color:"var(--color-text-primary)"}}>タイムカード</div>
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
         <thead><tr>
-          {["日付","曜","シフト","出勤","退勤","①午前","②午後","③夜勤","④日曜"].map(h=><th key={h} style={thS}>{h}</th>)}
+          {["日付","曜","シフト","出勤","退勤","①午前","②午後","③夜勤","④日曜","操作"].map(h=><th key={h} style={thS}>{h}</th>)}
         </tr></thead>
         <tbody>{rows.map(r=>{
           const dc=r.isSunday?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===r.ds);
           const bg=r.isHol?"#F5F9FE":"";
+          const isEditing=editKeyR===r.ds;
+          if(isEditing) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
+            <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
+            <td style={tdS}>{DOW_JP[r.dow]}</td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={editFormR.in} onChange={e=>setEditFormR(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
+            <td style={{padding:"4px 6px"}}><input type="time" value={editFormR.out} onChange={e=>setEditFormR(p=>({...p,out:e.target.value}))} disabled={!editFormR.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editFormR.in?1:0.4}}/></td>
+            <td colSpan={5} style={tdS}><div style={{display:"flex",gap:6}}>
+              <button onClick={()=>saveEditR(r.ds,r.def)} disabled={editSavingR} style={{...bP,padding:"4px 12px",fontSize:12,opacity:editSavingR?0.5:1}}>{editSavingR?"保存中...":"保存"}</button>
+              <button onClick={()=>setEditKeyR(null)} disabled={editSavingR} style={{...bS,padding:"4px 10px",fontSize:12}}>取消</button>
+              {punch&&<button onClick={async()=>{if(!confirm("削除しますか？"))return;try{await gasDelete("打刻",punch.id);await reload();setEditKeyR(null);}catch(e){alert(e.message);}}} disabled={editSavingR} style={{...bD,padding:"4px 10px",fontSize:12}}>削除</button>}
+            </div></td>
+          </tr>;
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
@@ -4075,6 +4141,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
             <td style={{...tdS,color:r.pmMin>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:r.pmMin>0?600:400}}>{r.pmMin>0?toHStr(r.pmMin):"―"}</td>
             <td style={{...tdS,color:r.nightMin>0?"#5B3A8E":"var(--color-text-tertiary)",fontWeight:r.nightMin>0?600:400}}>{r.nightMin>0?toHStr(r.nightMin):"―"}</td>
             <td style={{...tdS,color:r.sunMin>0?"#A32D2D":"var(--color-text-tertiary)",fontWeight:r.sunMin>0?600:400}}>{r.sunMin>0?toHStr(r.sunMin):"―"}</td>
+            <td style={tdS}><button onClick={()=>{setEditKeyR(r.ds);setEditFormR({in:punch?.in||"",out:punch?.out||""});}} style={{...bS,padding:"3px 10px",fontSize:11}}>{punch?"修正":"追加"}</button></td>
           </tr>;
         })}</tbody>
       </table>
@@ -4423,9 +4490,9 @@ export default function App(){
         if(t==="マイシフト") return <MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
         if(t==="月次集計") return isNursepart
-          ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData}/>
+          ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :isRehapart
-          ?<RehaMonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>
+          ?<RehaMonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll}/>;
