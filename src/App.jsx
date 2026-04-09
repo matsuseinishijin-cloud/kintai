@@ -3895,27 +3895,27 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
 
     {/* サマリー */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--color-text-primary)"}}>月次レポート</div>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
       {/* 上段：合計・出勤日数 */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
         {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
-          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
-            <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
-            <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{v}</div>
+          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
       </div>
       {/* 下段：時間帯内訳 */}
       <div style={{display:"flex",gap:6}}>
         {[
-          ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3"],
-          ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―","#854F0B"],
-          ["③午後後半（17:00〜）",totalPm2Min>0?toHStr(totalPm2Min):"―","#993C1D"],
-          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D"],
-        ].map(([l,v,c])=>(
-          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:"#fff",border:`1.5px solid ${c}22`,textAlign:"center"}}>
-            <div style={{fontSize:10,color:c,marginBottom:3,fontWeight:600}}>{l}</div>
-            <div style={{fontSize:17,fontWeight:700,color:c}}>{v}</div>
+          ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
+          ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―"],
+          ["③午後後半（17:00〜）",totalPm2Min>0?toHStr(totalPm2Min):"―"],
+          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―"],
+        ].map(([l,v])=>(
+          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:8,padding:"10px 8px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",textAlign:"center"}}>
+            <div style={{fontSize:10,color:"#555",marginBottom:3}}>{l}</div>
+            <div style={{fontSize:17,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
       </div>
@@ -4083,25 +4083,25 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],shiftDefsData,outerYear
 
     {/* サマリー */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--color-text-primary)"}}>月次レポート</div>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
         {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
-          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
-            <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
-            <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{v}</div>
+          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
       </div>
       <div style={{display:"flex",gap:6}}>
         {[
-          ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―","#1251a3"],
-          ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―","#854F0B"],
-          ["③夜勤（18:00〜）",totalNightMin>0?toHStr(totalNightMin):"―","#5B3A8E"],
-          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―","#A32D2D"],
-        ].map(([l,v,c])=>(
-          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:10,padding:"10px 8px",background:"#fff",border:`1.5px solid ${c}22`,textAlign:"center"}}>
-            <div style={{fontSize:10,color:c,marginBottom:3,fontWeight:600}}>{l}</div>
-            <div style={{fontSize:17,fontWeight:700,color:c}}>{v}</div>
+          ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
+          ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―"],
+          ["③夜勤（18:00〜）",totalNightMin>0?toHStr(totalNightMin):"―"],
+          ["④日曜",totalSunMin>0?toHStr(totalSunMin):"―"],
+        ].map(([l,v])=>(
+          <div key={l} style={{flex:"1 1 0",minWidth:0,borderRadius:8,padding:"10px 8px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",textAlign:"center"}}>
+            <div style={{fontSize:10,color:"#555",marginBottom:3}}>{l}</div>
+            <div style={{fontSize:17,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
       </div>
