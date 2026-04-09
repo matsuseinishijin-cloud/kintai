@@ -1926,10 +1926,59 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     return days;
   })();
 
-  // サブタブ定義：理学療法士パートは生+調整済、正社員は調整済のみ、その他はタイムカードのみ
+  // サブタブ定義：理学療法士パートは生+照合レポート
   const subTabs=isPTpart
-    ?["生タイムカード","調整済＋照合レポート"]
+    ?["生タイムカード","照合レポート"]
     :[];
+
+  // ── 理学療法士パート 照合ロジック ─────────────────────────────────────────
+  // 生打刻を元に新ルールで調整した出退勤・実働を計算
+  const getPTAdjusted=(r)=>{
+    if(!r.punch||!r.def.start) return {inT:r.punch?.in||"",outT:r.punch?.out||"",workMin:0,lateMin:0,otMin:0,isLate:false,isEarly:false,isOT:false};
+    const shiftStart=toMin(r.def.start);
+    const shiftEnd=toMin(r.def.end);
+    const pIn=r.punch.in?toMin(r.punch.in):null;
+    const pOut=r.punch.out?toMin(r.punch.out):null;
+    const approvedOT=(otReqs||[]).find(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="overtime");
+    const approvedEarly=(otReqs||[]).find(req=>String(req.empId)===String(emp?.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="early");
+
+    // 退勤表示時刻の決定
+    let adjOut=pOut;
+    if(pOut!==null){
+      if(approvedOT) adjOut=toMin(approvedOT.requestedEnd);
+      else if(pOut-shiftEnd>=10) adjOut=shiftEnd+7; // 10分以上遅い→シフト終了+7分
+      // 10分未満はそのまま
+    }
+
+    // 実働開始時刻
+    let workStart=shiftStart;
+    if(approvedEarly) workStart=toMin(approvedEarly.requestedEnd); // 早出申請時刻
+
+    // 遅刻判定
+    const lateMin=pIn!==null?Math.max(0,pIn-shiftStart):0;
+    const isLate=lateMin>=1; // 1分以上で遅刻バッジ
+    // 実働への遅刻影響：4分以上で10分丸め減算
+    let lateDeduct=0;
+    if(lateMin>=4) lateDeduct=Math.ceil(lateMin/10)*10;
+
+    // 実働計算（10分切り捨て）
+    const breakMin=r.def.breakMin!=null?Number(r.def.breakMin):0;
+    let rawWork=pOut!==null&&adjOut!==null?Math.max(0,adjOut-workStart-breakMin-lateDeduct):0;
+    const workMin=Math.floor(rawWork/10)*10;
+
+    // 残業（adjOutがシフト終了より大きい場合）
+    const otMin=adjOut!==null?Math.max(0,adjOut-shiftEnd):0;
+    // 早退（adjOutがシフト終了より小さい場合）
+    const isEarly=adjOut!==null&&adjOut<shiftEnd-1;
+    const isOT=otMin>0;
+
+    return {
+      inT:r.punch.in||"",
+      outT:adjOut!==null?fmtTime(adjOut):"",
+      workMin,lateMin,lateDeduct,otMin,isLate,isEarly,isOT,
+      adjOutRaw:adjOut
+    };
+  };
 
   // buildRowsの代わりに期間日付でrows生成
   const rows=(()=>{
@@ -2262,32 +2311,22 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     {/* 生タイムカード（理学療法士パートのみ・サブタブ0） */}
     {isPTpart&&subTab===0&&<div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:600}}>生タイムカード</div>
+        <div style={{fontSize:13,fontWeight:700}}>生タイムカード</div>
         {!selfView&&<button onClick={()=>printTimecard(false)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
       </div>
-      {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{period.label}</div>
-        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--color-text-secondary)"}}>
-          <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.awMin),0))}</strong></span>
-          <span>残業：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+r.otMin,0))}</strong></span>
-          <span>欠勤：<strong style={{color:rows.filter(r=>r.absent).length>0?"#A32D2D":"var(--color-text-primary)"}}>{rows.filter(r=>r.absent).length}日</strong></span>
-        </div>
-      </div>}
       <div style={{...crd,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead><tr>{["日","曜","シフト","出勤","退勤","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>{rows.map(r=>{
             const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
             const isEditing=editKey===r.ds;
-            if(isEditing) return <EditRow key={r.ds} r={r} colSpan={8}/>;
-            return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
+            if(isEditing) return <EditRow key={r.ds} r={r} colSpan={6}/>;
+            return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
               <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
               <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
               <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
               <td style={tdS}>{r.punch?.in||"―"}</td>
               <td style={tdS}>{r.punch?.out||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
-              <td style={{...tdS,fontWeight:500}}>{r.awMin>0?toHStr(r.awMin):"―"}</td>
-              <td style={{...tdS,color:r.diffMin>0?"#854F0B":r.diffMin<0?"#3B6D11":"var(--color-text-secondary)"}}>{r.punch?.out?(r.diffMin>=0?"+":"")+toHStr(r.diffMin):"―"}</td>
               <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
             </tr>;
           })}</tbody>
@@ -2295,65 +2334,81 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>
     </div>}
 
-    {/* 調整済＋照合レポート（理学療法士パート：サブタブ1） */}
-    {isPTpart&&subTab===1&&<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:600}}>調整済＋照合レポート</div>
-        {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
-      </div>
-      {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>{emp.name}（{emp.role}・{emp.type}）{period.label}</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:8}}>
-          {[
-            ["出勤",rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+"日",""],
-            ["欠勤",rows.filter(r=>r.absent).length+"日",rows.filter(r=>r.absent).length>0?"#A32D2D":""],
-            ["遅刻",rows.filter(r=>r.late).length+"回",rows.filter(r=>r.late).length>0?"#854F0B":""],
-            ["早退",rows.filter(r=>r.earlyLeave).length+"回",rows.filter(r=>r.earlyLeave).length>0?"#854F0B":""],
-            ["有給",rows.filter(r=>r.isLeave).length+"日","#0F6E56"],
-            ["残業",rows.filter(r=>r.otMin>0).length+"日",""],
-          ].map(([l,v,c])=>(
-            <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
-              <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
-              <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
-            </div>
-          ))}
+    {/* 照合レポート（理学療法士パート：サブタブ1） */}
+    {isPTpart&&subTab===1&&(()=>{
+      // 照合データを全行計算
+      const adjRows=rows.map(r=>({...r,...getPTAdjusted(r)}));
+      const totalWork=adjRows.reduce((s,r)=>s+r.workMin,0);
+      const tS=adjRows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0);
+      const attendDays=adjRows.filter(r=>!r.isOff&&!r.absent&&r.workMin>0).length;
+      const absentDays=adjRows.filter(r=>r.absent).length;
+      const lateDays=adjRows.filter(r=>r.isLate).length;
+      const earlyDays=adjRows.filter(r=>r.isEarly).length;
+      const lvDays=adjRows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
+      return <div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+          <div style={{fontSize:13,fontWeight:700}}>照合レポート</div>
+          {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
         </div>
-        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--color-text-secondary)"}}>
-          <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0))}</strong></span>
-          <span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>{
-            if(!r.punch?.out||r.isLeave) return s;
-            const adj=getAdjustedTime(r);
-            if(!adj.inT||!adj.outT) return s;
-            return s+Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0));
-          },0))}</strong></span>
-          <span>残業：<strong style={{color:rows.reduce((s,r)=>s+r.otMin,0)>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(rows.reduce((s,r)=>s+r.otMin,0))}</strong></span>
+        {/* サマリー：看護師・リハマネスタイルに統一 */}
+        {emp&&<div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:10}}>
+            {[
+              ["出勤",attendDays+"日"],["欠勤",absentDays+"日"],
+              ["遅刻",lateDays+"回"],["早退",earlyDays+"回"],["有給",lvDays+"日"],
+            ].map(([l,v])=>(
+              <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+                <div style={{fontSize:10,color:"#555",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#111"}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:12,fontSize:12,color:"#555"}}>
+            <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
+            <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
+          </div>
+        </div>}
+        {/* タイムカード */}
+        <div style={{fontSize:13,fontWeight:700,marginBottom:"0.5rem",color:"#111"}}>タイムカード</div>
+        <div style={{...crd,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>{adjRows.map(r=>{
+              const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+              const adjDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
+              const isEditing=editKey===r.ds;
+              if(isEditing) return <EditRow key={r.ds} r={r} colSpan={9}/>;
+              // バッジ生成
+              const badges=[];
+              if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
+              else if(r.missingOut) badges.push(<Badge key="mo" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
+              else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
+              else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
+              else {
+                if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+                if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{r.lateMin>0?"-"+r.lateMin+"分":""}</span></span>);
+                if(r.isEarly) badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/></span>);
+                if(r.approvedEarlyReq){const em=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(em>0) badges.push(<span key="ey" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{em}分</span></span>);}
+                if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
+              }
+              const rowBg=r.absent||r.missingOut?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
+              return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
+                <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+                <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+                <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+                <td style={tdS}>{r.punch?.in||"―"}</td>
+                <td style={tdS}>{r.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
+                <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
+                <td style={{...tdS,color:adjDiff!=null&&adjDiff>0?"#854F0B":adjDiff!=null&&adjDiff<0?"#3B6D11":"var(--color-text-secondary)"}}>{adjDiff!=null?(adjDiff>=0?"+":"")+toHStr(adjDiff):"―"}</td>
+                <td style={tdS}><div style={{display:"flex",flexWrap:"wrap",gap:2}}>{badges}</div></td>
+                <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
+              </tr>;
+            })}</tbody>
+          </table>
         </div>
-      </div>}
-      <div style={{...crd,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr>{["日","曜","シフト","出勤","退勤","実働","差異","状態","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-          <tbody>{rows.map(r=>{
-            const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
-            const adj=r.punch?getAdjustedTime(r):{inT:"",outT:"",adjusted:false};
-            const adjWorkMin=adj.inT&&adj.outT?Math.max(0,toMin(adj.outT)-toMin(adj.inT)-(r.def.breakMin!=null?r.def.breakMin:0)):0;
-            const adjDiff=r.def.end&&adj.outT?toMin(adj.outT)-toMin(r.def.end):null;
-            const isEditing=editKey===r.ds;
-            if(isEditing) return <EditRow key={r.ds} r={r} colSpan={9}/>;
-            return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
-              <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
-              <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
-              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.inT||"―"}</td>
-              <td style={{...tdS,color:adj.adjusted?"#534AB7":"var(--color-text-primary)"}}>{adj.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
-              <td style={{...tdS,fontWeight:500}}>{adjWorkMin>0?toHStr(adjWorkMin):"―"}</td>
-              <td style={{...tdS,color:adjDiff!=null&&adjDiff>0?"#854F0B":adjDiff!=null&&adjDiff<0?"#3B6D11":"var(--color-text-secondary)"}}>{adjDiff!=null?(adjDiff>=0?"+":"")+toHStr(adjDiff):"―"}</td>
-              <td style={tdS}>{statusBadge(r,true)}</td>
-              <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
-            </tr>;
-          })}</tbody>
-        </table>
-      </div>
-    </div>}
+      </div>;
+    })()}
 
     {/* 月次レポート（正社員・その他パート）：照合レポートのみ */}
     {!isPTpart&&emp&&(()=>{
