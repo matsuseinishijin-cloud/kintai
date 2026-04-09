@@ -3693,7 +3693,144 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
 }
 
 
-// ── MonthlyReport (理学療法士パート) ─────────────────────────────────────────
+// ── MyShiftWithReport (理学療法士パート従業員) ──────────────────────────────
+// マイシフトカレンダー＋月次レポート（独立ナビゲーター）を1タブに統合
+function MyShiftWithReport({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],reload=()=>{}}){
+  return <div>
+    {/* マイシフトカレンダー */}
+    <MyShift emp={emp} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>
+    {/* 月次レポート（独立ナビゲーター） */}
+    <div style={{marginTop:"1.5rem"}}>
+      <PTMonthlyReportSelf emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData}/>
+    </div>
+  </div>;
+}
+
+// ── PTMonthlyReportSelf (理学療法士パート従業員用月次レポート) ─────────────
+function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData}){
+  const cur0=getCurrentPeriod();
+  const [periodYear,setPeriodYear]=useState(cur0.year);
+  const [periodMonth,setPeriodMonth]=useState(cur0.month);
+  const period=getPeriodRange(periodYear,periodMonth);
+  const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
+  const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
+
+  const days=[];
+  let cur=new Date(period.start);const end=new Date(period.end);
+  while(cur<=end){days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);cur.setDate(cur.getDate()+1);}
+
+  const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+
+  // getPTAdjustedと同じロジックをここで再実装（TimecardView外なので）
+  const calcAdj=(r,punch,def)=>{
+    if(!punch||!def.start) return {outT:punch?.out||"",workMin:0,lateMin:0,otMin:0,isLate:false,isEarly:false,isOT:false,adjOutRaw:null};
+    const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+    const pIn=punch.in?toMin(punch.in):null,pOut=punch.out?toMin(punch.out):null;
+    const approvedOT=(otReqs||[]).find(req=>String(req.empId)===String(emp.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="overtime");
+    const approvedEarly=(otReqs||[]).find(req=>String(req.empId)===String(emp.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="early");
+    let adjOut=pOut;
+    if(pOut!==null){
+      if(approvedOT) adjOut=toMin(approvedOT.requestedEnd);
+      else if(pOut-shiftEnd>=10) adjOut=shiftEnd+7;
+    }
+    let workStart=shiftStart;
+    if(approvedEarly) workStart=toMin(approvedEarly.requestedEnd);
+    const lateMin=pIn!==null?Math.max(0,pIn-shiftStart):0;
+    const isLate=lateMin>=1;
+    let lateDeduct=0;if(lateMin>=4) lateDeduct=Math.ceil(lateMin/10)*10;
+    const breakMin=def.breakMin!=null?Number(def.breakMin):0;
+    const rawWork=pOut!==null&&adjOut!==null?Math.max(0,adjOut-workStart-breakMin-lateDeduct):0;
+    const workMin=Math.floor(rawWork/10)*10;
+    const otMin=adjOut!==null?Math.max(0,adjOut-shiftEnd):0;
+    const isEarly=adjOut!==null&&adjOut<shiftEnd-1;
+    return {outT:adjOut!==null?fmtTime(adjOut):"",workMin,lateMin,lateDeduct,otMin,isLate,isEarly,isOT:otMin>0,adjOutRaw:adjOut};
+  };
+
+  const rows=days.map(ds=>{
+    const dow=new Date(ds).getDay();
+    const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+    const def=empDefs[shiftRow?.shiftType||"off"]||empDefs["off"]||{label:"休日",start:null,end:null,color:"var(--color-background-secondary)",tc:"var(--color-text-tertiary)",breakMin:0};
+    const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+    const isOff=!def.start;
+    const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+    const isLeave=!!_lv;
+    const adj=(!isOff&&punch)?calcAdj({ds},punch,def):{outT:"",workMin:0,lateMin:0,otMin:0,isLate:false,isEarly:false,isOT:false,adjOutRaw:null};
+    const absent=!isOff&&!isLeave&&!punch;
+    return {ds,dow,def,isOff,punch,isLeave,absent,...adj};
+  });
+
+  const totalWork=rows.reduce((s,r)=>s+r.workMin,0);
+  const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:(toMin(r.def.end||"00:00")-toMin(r.def.start||"00:00")-(r.def.breakMin||0))),0);
+  const attendDays=rows.filter(r=>!r.isOff&&!r.absent&&r.workMin>0).length;
+  const absentDays=rows.filter(r=>r.absent).length;
+  const lateDays=rows.filter(r=>r.isLate).length;
+  const earlyDays=rows.filter(r=>r.isEarly).length;
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
+      <button onClick={prevPeriod} style={bS}>‹</button>
+      <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
+      <button onClick={nextPeriod} style={bS}>›</button>
+      <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
+    </div>
+    {/* サマリー */}
+    <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
+          <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+        {[["欠勤",absentDays+"日"],["遅刻",lateDays+"回"],["早退",earlyDays+"回"]].map(([l,v])=>(
+          <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+            <div style={{fontSize:10,color:"#555",marginBottom:2}}>{l}</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#111"}}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:12,fontSize:12,color:"#555"}}>
+        <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
+        <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
+      </div>
+    </div>
+    {/* タイムカード */}
+    <div style={{fontSize:13,fontWeight:700,marginBottom:"0.5rem",color:"#111"}}>タイムカード</div>
+    <div style={{...crd,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>{["日","曜","シフト","出勤","退勤","勤務時間","勤務状況"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map(r=>{
+          const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
+          const rawDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
+          const diffRounded=rawDiff!==null?Math.round(rawDiff/10)*10:null;
+          const badges=[];
+          if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
+          else if(r.isLeave) badges.push(<Badge key="lv" label="有休" bg="#E1F5EE" color="#0F6E56"/>);
+          else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
+          else {
+            if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
+            if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
+            if(r.isEarly){const ed=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{ed>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(ed)}</span>}</span>);}
+            if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
+          }
+          const rowBg=r.absent?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
+          return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
+            <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
+            <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
+            <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
+            <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
+            <td style={tdS}><div style={{display:"flex",flexWrap:"wrap",gap:2}}>{badges}</div></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+  </div>;
+}
 function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
   // 15日締め期間
   const cur0=getCurrentPeriod();
@@ -4468,7 +4605,7 @@ export default function App(){
   const isNursepart=cur&&cur.role==="看護師"&&cur.type==="パート";
   const isRehapart=cur&&cur.role==="リハマネ"&&cur.type==="パート";
   const eTabs=isPTpart
-    ?["打刻","申請","マイシフト","月次集計"]
+    ?["打刻","申請","マイシフト"]
     :isNursepart||isRehapart
     ?["打刻","申請","マイシフト","月次集計"]
     :["打刻","申請","マイシフト","月次レポート"];
@@ -4548,7 +4685,9 @@ export default function App(){
         const t=tabName||(tabs.find(x=>x!=="---")||tabs[0]||"");
         if(t==="打刻") return <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} onPunchesUpdate={setPunches}/>;
         if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} reload={loadAll}/>;
-        if(t==="マイシフト") return <MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
+        if(t==="マイシフト") return isPTpart
+          ?<MyShiftWithReport emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} reload={loadAll}/>
+          :<MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
         if(t==="月次集計") return isNursepart
           ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>
