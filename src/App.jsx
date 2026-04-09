@@ -3612,56 +3612,36 @@ function PunchFixRequest({emp,punches,punchFixReqs,shifts,shiftDefsData,reload})
   </div>;
 }
 
-// ── MyShift (Employee) ────────────────────────────────────────────────────────
-function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
-  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
-  const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
+// ── MyShiftCalendar（カレンダー描画のみ・MyShiftWithReportから使用） ────────
+function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],year,month}){
   const first=firstDow(year,month),last=daysInMonth(year,month);
   const cells=[...Array(first).fill(null),...Array.from({length:last},(_,i)=>i+1)];
   while(cells.length%7!==0) cells.push(null);
-  const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
-  const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   const td=today();
   const isPTpart=emp.role==="理学療法士"&&emp.type==="パート";
-
-  // 勤務状況バッジを計算
   const getStatusBadges=(ds,def)=>{
     if(!isPTpart||ds>td||!def.start) return [];
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const badges=[];
-    if(!punch){
-      badges.push({label:"欠勤",bg:"#FCEBEB",color:"#A32D2D"});
-      return badges;
-    }
-    const shiftStart=toMin(def.start);
-    const shiftEnd=toMin(def.end);
-    const punchIn=punch.in?toMin(punch.in):null;
-    const punchOut=punch.out?toMin(punch.out):null;
-    // 退勤忘れ（出勤打刻あり・退勤打刻なし）
-    if(punch.in&&!punch.out){
-      badges.push({label:"退勤忘れ",bg:"#FCEBEB",color:"#A32D2D"});
-      return badges;
-    }
-    let isLate=false,isEarly=false;
-    if(punchIn!==null&&punchIn>shiftStart) isLate=true;
-    if(punchOut!==null&&punchOut<shiftEnd) isEarly=true;
-    if(!isLate&&!isEarly) badges.push({label:"勤務済",bg:"#EAF3DE",color:"#3B6D11"});
+    if(!punch){badges.push({label:"欠勤",bg:"#FCEBEB",color:"#A32D2D"});return badges;}
+    const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+    const punchIn=punch.in?toMin(punch.in):null,punchOut=punch.out?toMin(punch.out):null;
+    if(punch.in&&!punch.out){badges.push({label:"退勤忘れ",bg:"#FCEBEB",color:"#A32D2D"});return badges;}
+    let isLate=punchIn!==null&&punchIn>shiftStart,isEarlyLeave=punchOut!==null&&punchOut<shiftEnd;
+    if(!isLate&&!isEarlyLeave) badges.push({label:"勤務済",bg:"#EAF3DE",color:"#3B6D11"});
     if(isLate) badges.push({label:"遅刻",bg:"#FAEEDA",color:"#854F0B"});
-    if(isEarly) badges.push({label:"早退",bg:"#FAEEDA",color:"#854F0B"});
-    // 承認済み残業申請
+    if(isEarlyLeave) badges.push({label:"早退",bg:"#FAEEDA",color:"#854F0B"});
     const ot=otReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
     if(ot) badges.push({label:"残業",bg:"#EEEDFE",color:"#3C3489"});
     return badges;
   };
-
   return <div>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>{DOW_JP.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:13,color:i===0?"#A32D2D":i===6?"#185FA5":"var(--color-text-secondary)",padding:"4px 0",fontWeight:500}}>{d}</div>)}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{cells.map((d,i)=>{
       if(!d) return <div key={i}/>;
       const ds=`${year}-${pad(month)}-${pad(d)}`;
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
-      const isLeave=!!_lvMatch, leaveHalf=_lvMatch?.half||null;
+      const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const _myDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
       const def=_myDefs[(isLeave&&!leaveHalf)?"off":shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off;
@@ -3669,20 +3649,13 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
       const leaveLabel=leaveHalf==="am"?"午前有給":leaveHalf==="pm"?"午後有給":"有給";
       const statusBadges=getStatusBadges(ds,def);
       return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:isLeave&&!leaveHalf?"#E1F5EE":def.color,border:isToday?"2px solid #185FA5":"0.5px solid transparent",minHeight:72}}>
-        {/* 日付：左上大きく */}
-        <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":def.tc,marginBottom:4}}>
-          {d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}
-        </div>
-        {/* シフト名とバッジを横並び */}
+        <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":def.tc,marginBottom:4}}>{d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</div>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
           <div>
-            {isLeave
-              ?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>
-              :<div style={{fontSize:13,color:def.tc,fontWeight:600}}>{def.label}</div>}
+            {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:def.tc,fontWeight:600}}>{def.label}</div>}
             {!isLeave&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
             {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
           </div>
-          {/* バッジ：縦に並べる */}
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
             {statusBadges.map((b,bi)=><span key={bi} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:b.bg,color:b.color,whiteSpace:"nowrap"}}>{b.label}</span>)}
           </div>}
@@ -3692,28 +3665,61 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
   </div>;
 }
 
+// ── MyShift (Employee) ────────────────────────────────────────────────────────
+function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
+  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
+  const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
+  const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
+  const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
+    <MyShiftCalendar emp={emp} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} year={year} month={month}/>
+  </div>;
+}
+
+
 
 // ── MyShiftWithReport (理学療法士パート従業員) ──────────────────────────────
-// マイシフトカレンダー＋月次レポート（独立ナビゲーター）を1タブに統合
 function MyShiftWithReport({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],reload=()=>{}}){
+  const cur0=getCurrentPeriod();
+  const CY=new Date().getFullYear(),CM=new Date().getMonth()+1;
+  // カレンダー用ナビゲーター
+  const [calYear,setCalYear]=useState(CY),[calMonth,setCalMonth]=useState(CM);
+  const prevCal=()=>calMonth===1?(setCalYear(y=>y-1),setCalMonth(12)):setCalMonth(m=>m-1);
+  const nextCal=()=>calMonth===12?(setCalYear(y=>y+1),setCalMonth(1)):setCalMonth(m=>m+1);
+  // 月次レポート用ナビゲーター（独立）
+  const [repYear,setRepYear]=useState(cur0.year),[repMonth,setRepMonth]=useState(cur0.month);
+  const prevRep=()=>{const pm=repMonth===1?12:repMonth-1;const py=repMonth===1?repYear-1:repYear;setRepYear(py);setRepMonth(pm);};
+  const nextRep=()=>{const nm=repMonth===12?1:repMonth+1;const ny=repMonth===12?repYear+1:repYear;setRepYear(ny);setRepMonth(nm);};
+
   return <div>
-    {/* マイシフトカレンダー */}
-    <MyShift emp={emp} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>
-    {/* 月次レポート（独立ナビゲーター） */}
-    <div style={{marginTop:"1.5rem"}}>
-      <PTMonthlyReportSelf emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData}/>
+    {/* シフトカレンダー：枠に入れて */}
+    <div style={{...crd,padding:"14px 16px",marginBottom:"1.5rem"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#111"}}>シフトカレンダー</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={prevCal} style={bS}>‹</button>
+          <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{calYear}年{calMonth}月</span>
+          <button onClick={nextCal} style={bS}>›</button>
+        </div>
+      </div>
+      <MyShiftCalendar emp={emp} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} year={calYear} month={calMonth}/>
     </div>
+
+    {/* 月次レポート：枠内にナビゲーターを入れて */}
+    <PTMonthlyReportSelf emp={emp} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} outerYear={repYear} outerMonth={repMonth} onPrev={prevRep} onNext={nextRep}/>
   </div>;
 }
 
 // ── PTMonthlyReportSelf (理学療法士パート従業員用月次レポート) ─────────────
-function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData}){
+function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData,outerYear=null,outerMonth=null,onPrev=null,onNext=null}){
   const cur0=getCurrentPeriod();
-  const [periodYear,setPeriodYear]=useState(cur0.year);
-  const [periodMonth,setPeriodMonth]=useState(cur0.month);
-  const period=getPeriodRange(periodYear,periodMonth);
-  const prevPeriod=()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);};
-  const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
+  const [periodYear,setPeriodYear]=useState(outerYear||cur0.year);
+  const [periodMonth,setPeriodMonth]=useState(outerMonth||cur0.month);
+  const prevPeriod=onPrev||(()=>{const pm=periodMonth===1?12:periodMonth-1;const py=periodMonth===1?periodYear-1:periodYear;setPeriodYear(py);setPeriodMonth(pm);});
+  const nextPeriod=onNext||(()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);});
+  const _year=outerYear??periodYear,_month=outerMonth??periodMonth;
+  const period=getPeriodRange(_year,_month);
 
   const days=[];
   let cur=new Date(period.start);const end=new Date(period.end);
@@ -3767,15 +3773,17 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
   const earlyDays=rows.filter(r=>r.isEarly).length;
 
   return <div>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",flexWrap:"wrap"}}>
-      <button onClick={prevPeriod} style={bS}>‹</button>
-      <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
-      <button onClick={nextPeriod} style={bS}>›</button>
-      <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
-    </div>
-    {/* サマリー */}
+    {/* サマリー（ナビゲーターを枠内に含める） */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#111"}}>月次レポート</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={prevPeriod} style={bS}>‹</button>
+          <span style={{fontSize:13,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
+          <button onClick={nextPeriod} style={bS}>›</button>
+          <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
+        </div>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
           <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
