@@ -744,8 +744,9 @@ function EmpManager({emps:empsFromProps,passwords,reload}){
 
 
 // ── ShiftSettingTab（シフト定義＋週間パターンのサブタブ） ────────────────────
-function ShiftSettingTab({shiftDefsData,weekPatterns,emps,shifts,lvReqs,reload,limitDepts=null,leadRoles=null,onSavingChange=null}){
-  const [sub,setSub]=useState("def");
+function ShiftSettingTab({shiftDefsData,weekPatterns,emps,shifts,lvReqs,reload,limitDepts=null,leadRoles=null,onSavingChange=null,initialSub="def"}){
+  const [sub,setSub]=useState(initialSub);
+  useEffect(()=>{setSub(initialSub);},[initialSub]);
   return <div>
     <div style={{display:"flex",gap:0,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)"}}>
       {[["def","シフト定義"],["pattern","週間パターン"]].map(([k,l])=>(
@@ -1176,7 +1177,7 @@ function ShiftDefManager({shiftDefsData,reload,limitDepts=null,onSavingChange=nu
 }
 
 // ── ShiftCalendar ─────────────────────────────────────────────────────────────
-function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRoles:initLeadRoles=null,lvReqs=[],onGotoShiftSetting=null}){
+function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRoles:initLeadRoles=null,lvReqs=[],onGotoShiftSetting=null,onGotoPattern=null}){
   const [year,setYear]=useState(new Date().getFullYear());
   const [month,setMonth]=useState(new Date().getMonth()+1);
   const [tooltip,setTooltip]=useState(null); // {x,y,lines[]}
@@ -1383,6 +1384,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
       {!roleFilter&&<span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>職種を選択するとシフト入力できます</span>}
       {roleFilter&&<span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>↓ シフトを選択してセルをクリック</span>}
       {onGotoShiftSetting&&<button onClick={onGotoShiftSetting} style={{marginLeft:"auto",padding:"5px 12px",borderRadius:7,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,fontWeight:600,cursor:"pointer"}}>＋ 勤務時間を作る</button>}
+      {onGotoPattern&&<button onClick={onGotoPattern} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3B6D11",background:"#EAF3DE",color:"#3B6D11",fontSize:11,fontWeight:600,cursor:"pointer"}}>＋ パターン入力</button>}
       <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
         <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>有休：</span>
         <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:99,background:"#0F6E56",color:"#fff"}}>有休</span>
@@ -1402,7 +1404,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
             const workMin=hasTime?toMin(v.end)-toMin(v.start)-bk:0;
             const wH=Math.floor(workMin/60);
             const wM=workMin%60;
-            return <div key={k} onClick={()=>setSelectedShift(k)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,background:v.color,border:isSelected?"2.5px solid #1251a3":"1.5px solid rgba(0,0,0,0.08)",cursor:"pointer",boxShadow:isSelected?"0 0 0 3px rgba(18,81,163,0.25)":"none",transform:isSelected?"scale(1.04)":"scale(1)",transition:"all 0.1s"}}>
+            return <div key={k} onClick={()=>setSelectedShift(k)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,background:v.color,border:isSelected?"2.5px solid #1251a3":"2.5px solid transparent",cursor:"pointer",transition:"border-color 0.1s"}}>
               <span style={{fontSize:14,fontWeight:700,color:v.tc}}>{v.label}</span>
               {hasTime&&<span style={{fontSize:12,color:v.tc,opacity:0.85}}>{v.start}〜{v.end}</span>}
               {hasTime&&<span style={{fontSize:12,fontWeight:600,color:v.tc}}>{wH+(wM>0?"."+wM*10/6|0:"")}h</span>}
@@ -4482,6 +4484,7 @@ export default function App(){
   const [error,setError]=useState(null);
   const [loginId,setLoginId]=useState(null);
   const [tabName,setTabName]=useState("");
+  const [patternMode,setPatternMode]=useState(false);
   const [showPwChange,setShowPwChange]=useState(false);
   const [shiftDefSaving,setShiftDefSaving]=useState(false);
   const [punchFixReqs,setPunchFixReqs]=useState([]);
@@ -4682,8 +4685,8 @@ export default function App(){
       {isAdmin&&(()=>{
         const t=tabName||aTabs[0];
         if(t==="従業員管理") return <EmpManager emps={emps} passwords={passwords} reload={loadAll}/>;
-        if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving}/>;
-        if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>setTabName("シフト設定")}/>;
+        if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
+        if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
         if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll}/>;
@@ -4704,8 +4707,8 @@ export default function App(){
           :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll}/>;
-        if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>setTabName("シフト設定")}/>;
-        if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving}/>;
+        if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}} />;
+        if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="申請許可"&&isLead){
           const isOTLead=leadRolesList.includes("理学療法士");
           const leadEmps=emps.filter(e=>leadRolesList.includes(e.role));
