@@ -1385,9 +1385,9 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
         <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>承認待ち</span>
       </div>
     </div>
-    {roleFilter&&<div style={{...crd,padding:"10px 14px",marginBottom:"1rem",overflowX:"auto"}}>
+    <div style={{...crd,padding:"10px 14px",marginBottom:"1rem",overflowX:"auto",minHeight:120}}>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {Object.entries(currentShiftDefs)
+        {roleFilter?Object.entries(currentShiftDefs)
           .sort((a,b)=>(Number(a[1].order)||999)-(Number(b[1].order)||999))
           .map(([k,v])=>{
             const isSelected=selectedShift===k;
@@ -1402,9 +1402,10 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               {hasTime&&<span style={{fontSize:12,fontWeight:600,color:v.tc}}>{wH+(wM>0?"."+wM*10/6|0:"")}h</span>}
               {isSelected&&<span style={{fontSize:10,fontWeight:700,color:"#1251a3",background:"rgba(255,255,255,0.8)",borderRadius:4,padding:"1px 4px"}}>✓</span>}
             </div>;
-          })}
+          })
+        :<span style={{fontSize:12,color:"var(--color-text-tertiary)"}}>職種を選択するとシフト一覧が表示されます</span>}
       </div>
-    </div>}
+    </div>
     <div ref={topScrollRef} style={{overflowX:"auto"}} onScroll={syncTop}><div style={{height:12}} ref={el=>{if(el&&tableRef.current)el.style.minWidth=tableRef.current.offsetWidth+"px"}}/></div>
     <div ref={bottomScrollRef} style={{overflowX:"auto"}} onScroll={syncBottom}>
       <table ref={tableRef} style={{borderCollapse:"collapse",fontSize:13,minWidth:1600}}>
@@ -3608,8 +3609,13 @@ function PunchFixRequest({emp,punches,punchFixReqs,shifts,shiftDefsData,reload})
 
 // ── MyShiftCalendar（カレンダー描画のみ・MyShiftWithReportから使用） ────────
 function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],year,month}){
-  const first=firstDow(year,month),last=daysInMonth(year,month);
-  const cells=[...Array(first).fill(null),...Array.from({length:last},(_,i)=>i+1)];
+  const last=daysInMonth(year,month);
+  // 月曜始まり：firstDow(日曜=0)を月曜起算に変換（月=0,火=1,...日=6）
+  const dow1=new Date(year,month-1,1).getDay(); // 0=日,1=月,...
+  const firstMon=dow1===0?6:dow1-1; // 月曜起算のオフセット
+  const cells=[...Array(firstMon).fill(null),...Array.from({length:last},(_,i)=>i+1)];
+  while(cells.length%7!==0) cells.push(null);
+  const DOW_MON=["月","火","水","木","金","土","日"]; // 月曜始まり
   while(cells.length%7!==0) cells.push(null);
   const td=today();
   const isPTpart=emp.role==="理学療法士"&&emp.type==="パート";
@@ -3630,9 +3636,9 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
     return badges;
   };
   return <div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>{DOW_JP.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:13,color:i===0?"#A32D2D":i===6?"#185FA5":"var(--color-text-secondary)",padding:"4px 0",fontWeight:500}}>{d}</div>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>{DOW_MON.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:13,color:i===6?"#A32D2D":i===5?"#185FA5":"var(--color-text-secondary)",padding:"4px 0",fontWeight:500}}>{d}</div>)}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{cells.map((d,i)=>{
-      if(!d) return <div key={i}/>;
+      if(!d) return <div key={i} style={{minHeight:72}}/>;
       const ds=`${year}-${pad(month)}-${pad(d)}`;
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
@@ -3644,7 +3650,7 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const statusBadges=getStatusBadges(ds,def);
       const isOff=!def.start&&!isLeave;
       // 背景：出勤日は白、休日は薄グレー（反転）
-      const cellBg=isLeave?"#E8F8F0":isOff?"#F0F0F0":"#ffffff";
+      const cellBg=isLeave?"#E8F8F0":isOff?"#F5F0EB":"#ffffff";
       const cellBorder=isToday?"2px solid #1251a3":"1px solid #ddd";
       return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:cellBg,border:cellBorder,minHeight:72}}>
         <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":isOff?"#aaa":"#111",marginBottom:4}}>{d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</div>
