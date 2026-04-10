@@ -819,12 +819,7 @@ function WeekPatternManager({weekPatterns,emps,shifts,lvReqs,shiftDefsData,reloa
     }
     if(entries.length===0){setApplyMsg("適用できる日がありません");return;}
     try{
-      let done=0;
-      for(const e of entries){
-        await gasSaveRaw("シフト",convertTo(e,SHIFT_INV));
-        done++;
-        if(entries.length>5) setApplyMsg(`保存中... ${done}/${entries.length}日`);
-      }
+      await gasSaveMany("シフト",entries.map(e=>convertTo(e,SHIFT_INV)));
       await reload();
       setApplyMsg(`${entries.length}日分のシフトを適用しました`);
       setTimeout(()=>setApplyMsg(""),4000);
@@ -1245,16 +1240,13 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     setSaving(true);
     try{
       const entries=Object.entries(localEdits);
-      let done=0;
-      for(const [key,shiftType] of entries){
+      const dataList=entries.map(([key,shiftType])=>{
         const sepIdx=key.indexOf("_");
         const empId=key.slice(0,sepIdx), date=key.slice(sepIdx+1);
         const existing=shiftsFromProps.find(s=>String(s.empId)===String(empId)&&s.date===date);
-        const entry={id:existing?.id||newId(),empId,date,shiftType};
-        await gasSaveRaw("シフト",convertTo(entry,SHIFT_INV));
-        done++;
-        if(entries.length>5) setSaveMsg(`保存中... ${done}/${entries.length}`);
-      }
+        return convertTo({id:existing?.id||newId(),empId,date,shiftType},SHIFT_INV);
+      });
+      await gasSaveMany("シフト",dataList);
       setSaveMsg("");
       setLocalEdits({});
       await reload();
