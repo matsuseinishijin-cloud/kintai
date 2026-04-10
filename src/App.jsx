@@ -1362,8 +1362,8 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     </div>}
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1rem",flexWrap:"wrap"}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:15,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
-      {hasEdits&&<button onClick={saveAll} disabled={saving} style={{...bP,padding:"8px 18px",background:saving?"#6b7280":"#1251a3",opacity:saving?0.7:1}}>{saving?(saveMsg||"保存中..."):"シフト保存 ("+Object.keys(localEdits).length+"件)"}</button>}
-      {hasEdits&&<button onClick={()=>setLocalEdits({})} style={{...bS,color:"#A32D2D",borderColor:"#F09595"}}>変更を破棄</button>}
+      <button onClick={saveAll} disabled={!hasEdits||saving} style={{...bP,padding:"8px 18px",background:saving?"#6b7280":hasEdits?"#1251a3":"#9ca3af",opacity:(!hasEdits||saving)?0.4:1,cursor:hasEdits&&!saving?"pointer":"default"}}>{saving?(saveMsg||"保存中..."):hasEdits?"シフト保存 ("+Object.keys(localEdits).length+"件)":"シフト保存"}</button>
+      <button onClick={()=>setLocalEdits({})} disabled={!hasEdits} style={{...bS,color:hasEdits?"#A32D2D":"var(--color-text-tertiary)",borderColor:hasEdits?"#F09595":"var(--color-border-secondary)",opacity:hasEdits?1:0.4,cursor:hasEdits?"pointer":"default"}}>変更を破棄</button>
       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
         {!initLeadRoles&&<button onClick={()=>{setRoleFilter(null);setTypeFilter(null);}} style={{padding:"4px 10px",borderRadius:6,border:!roleFilter?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:!roleFilter?"#E6F1FB":"var(--color-background-primary)",color:!roleFilter?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:!roleFilter?500:400}}>全職種</button>}
         {DISPLAY_ROLES.map(r=><button key={r} onClick={()=>{setRoleFilter(r===roleFilter&&!initLeadRoles?null:r);setTypeFilter(null);}} style={{padding:"4px 10px",borderRadius:6,border:roleFilter===r?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:roleFilter===r?"#E6F1FB":"var(--color-background-primary)",color:roleFilter===r?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:roleFilter===r?500:400}}>{r}</button>)}
@@ -3665,8 +3665,15 @@ function MyShift({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[]}){
   const [year,setYear]=useState(CY),[month,setMonth]=useState(CM);
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
-  return <div>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
+  return <div style={{...crd,padding:"14px 16px"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#111"}}>シフトカレンダー</div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <button onClick={prevM} style={bS}>‹</button>
+        <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{year}年{month}月</span>
+        <button onClick={nextM} style={bS}>›</button>
+      </div>
+    </div>
     <MyShiftCalendar emp={emp} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} year={year} month={month}/>
   </div>;
 }
