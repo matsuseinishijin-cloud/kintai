@@ -3642,13 +3642,17 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const dow=new Date(year,month-1,d).getDay(),isToday=ds===td,hol=isHoliday(ds);
       const leaveLabel=leaveHalf==="am"?"午前有給":leaveHalf==="pm"?"午後有給":"有給";
       const statusBadges=getStatusBadges(ds,def);
-      return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:isLeave&&!leaveHalf?"#E1F5EE":def.color,border:isToday?"2px solid #185FA5":"0.5px solid transparent",minHeight:72}}>
-        <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":def.tc,marginBottom:4}}>{d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</div>
+      const isOff=!def.start&&!isLeave;
+      // 背景：出勤日は白、休日は薄グレー（反転）
+      const cellBg=isLeave?"#E8F8F0":isOff?"#F0F0F0":"#ffffff";
+      const cellBorder=isToday?"2px solid #1251a3":"1px solid #ddd";
+      return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:cellBg,border:cellBorder,minHeight:72}}>
+        <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":isOff?"#aaa":"#111",marginBottom:4}}>{d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</div>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
           <div>
-            {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:def.tc,fontWeight:600}}>{def.label}</div>}
-            {!isLeave&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
-            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:def.tc,opacity:0.85}}>{def.start}〜{def.end}</div>}
+            {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:isOff?"#aaa":"#333",fontWeight:600}}>{def.label}</div>}
+            {!isLeave&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
+            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
           </div>
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
             {statusBadges.map((b,bi)=><span key={bi} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:b.bg,color:b.color,whiteSpace:"nowrap"}}>{b.label}</span>)}
