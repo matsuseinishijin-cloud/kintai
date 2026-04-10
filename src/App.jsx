@@ -3215,7 +3215,7 @@ function TransferApproval({emps,transferReqs,shifts,lvReqs=[],shiftDefsData,relo
 }
 
 // ── ApprovalCenter（申請許可タブ） ────────────────────────────────────────────
-function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[],shifts,shiftDefsData,leaves,reload,showOT=false,showPunchFix=true}){
+function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[],shifts,shiftDefsData,leaves,reload,showOT=false,showPunchFix=true,showLeave=true,showEarly=true}){
   const [typeFilter,setTypeFilter]=useState("all");
   const [statusFilter,setStatusFilter]=useState("pending");
   const empName=id=>emps.find(e=>String(e.id)===String(id))?.name||id;
@@ -3317,9 +3317,9 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
 
   // 全申請を統合してフィルタリング
   const allItems=[
-    ...lvReqs.map(r=>({...r,_type:"leave"})),
+    ...(showLeave?lvReqs.map(r=>({...r,_type:"leave"})):[]),
     ...(showOT?otReqs.filter(r=>r.type==="overtime"||r.type==="early").map(r=>({...r,_type:"ot"}))
-      :otReqs.filter(r=>r.type==="early").map(r=>({...r,_type:"ot"}))),
+      :showEarly?otReqs.filter(r=>r.type==="early").map(r=>({...r,_type:"ot"})):[]),
     ...(transferReqs||[]).map(r=>({...r,_type:"transfer"})),
     ...(showPunchFix?(punchFixReqs||[]).map(r=>({...r,_type:"punchfix"})):[]),
   ].sort((a,b)=>{
@@ -3329,10 +3329,10 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
 
   const typeOptions=[
     {key:"all",label:"すべて"},
-    {key:"leave",label:"有休"},
+    ...(showLeave?[{key:"leave",label:"有休"}]:[]),
     ...(showPunchFix?[{key:"punchfix",label:"打刻修正"}]:[]),
     {key:"transfer",label:"振替"},
-    {key:"early",label:"早出"},
+    ...(showEarly?[{key:"early",label:"早出"}]:[]),
     ...(showOT?[{key:"overtime",label:"残業/時間外"}]:[]),
   ];
 
@@ -4724,6 +4724,8 @@ export default function App(){
             reload={loadAll}
             showOT={isOTLead}
             showPunchFix={isOTLead}
+            showLeave={isOTLead}
+            showEarly={isOTLead}
           />;
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
