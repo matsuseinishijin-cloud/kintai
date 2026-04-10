@@ -1360,24 +1360,29 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     {tooltip&&<div style={{position:"fixed",left:tooltip.x,top:tooltip.y,zIndex:99999,background:"#1a1a2e",color:"#fff",fontSize:12,lineHeight:1.7,padding:"8px 12px",borderRadius:10,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",pointerEvents:"none"}}>
       {tooltip.lines.map((l,i)=><div key={i}>{l}</div>)}
     </div>}
-    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1rem",flexWrap:"wrap"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:15,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
-      <button onClick={saveAll} disabled={!hasEdits||saving} style={{...bP,padding:"8px 18px",background:saving?"#6b7280":hasEdits?"#1251a3":"#9ca3af",opacity:(!hasEdits||saving)?0.4:1,cursor:hasEdits&&!saving?"pointer":"default"}}>{saving?(saveMsg||"保存中..."):hasEdits?"シフト保存 ("+Object.keys(localEdits).length+"件)":"シフト保存"}</button>
-      <button onClick={()=>setLocalEdits({})} disabled={!hasEdits} style={{...bS,color:hasEdits?"#A32D2D":"var(--color-text-tertiary)",borderColor:hasEdits?"#F09595":"var(--color-border-secondary)",opacity:hasEdits?1:0.4,cursor:hasEdits?"pointer":"default"}}>変更を破棄</button>
-      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-        {!initLeadRoles&&<button onClick={()=>{setRoleFilter(null);setTypeFilter(null);}} style={{padding:"4px 10px",borderRadius:6,border:!roleFilter?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:!roleFilter?"#E6F1FB":"var(--color-background-primary)",color:!roleFilter?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:!roleFilter?500:400}}>全職種</button>}
-        {DISPLAY_ROLES.map(r=><button key={r} onClick={()=>{setRoleFilter(r===roleFilter&&!initLeadRoles?null:r);setTypeFilter(null);}} style={{padding:"4px 10px",borderRadius:6,border:roleFilter===r?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:roleFilter===r?"#E6F1FB":"var(--color-background-primary)",color:roleFilter===r?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:roleFilter===r?500:400}}>{r}</button>)}
+    {/* ツールバー：1段目（月ナビ・保存・職種） */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"nowrap",minHeight:38}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:15,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
+      <button onClick={saveAll} disabled={!hasEdits||saving} style={{...bP,padding:"6px 14px",fontSize:12,flexShrink:0,background:saving?"#6b7280":hasEdits?"#1251a3":"#9ca3af",opacity:(!hasEdits||saving)?0.4:1,cursor:hasEdits&&!saving?"pointer":"default"}}>{saving?(saveMsg||"保存中..."):hasEdits?"シフト保存 ("+Object.keys(localEdits).length+"件)":"シフト保存"}</button>
+      <button onClick={()=>setLocalEdits({})} disabled={!hasEdits} style={{...bS,padding:"6px 12px",fontSize:12,flexShrink:0,color:hasEdits?"#A32D2D":"var(--color-text-tertiary)",borderColor:hasEdits?"#F09595":"var(--color-border-secondary)",opacity:hasEdits?1:0.4,cursor:hasEdits?"pointer":"default"}}>変更を破棄</button>
+      <div style={{display:"flex",gap:4,flexWrap:"nowrap",overflowX:"auto"}}>
+        {!initLeadRoles&&<button onClick={()=>{setRoleFilter(null);setTypeFilter(null);}} style={{padding:"4px 8px",borderRadius:6,border:!roleFilter?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:!roleFilter?"#E6F1FB":"var(--color-background-primary)",color:!roleFilter?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:!roleFilter?500:400,whiteSpace:"nowrap"}}>全職種</button>}
+        {DISPLAY_ROLES.map(r=><button key={r} onClick={()=>{setRoleFilter(r===roleFilter&&!initLeadRoles?null:r);setTypeFilter(null);}} style={{padding:"4px 8px",borderRadius:6,border:roleFilter===r?"2px solid #185FA5":"0.5px solid var(--color-border-secondary)",background:roleFilter===r?"#E6F1FB":"var(--color-background-primary)",color:roleFilter===r?"#185FA5":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:roleFilter===r?500:400,whiteSpace:"nowrap"}}>{r}</button>)}
       </div>
-      {isPTFilter&&<div style={{display:"flex",gap:4,alignItems:"center"}}>
-        <span style={{fontSize:11,color:"var(--color-text-secondary)"}}>絞り込み：</span>
-        {["全て","正社員","パート"].map(t=><button key={t} onClick={()=>setTypeFilter(t==="全て"?null:t)} style={{padding:"4px 10px",borderRadius:6,border:(typeFilter===t||(t==="全て"&&!typeFilter))?"2px solid #854F0B":"0.5px solid var(--color-border-secondary)",background:(typeFilter===t||(t==="全て"&&!typeFilter))?"#FAEEDA":"var(--color-background-primary)",color:(typeFilter===t||(t==="全て"&&!typeFilter))?"#854F0B":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:(typeFilter===t||(t==="全て"&&!typeFilter))?600:400}}>{t}</button>)}
-        <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>※人数は全員で集計</span>
-      </div>}
-      {!roleFilter&&<span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>職種を選択するとシフト入力できます</span>}
-      {roleFilter&&<span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>↓ シフトを選択してセルをクリック</span>}
-      {onGotoShiftSetting&&<button onClick={onGotoShiftSetting} style={{marginLeft:"auto",padding:"5px 12px",borderRadius:7,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,fontWeight:600,cursor:"pointer"}}>＋ 勤務時間を作る</button>}
-      {onGotoPattern&&<button onClick={onGotoPattern} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3B6D11",background:"#EAF3DE",color:"#3B6D11",fontSize:11,fontWeight:600,cursor:"pointer"}}>＋ パターン入力</button>}
-      <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
+      <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        {onGotoShiftSetting&&<button onClick={onGotoShiftSetting} style={{padding:"5px 10px",borderRadius:7,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>＋ 勤務時間を作る</button>}
+        {onGotoPattern&&<button onClick={onGotoPattern} style={{padding:"5px 10px",borderRadius:7,border:"1px solid #3B6D11",background:"#EAF3DE",color:"#3B6D11",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>＋ パターン入力</button>}
+      </div>
+    </div>
+    {/* ツールバー：2段目（絞り込み・凡例）- 常に同じ高さを確保 */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem",minHeight:28}}>
+      {isPTFilter
+        ?<div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <span style={{fontSize:11,color:"var(--color-text-secondary)"}}>絞り込み：</span>
+          {["全て","正社員","パート"].map(t=><button key={t} onClick={()=>setTypeFilter(t==="全て"?null:t)} style={{padding:"3px 8px",borderRadius:6,border:(typeFilter===t||(t==="全て"&&!typeFilter))?"2px solid #854F0B":"0.5px solid var(--color-border-secondary)",background:(typeFilter===t||(t==="全て"&&!typeFilter))?"#FAEEDA":"var(--color-background-primary)",color:(typeFilter===t||(t==="全て"&&!typeFilter))?"#854F0B":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontWeight:(typeFilter===t||(t==="全て"&&!typeFilter))?600:400}}>{t}</button>)}
+        </div>
+        :<div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{roleFilter?"↓ シフトを選択してセルをクリック":"職種を選択するとシフト入力できます"}</div>}
+      <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>有休：</span>
         <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:99,background:"#0F6E56",color:"#fff"}}>有休</span>
         <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>承認済</span>
@@ -3650,7 +3655,7 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const statusBadges=getStatusBadges(ds,def);
       const isOff=!def.start&&!isLeave;
       // 背景：出勤日は白、休日は薄グレー（反転）
-      const cellBg=isLeave?"#E8F8F0":isOff?"#F5F0EB":"#ffffff";
+      const cellBg=isLeave?"#E8F8F0":isOff?"#FAF0EE":"#ffffff";
       const cellBorder=isToday?"2px solid #1251a3":"1px solid #ddd";
       return <div key={i} style={{borderRadius:8,padding:"6px 8px",background:cellBg,border:cellBorder,minHeight:72}}>
         <div style={{fontSize:16,fontWeight:600,color:dow===0||hol?"#A32D2D":dow===6?"#185FA5":isLeave?"#0F6E56":isOff?"#aaa":"#111",marginBottom:4}}>{d}{hol&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</div>
