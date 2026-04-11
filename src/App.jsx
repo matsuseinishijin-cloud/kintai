@@ -2587,12 +2587,49 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div style={{width:36,height:36,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:500}}>{emp.name[0]}</div>
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
-        {[["出勤",rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+"日",""],["欠勤",abC+"日",abC>0?"#A32D2D":"#3B6D11"],["遅刻",lC+"回",lC>0?"#854F0B":"#3B6D11"],["早退",eC+"回",eC>0?"#854F0B":"#3B6D11"],["有給",lvC+"日","#0F6E56"],[rule.type==="approval"?"打刻調整":"残業日",rule.type==="approval"?adjC+"件":rows.filter(r=>r.otMin>0&&!r.isOff).length+"日",""]].map(([l,v,c])=>(
-          <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div></div>
-        ))}
-        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"8px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div><div style={{fontSize:16,fontWeight:500,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
-      </div>
+      {(()=>{
+        const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
+        const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length;
+        const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
+        // 医療事務・その他roundタイプ：上段3・下段4の2段構成
+        if(rule.type==="round"||rule.type==="none"){
+          return <>
+            {/* 上段：勤務日数・残業時間・要確認 */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+              <div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>勤務日数</div>
+                <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{attendDays}日</div>
+              </div>
+              <div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
+                <div style={{fontSize:20,fontWeight:700,color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{tO>0?toHStr(tO):"―"}</div>
+              </div>
+              <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div>
+                <div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div>
+              </div>
+            </div>
+            {/* 下段：欠勤・遅刻・早退・有休 */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+              {[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""],["有休",lvC+"日","#0F6E56"]].map(([l,v,c])=>(
+                <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                  <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+                  <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </>;
+        }
+        // その他職種：従来の7列グリッド
+        return <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
+            {[["出勤",attendDays+"日",""],["欠勤",abC+"日",abC>0?"#A32D2D":"#3B6D11"],["遅刻",lC+"回",lC>0?"#854F0B":"#3B6D11"],["早退",eC+"回",eC>0?"#854F0B":"#3B6D11"],["有給",lvC+"日","#0F6E56"],[rule.type==="approval"?"打刻調整":"残業日",rule.type==="approval"?adjC+"件":otDays+"日",""]].map(([l,v,c])=>(
+              <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div></div>
+            ))}
+            <div style={{textAlign:"center",padding:"8px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div><div style={{fontSize:16,fontWeight:500,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div></div>
+          </div>
+        </>;
+      })()}
       <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap",alignItems:"center"}}>
         <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
