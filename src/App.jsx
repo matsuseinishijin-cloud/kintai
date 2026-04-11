@@ -566,7 +566,7 @@ function LoginScreen({emps,passwords,onLogin}){
       else { setErr("パスワードが違います"); }
     } else {
       const pwRec=passwords.find(p=>String(p.empId)===String(sel));
-      const correct=pwRec?.password||String(sel);
+      const correct=pwRec?.password!=null?String(pwRec.password):String(sel);
       if(pw===correct){ onLogin(sel); }
       else { setErr("パスワードが違います"); }
     }
