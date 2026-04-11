@@ -2294,7 +2294,13 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     {/* 月次レポート（理学療法士パート：サブタブ0） */}
     {isPTpart&&subTab===0&&(()=>{
       const adjRows=rows.map(r=>({...r,...getPTAdjusted(r)}));
+      // 残業：申請ありのみ10分切り捨てで加算
+      const totalOT=adjRows.reduce((s,r)=>{
+        if(!r.approvedOTReq||!r.isOT) return s;
+        return s+Math.floor(r.otMin/10)*10;
+      },0);
       const totalWork=adjRows.reduce((s,r)=>s+r.workMin,0);
+      const totalWorkWithOT=totalWork+totalOT;
       const tS=adjRows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0);
       const attendDays=adjRows.filter(r=>!r.isOff&&!r.absent&&r.workMin>0).length;
       const absentDays=adjRows.filter(r=>r.absent).length;
@@ -2310,10 +2316,11 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
           {/* 上段：合計就労時間・出勤日数・要確認 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-            {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
+            {[["合計就労時間",toHStr(totalWorkWithOT)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
               <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
                 <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+                {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
               </div>
             ))}
             <div style={{textAlign:"center",padding:"10px 4px",background:confirmDays>0?"#FFF0F0":"#fff",border:confirmDays>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
@@ -2354,11 +2361,13 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
               else {
-                if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded!==null&&diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
+                const hasApprovedOT=!!r.approvedOTReq;
+                const otRounded=Math.floor(r.otMin/10)*10;
+                if(r.isOT&&hasApprovedOT&&otRounded>0) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span></span>);
                 if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
                 if(r.isEarly){const earlyDiff=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{earlyDiff>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(earlyDiff)}</span>}</span>);}
                 if(r.approvedEarlyReq){const em=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(em>0) badges.push(<span key="ey" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{toHStr(Math.round(em/10)*10)}</span></span>);}
-                if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
+                if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="○" bg="#EAF3DE" color="#3B6D11"/>);
               }
               const rowBg=r.absent||r.missingOut?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
               return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
@@ -3950,7 +3959,13 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
     return {ds,dow,def,isOff,isOffPunch,punch,isLeave,absent,...adj};
   });
 
+  const totalOT=rows.reduce((s,r)=>{
+    const approvedOT=(otReqs||[]).find(req=>String(req.empId)===String(emp.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="overtime");
+    if(!approvedOT||!r.isOT) return s;
+    return s+Math.floor(r.otMin/10)*10;
+  },0);
   const totalWork=rows.reduce((s,r)=>s+r.workMin,0);
+  const totalWorkWithOT=totalWork+totalOT;
   const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:(toMin(r.def.end||"00:00")-toMin(r.def.start||"00:00")-(r.def.breakMin||0))),0);
   const attendDays=rows.filter(r=>!r.isOff&&!r.absent&&r.workMin>0).length;
   const absentDays=rows.filter(r=>r.absent).length;
@@ -3970,10 +3985,11 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-        {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
+        {[["合計就労時間",toHStr(totalWorkWithOT)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
           <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
             <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
             <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+            {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
           </div>
         ))}
         {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
@@ -4006,10 +4022,12 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           else if(r.isOffPunch) badges.push(<Badge key="offpunch" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
-            if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
+            const approvedOT=(otReqs||[]).find(req=>String(req.empId)===String(emp.id)&&req.date===r.ds&&req.status==="approved"&&req.type==="overtime");
+            const otRounded=Math.floor(r.otMin/10)*10;
+            if(r.isOT&&approvedOT&&otRounded>0) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span></span>);
             if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
             if(r.isEarly){const ed=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{ed>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(ed)}</span>}</span>);}
-            if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
+            if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="○" bg="#EAF3DE" color="#3B6D11"/>);
           }
           const rowBg=r.absent?"#FFF5F5":r.isOffPunch?"#F5F9FE":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
