@@ -2300,6 +2300,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const absentDays=adjRows.filter(r=>r.absent).length;
       const lateDays=adjRows.filter(r=>r.isLate).length;
       const earlyDays=adjRows.filter(r=>r.isEarly).length;
+      const confirmDays=adjRows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
       return <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
           <div style={{fontSize:13,fontWeight:700}}>月次レポート</div>
@@ -2307,14 +2308,18 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         </div>
         {emp&&<div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-          {/* 上段：合計就労時間・出勤日数 */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          {/* 上段：合計就労時間・出勤日数・要確認 */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
             {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
               <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
                 <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
               </div>
             ))}
+            <div style={{textAlign:"center",padding:"10px 4px",background:confirmDays>0?"#FFF0F0":"#fff",border:confirmDays>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div>
+              <div style={{fontSize:20,fontWeight:700,color:confirmDays>0?"#A32D2D":"#111"}}>{confirmDays>0?confirmDays+"日":"―"}</div>
+            </div>
           </div>
           {/* 下段：欠勤・遅刻・早退 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
@@ -2328,7 +2333,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
             <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
             <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
-            {adjRows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
+            
           </div>
         </div>}
         {/* タイムカード */}
@@ -2582,10 +2587,11 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div style={{width:36,height:36,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:500}}>{emp.name[0]}</div>
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
         {[["出勤",rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+"日",""],["欠勤",abC+"日",abC>0?"#A32D2D":"#3B6D11"],["遅刻",lC+"回",lC>0?"#854F0B":"#3B6D11"],["早退",eC+"回",eC>0?"#854F0B":"#3B6D11"],["有給",lvC+"日","#0F6E56"],[rule.type==="approval"?"打刻調整":"残業日",rule.type==="approval"?adjC+"件":rows.filter(r=>r.otMin>0&&!r.isOff).length+"日",""]].map(([l,v,c])=>(
           <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div></div>
         ))}
+        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"8px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div><div style={{fontSize:16,fontWeight:500,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap",alignItems:"center"}}>
         <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
@@ -2596,7 +2602,6 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
         {unapprovedAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 未申請残業が月{rule.limitH}h超過</span>}
-        {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
@@ -3927,13 +3932,14 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>（15日締め）</span>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
         {[["合計就労時間",toHStr(totalWork)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
           <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
             <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
             <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
+        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
         {[["欠勤",absentDays+"日"],["遅刻",lateDays+"回"],["早退",earlyDays+"回"]].map(([l,v])=>(
@@ -3946,7 +3952,6 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
       <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
         <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
         <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
-        {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>
     {/* タイムカード */}
@@ -4244,17 +4249,18 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
     {/* サマリー */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-      {/* 上段：合計・出勤日数 */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+      {/* 上段：合計・出勤日数・要確認 */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
         {[["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"]].map(([l,v])=>(
           <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
             <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
             <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
+        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       {/* 下段：時間帯内訳 */}
-      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)?10:0}}>
+      <div style={{display:"flex",gap:6}}>
         {[
           ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―"],
@@ -4267,7 +4273,6 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
           </div>
         ))}
       </div>
-      {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
@@ -4433,18 +4438,25 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
     {/* サマリー */}
     <div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
         {(()=>{
           const lvDays=(lvReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&days.includes(r.date)).reduce((s,r)=>s+(r.half?0.5:1),0);
-          return [["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"],["有給",lvDays>0?lvDays+"日":"―"]].map(([l,v])=>(
-            <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
-              <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
-              <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+          const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
+          return [
+            ...([["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"],["有給",lvDays>0?lvDays+"日":"―"]].map(([l,v])=>(
+              <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+                <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+              </div>
+            ))),
+            <div key="confirm" style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div>
+              <div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div>
             </div>
-          ));
+          ];
         })()}
       </div>
-      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)?10:0}}>
+      <div style={{display:"flex",gap:6}}>
         {[
           ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―"],
@@ -4457,7 +4469,6 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           </div>
         ))}
       </div>
-      {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
