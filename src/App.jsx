@@ -521,12 +521,12 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
 // ── UI primitives ─────────────────────────────────────────────────────────────
 const Badge=({label,color,bg})=><span style={{display:"inline-block",padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:500,background:bg,color,whiteSpace:"nowrap"}}>{label}</span>;
 const statusBadge=(r,isAdmin=false)=>{
-  if(r.absent) return <Badge label="要対応" bg="#FCEBEB" color="#A32D2D"/>;
+  if(r.absent) return <Badge label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>;
   if((r.adjusted||r.earlyAdj)&&isAdmin) return <Badge label="打刻調整" bg="#EEEDFE" color="#3C3489"/>;
   if(r.isLeave&&r.leaveHalf==="am") return <Badge label="有給（午前）" bg="#E1F5EE" color="#0F6E56"/>;
   if(r.isLeave&&r.leaveHalf==="pm") return <Badge label="有給（午後）" bg="#E1F5EE" color="#0F6E56"/>;
   if(r.isLeave) return <Badge label="有給" bg="#E1F5EE" color="#0F6E56"/>;
-  if(r.isOffPunch) return <Badge label="シフト確認" bg="#EDE9FE" color="#5B21B6"/>;
+  if(r.isOffPunch) return <Badge label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>;
   if(r.isOff) return <Badge label="休日" bg="#E6F1FB" color="#185FA5"/>;
   if(r.late&&r.earlyLeave) return <Badge label="遅刻・早退" bg="#FAEEDA" color="#854F0B"/>;
   if(r.late) return <Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>;
@@ -1926,27 +1926,35 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     const td=today();
     const curY=new Date().getFullYear(),curM=new Date().getMonth()+1;
     const prevY=curM===1?curY-1:curY,prevMM=curM===1?12:curM-1;
-    // 対象従業員（管理者=全員、責任者=担当のみ）
     const targetEmps=leadRoles?emps.filter(e=>leadRoles.includes(e.role)):emps;
     const items=[];
     for(const e of targetEmps){
       const empDefs=getShiftDefsByRole(e.role,shiftDefsData||{});
-      // 当月・先月の全日を対象
       for(const [y,m] of [[prevY,prevMM],[curY,curM]]){
         const last=daysInMonth(y,m);
         for(let d=1;d<=last;d++){
           const ds=`${y}-${pad(m)}-${pad(d)}`;
           if(ds>td) continue;
           const punch=punches.find(p=>String(p.empId)===String(e.id)&&p.date===ds);
-          if(!punch?.out) continue;
           const shiftRow=shifts.find(s=>String(s.empId)===String(e.id)&&s.date===ds);
           const st=shiftRow?.shiftType||"off";
           const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
-          if(!def.start) items.push({emp:e,ds,punch});
+          const isOff=!def.start;
+          const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
+          const isLeave=!!_lv;
+          if(isLeave) continue;
+          // シフトなし・打刻あり
+          if(isOff&&punch?.out){items.push({emp:e,ds,punch,kind:"シフト確認"});continue;}
+          // シフトあり・打刻なし（欠勤）
+          if(!isOff&&!punch){items.push({emp:e,ds,punch:null,kind:"シフト確認"});continue;}
+          // 退勤忘れ
+          if(!isOff&&punch?.in&&!punch?.out){items.push({emp:e,ds,punch,kind:"退勤忘れ"});continue;}
+          // 出勤忘れ
+          if(!isOff&&!punch?.in&&punch?.out){items.push({emp:e,ds,punch,kind:"出勤忘れ"});continue;}
         }
       }
     }
-    return items;
+    return items.sort((a,b)=>a.ds<b.ds?1:-1);
   })();
 
   // ── 理学療法士パート 照合ロジック（calcPTAdjをラップ） ────────────────────
@@ -2320,7 +2328,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
             <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
             <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
-            {adjRows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
+            {adjRows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
           </div>
         </div>}
         {/* タイムカード */}
@@ -2336,7 +2344,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               const isEditing=editKey===r.ds;
               if(isEditing) return <EditRow key={r.ds} r={r} colSpan={8}/>;
               const badges=[];
-              if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
+              if(r.absent) badges.push(<Badge key="ab" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.missingOut) badges.push(<Badge key="mo" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
@@ -2414,7 +2422,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         ?<div style={{...crd,padding:"2rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>要確認の打刻はありません ✓</div>
         :<div style={{...crd,overflow:"hidden"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr>{["従業員","日付","曜","出勤","退勤","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <thead><tr>{["従業員","日付","曜","種別","出勤","退勤","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
             <tbody>{offPunchItems.map((item,i)=>{
               const dow=new Date(item.ds).getDay();
               const dc=dow===0||isHoliday(item.ds)?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)";
@@ -2425,10 +2433,11 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 </div></td>
                 <td style={{...tdS,color:"var(--color-text-secondary)"}}>{item.ds.slice(5).replace("-","/")} {isHoliday(item.ds)&&<span style={{fontSize:9,color:"#A32D2D"}}>祝</span>}</td>
                 <td style={{...tdS,color:dc}}>{DOW_JP[dow]}</td>
-                <td style={tdS}>{item.punch.in||"―"}</td>
-                <td style={tdS}>{item.punch.out||"―"}</td>
+                <td style={tdS}><Badge label={item.kind} bg="#FCEBEB" color="#A32D2D"/></td>
+                <td style={tdS}>{item.punch?.in||"―"}</td>
+                <td style={tdS}>{item.punch?.out||"―"}</td>
                 <td style={tdS}>
-                  {onGotoShiftCalendar&&<button onClick={()=>onGotoShiftCalendar(item.emp.id,item.ds)} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,cursor:"pointer",fontWeight:500}}>シフトを入れる</button>}
+                  {item.kind==="シフト確認"&&onGotoShiftCalendar&&<button onClick={()=>onGotoShiftCalendar(item.emp.id,item.ds)} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,cursor:"pointer",fontWeight:500}}>シフトを入れる</button>}
                 </td>
               </tr>;
             })}</tbody>
@@ -2587,7 +2596,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
         {unapprovedAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 未申請残業が月{rule.limitH}h超過</span>}
-        {rows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
+        {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
@@ -2614,7 +2623,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           }
           // 勤務状況バッジ生成
           const badges=[];
-          if(r.absent) badges.push(<Badge key="absent" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
+          if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingIn) badges.push(<Badge key="missingIn" label="出勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isLeave) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
@@ -3937,7 +3946,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
       <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
         <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
         <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
-        {rows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
+        {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>
     {/* タイムカード */}
@@ -3950,9 +3959,9 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           const rawDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
           const diffRounded=rawDiff!==null?Math.round(rawDiff/10)*10:null;
           const badges=[];
-          if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
+          if(r.absent) badges.push(<Badge key="ab" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isLeave) badges.push(<Badge key="lv" label="有休" bg="#E1F5EE" color="#0F6E56"/>);
-          else if(r.isOffPunch) badges.push(<Badge key="offpunch" label="シフト確認" bg="#EDE9FE" color="#5B21B6"/>);
+          else if(r.isOffPunch) badges.push(<Badge key="offpunch" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
             if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
@@ -4245,7 +4254,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
         ))}
       </div>
       {/* 下段：時間帯内訳 */}
-      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch)?10:0}}>
+      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)?10:0}}>
         {[
           ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―"],
@@ -4258,7 +4267,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
           </div>
         ))}
       </div>
-      {rows.some(r=>r.isOffPunch)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
+      {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
@@ -4435,7 +4444,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           ));
         })()}
       </div>
-      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch)?10:0}}>
+      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)?10:0}}>
         {[
           ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―"],
@@ -4448,7 +4457,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           </div>
         ))}
       </div>
-      {rows.some(r=>r.isOffPunch)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
+      {rows.some(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
@@ -4762,7 +4771,12 @@ export default function App(){
           const shiftRow=shifts.find(s=>String(s.empId)===String(e.id)&&s.date===ds);
           const st=shiftRow?.shiftType||"off";
           const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
-          if(!def.start) count++;
+          const _lv2=(lvReqs||[]).find(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
+          if(_lv2) continue;
+          if(!def.start&&punch?.out) count++; // シフトなし打刻
+          else if(def.start&&!punch) count++; // シフトあり打刻なし
+          else if(def.start&&punch?.in&&!punch?.out) count++; // 退勤忘れ
+          else if(def.start&&!punch?.in&&punch?.out) count++; // 出勤忘れ
         }
       }
     }
