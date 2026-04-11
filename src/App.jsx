@@ -507,7 +507,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
         if(im>shiftStartMin+1) late=true;
         if(om<shiftEndMin-1) earlyLeave=true;
         diffMin=om-shiftEndMin;
-      } else { otMin=isOff?awMin:otMin; }
+      } else { otMin=0; } // シフトなし打刻は残業計上しない
     } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
 
     const isOffPunch=isOff&&!!punch?.out;
@@ -1885,7 +1885,7 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
 // ── TimecardView ──────────────────────────────────────────────────────────────
 const CLINIC_NAME = "医）松口整形外科クリニック";
 
-function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{}}){
+function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{},onGotoShiftCalendar=null}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month);
   const [rf,setRf]=useState("");
@@ -1914,10 +1914,38 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     return days;
   })();
 
-  // サブタブ定義：理学療法士パートは月次レポート→タイムカード
+  // サブタブ定義：理学療法士パートは月次レポート→タイムカード→要確認、その他は要確認のみ
   const subTabs=isPTpart
-    ?["月次レポート","タイムカード"]
-    :[];
+    ?(selfView?["月次レポート","タイムカード"]:["月次レポート","タイムカード","要確認"])
+    :(selfView?["タイムカード"]:["タイムカード","要確認"]);
+
+  // ── 要確認データ（当月・先月のシフトなし打刻） ───────────────────────────
+  const offPunchItems=(()=>{
+    const td=today();
+    const curY=new Date().getFullYear(),curM=new Date().getMonth()+1;
+    const prevY=curM===1?curY-1:curY,prevMM=curM===1?12:curM-1;
+    // 対象従業員（管理者=全員、責任者=担当のみ）
+    const targetEmps=leadRoles?emps.filter(e=>leadRoles.includes(e.role)):emps;
+    const items=[];
+    for(const e of targetEmps){
+      const empDefs=getShiftDefsByRole(e.role,shiftDefsData||{});
+      // 当月・先月の全日を対象
+      for(const [y,m] of [[prevY,prevMM],[curY,curM]]){
+        const last=daysInMonth(y,m);
+        for(let d=1;d<=last;d++){
+          const ds=`${y}-${pad(m)}-${pad(d)}`;
+          if(ds>td) continue;
+          const punch=punches.find(p=>String(p.empId)===String(e.id)&&p.date===ds);
+          if(!punch?.out) continue;
+          const shiftRow=shifts.find(s=>String(s.empId)===String(e.id)&&s.date===ds);
+          const st=shiftRow?.shiftType||"off";
+          const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
+          if(!def.start) items.push({emp:e,ds,punch});
+        }
+      }
+    }
+    return items;
+  })();
 
   // ── 理学療法士パート 照合ロジック（calcPTAdjをラップ） ────────────────────
   const getPTAdjusted=(r)=>calcPTAdj({empId:emp?.id,ds:r.ds,punch:r.punch,def:r.def,otReqs:otReqs||[]});
@@ -1968,7 +1996,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           if(im>shiftStartMin+1) late=true;
           if(om<shiftEndMin-1) earlyLeave=true;
           diffMin=om-shiftEndMin;
-        } else { otMin=isOff?awMin:otMin; }
+        } else { otMin=0; } // シフトなし打刻は残業計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!punch?.out;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
@@ -2203,8 +2231,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       {!selfView&&<select value={empId} onChange={e=>{setEmpId(e.target.value);setBulkMode(false);}} style={{...iS,width:"auto"}}>
         {filteredEmps.map(e=><option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}
       </select>}
-      {isAdmin&&emp&&!bulkMode&&<button onClick={startBulk} style={{...bP,padding:"8px 16px",fontSize:13}}>一括入力</button>}
-      {isAdmin&&emp&&bulkMode&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+      {(isAdmin||leadRoles)&&emp&&!bulkMode&&<button onClick={startBulk} style={{...bP,padding:"8px 16px",fontSize:13}}>一括入力</button>}
+      {(isAdmin||leadRoles)&&emp&&bulkMode&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
         <button onClick={fillFromShift} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:12,cursor:"pointer",fontWeight:500}}>シフトから自動入力</button>
         <button onClick={clearOff} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-secondary)",fontSize:12,cursor:"pointer"}}>休日をクリア</button>
         <button onClick={saveBulk} disabled={bulkSaving} style={{...bP,padding:"8px 16px",fontSize:13,opacity:bulkSaving?0.5:1}}>{bulkSaving?"保存中...":"まとめて保存"}</button>
@@ -2214,7 +2242,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     </div>
 
     {/* 一括入力モード */}
-    {isAdmin&&bulkMode&&emp&&<div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
+    {(isAdmin||leadRoles)&&bulkMode&&emp&&<div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
       <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-secondary)",background:"#F5F9FE"}}>
         出勤時刻を入力した日が保存されます。空欄の日は打刻なし（既存打刻がある場合は削除）になります。
       </div>
@@ -2245,9 +2273,12 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>
     </div>}
 
-    {/* サブタブ（理学療法士パートのみ） */}
+    {/* サブタブ（全員対象：要確認サブタブ追加） */}
     {subTabs.length>0&&<div style={{display:"flex",gap:4,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)"}}>
-      {subTabs.map((t,i)=><button key={t} onClick={()=>setSubTab(i)} style={{padding:"8px 18px",border:"none",borderBottom:subTab===i?"2px solid #1251a3":"2px solid transparent",background:"transparent",color:subTab===i?"#1251a3":"var(--color-text-secondary)",fontWeight:subTab===i?600:400,fontSize:13,cursor:"pointer",marginBottom:"-2px"}}>{t}</button>)}
+      {subTabs.map((t,i)=><button key={t} onClick={()=>setSubTab(i)} style={{padding:"8px 18px",border:"none",borderBottom:subTab===i?"2px solid #1251a3":"2px solid transparent",background:"transparent",color:subTab===i?"#1251a3":"var(--color-text-secondary)",fontWeight:subTab===i?600:400,fontSize:13,cursor:"pointer",marginBottom:"-2px",display:"flex",alignItems:"center",gap:4}}>
+        {t}
+        {t==="要確認"&&offPunchItems.length>0&&<span style={{padding:"1px 6px",borderRadius:99,fontSize:10,background:"#5B21B6",color:"#fff",fontWeight:700}}>{offPunchItems.length}</span>}
+      </button>)}
     </div>}
 
     {/* 月次レポート（理学療法士パート：サブタブ0） */}
@@ -2284,9 +2315,10 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               </div>
             ))}
           </div>
-          <div style={{display:"flex",gap:12,fontSize:12,color:"#555"}}>
+          <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
             <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
             <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
+            {adjRows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
           </div>
         </div>}
         {/* タイムカード */}
@@ -2355,8 +2387,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>
     </div>}
 
-    {/* 月次レポート（正社員・その他パート）：照合レポートのみ */}
-    {!isPTpart&&emp&&(()=>{
+    {/* 月次レポート（正社員・その他パート）：サブタブ0 */}
+    {!isPTpart&&subTab===0&&emp&&(()=>{
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
       const isRehaPart=emp.role==="リハマネ"&&emp.type==="パート";
       if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
@@ -2369,6 +2401,38 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month}/>
       </div>;
     })()}
+
+    {/* 要確認タブ（管理者・責任者共通・最終サブタブ） */}
+    {subTab===subTabs.length-1&&!selfView&&<div>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:"1rem",color:"#111"}}>
+        シフトなし打刻一覧
+        <span style={{marginLeft:8,fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>当月・先月</span>
+      </div>
+      {offPunchItems.length===0
+        ?<div style={{...crd,padding:"2rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>要確認の打刻はありません ✓</div>
+        :<div style={{...crd,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr>{["従業員","日付","曜","出勤","退勤","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>{offPunchItems.map((item,i)=>{
+              const dow=new Date(item.ds).getDay();
+              const dc=dow===0||isHoliday(item.ds)?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)";
+              return <tr key={i} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F5F3FF"}}>
+                <td style={tdS}><div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===item.emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===item.emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:500}}>{item.emp.name[0]}</div>
+                  <span>{item.emp.name}</span>
+                </div></td>
+                <td style={{...tdS,color:"var(--color-text-secondary)"}}>{item.ds.slice(5).replace("-","/")} {isHoliday(item.ds)&&<span style={{fontSize:9,color:"#A32D2D"}}>祝</span>}</td>
+                <td style={{...tdS,color:dc}}>{DOW_JP[dow]}</td>
+                <td style={tdS}>{item.punch.in||"―"}</td>
+                <td style={tdS}>{item.punch.out||"―"}</td>
+                <td style={tdS}>
+                  {onGotoShiftCalendar&&<button onClick={()=>onGotoShiftCalendar(item.emp.id,item.ds)} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #1251a3",background:"#E6F1FB",color:"#1251a3",fontSize:11,cursor:"pointer",fontWeight:500}}>シフトを入れる</button>}
+                </td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>}
+    </div>}
   </div>;
 }
 
@@ -2418,7 +2482,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         else otMin=rawOtMin;
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
         if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1) earlyLeave=true;diffMin=om-shiftEndMin;}
-        else{otMin=isOff?awMin:otMin;}
+        else{otMin=0;} // シフトなし打刻は残業計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!punch?.out;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
@@ -2512,7 +2576,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div></div>
         ))}
       </div>
-      <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap",alignItems:"center"}}>
         <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
         <span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>
@@ -2521,6 +2585,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
         {unapprovedAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 未申請残業が月{rule.limitH}h超過</span>}
+        {rows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
@@ -3678,9 +3743,10 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           </div>
         ))}
       </div>
-      <div style={{display:"flex",gap:12,fontSize:12,color:"#555"}}>
+      <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
         <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
         <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
+        {rows.some(r=>r.isOffPunch)&&<Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/>}
       </div>
     </div>
     {/* タイムカード */}
@@ -3987,7 +4053,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
         ))}
       </div>
       {/* 下段：時間帯内訳 */}
-      <div style={{display:"flex",gap:6}}>
+      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch)?10:0}}>
         {[
           ["①午前（8:30〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後前半（〜17:00）",totalPm1Min>0?toHStr(totalPm1Min):"―"],
@@ -4000,6 +4066,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
           </div>
         ))}
       </div>
+      {rows.some(r=>r.isOffPunch)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
@@ -4176,7 +4243,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           ));
         })()}
       </div>
-      <div style={{display:"flex",gap:6}}>
+      <div style={{display:"flex",gap:6,marginBottom:rows.some(r=>r.isOffPunch)?10:0}}>
         {[
           ["①午前（8:40〜14:00）",totalAmMin>0?toHStr(totalAmMin):"―"],
           ["②午後（14:00〜18:00）",totalPmMin>0?toHStr(totalPmMin):"―"],
@@ -4189,6 +4256,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           </div>
         ))}
       </div>
+      {rows.some(r=>r.isOffPunch)&&<div style={{marginTop:8}}><Badge label="⚠ 要確認日あり" bg="#EDE9FE" color="#5B21B6"/></div>}
     </div>
 
     {/* タイムカード */}
@@ -4480,6 +4548,31 @@ export default function App(){
   const pendOT=otReqs.filter(r=>r.status==="pending").length;
   const pendLV=lvReqs.filter(r=>r.status==="pending").length;
   const pendTR=transferReqs.filter(r=>r.status==="pending").length;
+  // シフトなし打刻件数（当月・先月）
+  const offPunchCount=(()=>{
+    const td=today();
+    const curY=new Date().getFullYear(),curM=new Date().getMonth()+1;
+    const prevY=curM===1?curY-1:curY,prevMM=curM===1?12:curM-1;
+    const targetEmps=isAdmin?emps:isLead?emps.filter(e=>leadRolesList.includes(e.role)):[];
+    let count=0;
+    for(const e of targetEmps){
+      const empDefs=getShiftDefsByRole(e.role,shiftDefsData||{});
+      for(const [y,m] of [[prevY,prevMM],[curY,curM]]){
+        const last=daysInMonth(y,m);
+        for(let d=1;d<=last;d++){
+          const ds=`${y}-${pad(m)}-${pad(d)}`;
+          if(ds>td) continue;
+          const punch=punches.find(p=>String(p.empId)===String(e.id)&&p.date===ds);
+          if(!punch?.out) continue;
+          const shiftRow=shifts.find(s=>String(s.empId)===String(e.id)&&s.date===ds);
+          const st=shiftRow?.shiftType||"off";
+          const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
+          if(!def.start) count++;
+        }
+      }
+    }
+    return count;
+  })();
   const aTabs=["従業員管理","シフト","申請許可","有給管理","タイムカード"];
   const isPTpart=cur&&cur.role==="理学療法士"&&cur.type==="パート";
   // 責任者タブ："---"はセパレーター
@@ -4543,6 +4636,7 @@ export default function App(){
               return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:isActive?"#185FA5":"transparent",color:isActive?"white":"#185FA5",fontSize:14,fontWeight:isActive?700:500,cursor:shiftDefSaving?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:shiftDefSaving&&!isActive?0.4:1,transition:"background 0.15s",textAlign:"center"}}>
                 {t}
                 {t==="申請許可"&&leadPendAll2>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{leadPendAll2}</span>}
+                {t==="タイムカード"&&offPunchCount>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#5B21B6",color:"white"}}>{offPunchCount}</span>}
               </button>;
             })}
           </div>
@@ -4554,6 +4648,7 @@ export default function App(){
         return <button key={t+i} onClick={()=>{if(shiftDefSaving)return;setTabName(t);setShowPwChange(false);}} style={{...nB(tabName===t||(tabName===""&&i===0&&t!=="---")),opacity:shiftDefSaving&&tabName!==t?0.4:1,cursor:shiftDefSaving?"not-allowed":"pointer"}}>
           {t}
           {isAdmin&&t==="申請許可"&&pendAll>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{pendAll}</span>}
+          {(isAdmin||isLead)&&t==="タイムカード"&&offPunchCount>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#5B21B6",color:"white"}}>{offPunchCount}</span>}
         </button>;
       })}
     </div>
@@ -4565,7 +4660,7 @@ export default function App(){
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
-        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll}/>;
+        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")}/>;
         return null;
       })()}
       {!isAdmin&&cur&&(()=>{
@@ -4606,7 +4701,7 @@ export default function App(){
           />;
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
-        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll}/>;
+        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")}/>;
         return null;
       })()}
     </div>
