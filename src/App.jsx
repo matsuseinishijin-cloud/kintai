@@ -3891,11 +3891,12 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
     const def=empDefs[shiftRow?.shiftType||"off"]||empDefs["off"]||{label:"休日",start:null,end:null,color:"var(--color-background-secondary)",tc:"var(--color-text-tertiary)",breakMin:0};
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const isOff=!def.start;
+    const isOffPunch=isOff&&!!punch?.out;
     const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
     const isLeave=!!_lv;
     const adj=(!isOff&&punch)?calcPTAdj({empId:emp.id,ds,punch,def,otReqs}):{outT:"",workMin:0,lateMin:0,lateDeduct:0,otMin:0,isLate:false,isEarly:false,isOT:false,adjOutRaw:null};
     const absent=!isOff&&!isLeave&&!punch;
-    return {ds,dow,def,isOff,punch,isLeave,absent,...adj};
+    return {ds,dow,def,isOff,isOffPunch,punch,isLeave,absent,...adj};
   });
 
   const totalWork=rows.reduce((s,r)=>s+r.workMin,0);
@@ -3951,6 +3952,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           const badges=[];
           if(r.absent) badges.push(<Badge key="ab" label="要対応" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isLeave) badges.push(<Badge key="lv" label="有休" bg="#E1F5EE" color="#0F6E56"/>);
+          else if(r.isOffPunch) badges.push(<Badge key="offpunch" label="シフト確認" bg="#EDE9FE" color="#5B21B6"/>);
           else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
             if(r.isOT) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{diffRounded>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(diffRounded)}</span>}</span>);
@@ -3958,7 +3960,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
             if(r.isEarly){const ed=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{ed>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(ed)}</span>}</span>);}
             if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
           }
-          const rowBg=r.absent?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
+          const rowBg=r.absent?"#FFF5F5":r.isOffPunch?"#F5F9FE":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
