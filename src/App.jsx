@@ -2345,7 +2345,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
               // 差異（10分丸め）：adjustedOut - shiftEnd を10分単位で
               const rawDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
-              const diffRounded=rawDiff!==null?Math.round(rawDiff/10)*10:null;
+              const diffRounded=rawDiff!==null?Math.floor(rawDiff/10)*10:null;
               const isEditing=editKey===r.ds;
               if(isEditing) return <EditRow key={r.ds} r={r} colSpan={8}/>;
               const badges=[];
@@ -3999,7 +3999,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
         <tbody>{rows.map(r=>{
           const dc=r.dow===0||isHoliday(r.ds)?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           const rawDiff=r.adjOutRaw!==null&&r.def.end?r.adjOutRaw-toMin(r.def.end):null;
-          const diffRounded=rawDiff!==null?Math.round(rawDiff/10)*10:null;
+          const diffRounded=rawDiff!==null?Math.floor(rawDiff/10)*10:null;
           const badges=[];
           if(r.absent) badges.push(<Badge key="ab" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.isLeave) badges.push(<Badge key="lv" label="有休" bg="#E1F5EE" color="#0F6E56"/>);
