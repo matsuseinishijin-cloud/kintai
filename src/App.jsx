@@ -70,6 +70,7 @@ const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", "申請
 const TRANSFER_MAP  = { id:"id", "従業員id":"empId", "振替出勤日":"workDate", "振替出勤シフト":"workShift", "振替休日":"offDate", "理由":"reason", "状態":"status" };
 const WEEK_PAT_MAP  = { id:"id", "職種":"role", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
 const SHIFT_CONFIRM_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "理由詳細":"reasonDetail", "開始時刻":"startTime", "終了時刻":"endTime", "承認シフト":"approvedShift", "状態":"status" };
+const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "不足週開始日":"shortWeekStart", "超過週開始日":"overWeekStart", "相殺時間":"offsetMin", "理由":"reason", "状態":"status" };
 
 // アプリ内キー → 日本語列名
 function invertMap(m){ const r={}; Object.entries(m).forEach(([k,v])=>r[v]=k); return r; }
@@ -81,6 +82,7 @@ const PUNCH_FIX_INV=invertMap(PUNCH_FIX_MAP);
 const TRANSFER_INV=invertMap(TRANSFER_MAP);
 const WEEK_PAT_INV=invertMap(WEEK_PAT_MAP);
 const SHIFT_CONFIRM_INV=invertMap(SHIFT_CONFIRM_MAP);
+const TIME_TRANSFER_INV=invertMap(TIME_TRANSFER_MAP);
 const DOW_KEYS=["sun","mon","tue","wed","thu","fri","sat"]; // 0=日〜6=土
 
 function convertFrom(row, map){ const o={}; Object.entries(map).forEach(([jp,en])=>{ if(row[jp]!==undefined){ const v=row[jp]; if(en==="id"||en==="empId"){ o[en]=(v!==null&&v!==undefined&&v!==""?String(v):v); } else if(en==="isLead"){ o[en]=v===true||v==="true"||v==="TRUE"||v===1?"true":"false"; } else { o[en]=v; } } }); return o; }
@@ -1887,7 +1889,7 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
 // ── TimecardView ──────────────────────────────────────────────────────────────
 const CLINIC_NAME = "医）松口整形外科クリニック";
 
-function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{},onGotoShiftCalendar=null}){
+function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{},onGotoShiftCalendar=null,timeTransferReqs=[]}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month);
   const [rf,setRf]=useState("");
@@ -2422,7 +2424,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
           {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
         </div>
-        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month}/>
+        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs}/>
       </div>;
     })()}
 
@@ -2462,7 +2464,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
-function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null}){
+function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null,timeTransferReqs=[]}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(outerYear||cur0.year),[month,setMonth]=useState(outerMonth||cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
@@ -2550,7 +2552,45 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   },0);
   const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
 
-  // 月20h超過アラート（fixed・overtime_requestの両方）
+  // 時間外計算（理学療法士正社員・weeklyLimit<40のみ）
+  const showOvertimeCell=emp?.role==="理学療法士"&&emp?.type==="正社員"&&emp?.weeklyLimit&&Number(emp.weeklyLimit)<40;
+  const overtimeMin=(()=>{
+    if(!showOvertimeCell||!emp?.weeklyLimit) return 0;
+    const wLimit=Number(emp.weeklyLimit)*60;
+    const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    // 週ごとにシフト定義合計を計算
+    const weekMap={};
+    periodDays.forEach(ds=>{
+      const d=new Date(ds);
+      const dow=d.getDay();
+      const diff=dow===0?-6:1-dow;
+      const mon=new Date(d);mon.setDate(d.getDate()+diff);
+      const wk=mon.toISOString().slice(0,10);
+      const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+      const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+      if(!weekMap[wk]) weekMap[wk]=0;
+      if(def.start&&def.end){
+        const bk=def.breakMin!=null?Number(def.breakMin):0;
+        weekMap[wk]+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);
+      }
+    });
+    // 週ごとの超過分を合算
+    let total=Object.entries(weekMap).reduce((s,[wk,wMin])=>s+Math.max(0,wMin-wLimit),0);
+    // 承認済み時間振替申請の相殺分を差し引く
+    const approved=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved");
+    approved.forEach(r=>{
+      // 超過週がperiodDays内にある場合
+      const overWeekDs=periodDays.find(ds=>{
+        const d=new Date(ds);
+        const dow=d.getDay();
+        const diff=dow===0?-6:1-dow;
+        const mon=new Date(d);mon.setDate(d.getDate()+diff);
+        return mon.toISOString().slice(0,10)===r.overWeekStart;
+      });
+      if(overWeekDs) total-=Number(r.offsetMin||0);
+    });
+    return Math.max(0,total);
+  })();
   const isFixedOT=rule.type==="fixed"||rule.type==="overtime_request";
   const otAlert=isFixedOT&&tO>(rule.limitH||20)*60;
 
@@ -2629,12 +2669,16 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             </div>
           </>;
         }
-        // その他職種：従来の7列グリッド
+        // その他職種：従来のグリッド＋時間外セル
         return <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${showOvertimeCell?8:7},1fr)`,gap:8}}>
             {[["出勤",attendDays+"日",""],["欠勤",abC+"日",abC>0?"#A32D2D":"#3B6D11"],["遅刻",lC+"回",lC>0?"#854F0B":"#3B6D11"],["早退",eC+"回",eC>0?"#854F0B":"#3B6D11"],["有給",lvC+"日","#0F6E56"],[rule.type==="approval"?"打刻調整":"残業日",rule.type==="approval"?adjC+"件":otDays+"日",""]].map(([l,v,c])=>(
               <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div></div>
             ))}
+            {showOvertimeCell&&<div style={{textAlign:"center",padding:"8px 4px",background:overtimeMin>0?"#FFF8E1":"var(--color-background-secondary)",border:overtimeMin>0?"0.5px solid #F59E0B":"none",borderRadius:8}}>
+              <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>時間外</div>
+              <div style={{fontSize:16,fontWeight:500,color:overtimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{overtimeMin>0?toHStr(overtimeMin):"―"}</div>
+            </div>}
             <div style={{textAlign:"center",padding:"8px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}><div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div><div style={{fontSize:16,fontWeight:500,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div></div>
           </div>
         </>;
@@ -3237,7 +3281,7 @@ function TransferRequest({emp,shifts,transferReqs,shiftDefsData,reload}){
 }
 
 // ── ApprovalCenter（申請許可タブ） ────────────────────────────────────────────
-function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[],shifts,shiftDefsData,leaves,reload,showOT=false,showPunchFix=true,showLeave=true,showEarly=true,shiftConfirmReqs=[]}){
+function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[],shifts,shiftDefsData,leaves,reload,showOT=false,showPunchFix=true,showLeave=true,showEarly=true,shiftConfirmReqs=[],timeTransferReqs=[]}){
   const [typeFilter,setTypeFilter]=useState("all");
   const [statusFilter,setStatusFilter]=useState("pending");
   const [scApprove,setScApprove]=useState({}); // {id: selectedShiftKey}
@@ -3345,12 +3389,9 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     try{
       await gasSave("シフト確認申請",convertTo({...req,status,approvedShift:approvedShift||""},SHIFT_CONFIRM_INV));
       if(status==="approved"){
-        // シフトを自動セット（シフト定義から該当キーを探す）
         const empObj=emps.find(e=>String(e.id)===String(req.empId));
         const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
-        // 承認シフトキーが定義にない場合はカスタムシフト定義を作成
         const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
-        // 既存シフトがなければ最も近いシフトキーを使用、なければoffのまま
         const matchKey=Object.keys(empDefs).find(k=>{
           const d=empDefs[k];
           return d.start===req.startTime&&d.end===req.endTime;
@@ -3358,6 +3399,15 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
         const shiftTypeToSave=matchKey||approvedShift||"off";
         await gasSave("シフト",convertTo({id:shiftRow?.id||newId(),empId:req.empId,date:req.date,shiftType:shiftTypeToSave},SHIFT_INV));
       }
+      await reload();
+    }catch(e){alert("更新失敗："+e.message);}
+  };
+
+  // 時間振替申請の承認処理
+  const decideTT=async(id,status)=>{
+    const req=(timeTransferReqs||[]).find(r=>r.id===id);if(!req)return;
+    try{
+      await gasSave("時間振替申請",convertTo({...req,status},TIME_TRANSFER_INV));
       await reload();
     }catch(e){alert("更新失敗："+e.message);}
   };
@@ -3370,8 +3420,10 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     ...(transferReqs||[]).map(r=>({...r,_type:"transfer"})),
     ...(showPunchFix?(punchFixReqs||[]).map(r=>({...r,_type:"punchfix"})):[]),
     ...(shiftConfirmReqs||[]).map(r=>({...r,_type:"shiftconfirm"})),
+    ...(timeTransferReqs||[]).map(r=>({...r,_type:"timetransfer"})),
   ].sort((a,b)=>{
-    const da=a.date||a.workDate||""; const db=b.date||b.workDate||"";
+    const da=a.date||a.workDate||a.overWeekStart||"";
+    const db=b.date||b.workDate||b.overWeekStart||"";
     return da<db?1:-1;
   });
 
@@ -3383,6 +3435,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     ...(showEarly?[{key:"early",label:"早出"}]:[]),
     ...(showOT?[{key:"overtime",label:"残業/時間外"}]:[]),
     {key:"shiftconfirm",label:"シフト確認"},
+    {key:"timetransfer",label:"時間振替"},
   ];
 
   const filtered=allItems.filter(r=>{
@@ -3394,6 +3447,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     if(typeFilter==="early") return r._type==="ot"&&r.type==="early";
     if(typeFilter==="overtime") return r._type==="ot"&&(r.type==="overtime");
     if(typeFilter==="shiftconfirm") return r._type==="shiftconfirm";
+    if(typeFilter==="timetransfer") return r._type==="timetransfer";
     return true;
   });
 
@@ -3405,6 +3459,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     if(r._type==="transfer") return "振替";
     if(r._type==="ot") return r.type==="early"?"早出":"残業/時間外";
     if(r._type==="shiftconfirm") return "シフト確認";
+    if(r._type==="timetransfer") return "時間振替";
     return "その他";
   };
   const typeBg=r=>{
@@ -3414,6 +3469,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     if(r._type==="ot"&&r.type==="early") return {bg:"#EAF3DE",color:"#3B6D11"};
     if(r._type==="ot") return {bg:"#FAEEDA",color:"#854F0B"};
     if(r._type==="shiftconfirm") return {bg:"#FEF3C7",color:"#92400E"};
+    if(r._type==="timetransfer") return {bg:"#EDE9FE",color:"#5B21B6"};
     return {bg:"#f5f5f5",color:"#333"};
   };
 
@@ -3423,6 +3479,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     if(r._type==="transfer") return `出勤:${r.workDate}　休日:${r.offDate}`;
     if(r._type==="ot") return `${r.date}　→${r.requestedEnd||"―"}`;
     if(r._type==="shiftconfirm") return `${r.date}　${r.startTime||"―"}〜${r.endTime||"―"}（${r.reason||"―"}）`;
+    if(r._type==="timetransfer") return `不足：${r.shortWeekStart}週　超過：${r.overWeekStart}週　${toHStr(Number(r.offsetMin||0))}`;
     return "―";
   };
 
@@ -3465,7 +3522,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
               </td>
               <td style={tdS}>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                  {isPending&&r._type!=="shiftconfirm"&&<>
+                  {isPending&&r._type!=="shiftconfirm"&&r._type!=="timetransfer"&&<>
                     <button onClick={()=>{
                       if(r._type==="leave") decideLv(r.id,"approved");
                       else if(r._type==="ot") decideOT(r.id,"approved");
@@ -3479,6 +3536,11 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
                       else if(r._type==="punchfix") decidePF(r.id,"rejected");
                     }} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
                   </>}
+                  {isPending&&r._type==="timetransfer"&&<>
+                    <button onClick={()=>decideTT(r.id,"approved")} style={{padding:"3px 10px",borderRadius:6,background:"#EAF3DE",color:"#3B6D11",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>承認</button>
+                    <button onClick={()=>decideTT(r.id,"rejected")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
+                  </>}
+                  {isApproved&&r._type==="timetransfer"&&<button onClick={()=>decideTT(r.id,"cancelled")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
                   {isPending&&r._type==="shiftconfirm"&&(()=>{
                     const empObj=emps.find(e=>String(e.id)===String(r.empId));
                     const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
@@ -3587,6 +3649,165 @@ function OvertimeRequest({emp,shifts,otReqs,shiftDefsData,reload}){
           <td style={tdS}>{r.requestedEnd}</td>
           <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
         </tr>)}</tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
+// ── TimeTransferRequest (従業員：時間振替申請) ───────────────────────────────
+function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload}){
+  const [form,setForm]=useState({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
+  const [sub,setSub]=useState(false),[err,setErr]=useState("");
+
+  // 週の月曜日を返す
+  const getMondayOf=(ds)=>{
+    const d=new Date(ds);
+    const dow=d.getDay();
+    const diff=dow===0?-6:1-dow;
+    d.setDate(d.getDate()+diff);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  };
+
+  // 週のシフト合計時間（分）を計算
+  const getWeekShiftMin=(weekStart)=>{
+    if(!weekStart) return 0;
+    const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    let total=0;
+    for(let i=0;i<7;i++){
+      const d=new Date(weekStart);
+      d.setDate(d.getDate()+i);
+      const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+      const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+      if(def.start&&def.end){
+        const bk=def.breakMin!=null?Number(def.breakMin):0;
+        total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);
+      }
+    }
+    return total;
+  };
+
+  const weeklyLimit=emp.weeklyLimit?Number(emp.weeklyLimit)*60:null;
+
+  // 対象週の選択肢（当月・翌月）
+  const weekOptions=(()=>{
+    const opts=[];
+    const now=new Date();
+    for(let mo=0;mo<=1;mo++){
+      const y=now.getMonth()+1+mo>12?now.getFullYear()+1:now.getFullYear();
+      const m=((now.getMonth()+mo)%12)+1;
+      const last=daysInMonth(y,m);
+      const seen=new Set();
+      for(let d=1;d<=last;d++){
+        const ds=`${y}-${pad(m)}-${pad(d)}`;
+        const mon=getMondayOf(ds);
+        if(!seen.has(mon)){seen.add(mon);opts.push(mon);}
+      }
+    }
+    return [...new Set(opts)].sort();
+  })();
+
+  const shortWeekMin=form.shortWeekStart?getWeekShiftMin(form.shortWeekStart):0;
+  const overWeekMin=form.overWeekStart?getWeekShiftMin(form.overWeekStart):0;
+  const shortDiff=weeklyLimit?Math.max(0,weeklyLimit-shortWeekMin):0; // 不足分
+  const overDiff=weeklyLimit?Math.max(0,overWeekMin-weeklyLimit):0;   // 超過分
+
+  // 既存の承認済み申請での相殺済み時間を考慮
+  const alreadyOffsetShort=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===form.shortWeekStart&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const alreadyOffsetOver=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===form.overWeekStart&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const maxOffset=Math.min(shortDiff-alreadyOffsetShort, overDiff-alreadyOffsetOver);
+
+  const canSubmit=form.shortWeekStart&&form.overWeekStart&&form.offsetMin&&form.reason&&
+    Number(form.offsetMin)>0&&Number(form.offsetMin)<=maxOffset&&form.shortWeekStart!==form.overWeekStart;
+
+  const submit=async()=>{
+    setErr("");
+    if(!canSubmit){setErr("入力内容を確認してください");return;}
+    try{
+      const data=convertTo({id:newId(),empId:emp.id,shortWeekStart:form.shortWeekStart,overWeekStart:form.overWeekStart,offsetMin:Number(form.offsetMin),reason:form.reason,status:"pending"},TIME_TRANSFER_INV);
+      await gasSave("時間振替申請",data);
+      setForm({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
+      setSub(true);setTimeout(()=>setSub(false),3000);
+      await reload();
+    }catch(e){setErr("申請失敗："+e.message);}
+  };
+
+  const myReqs=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.overWeekStart<a.overWeekStart?-1:1);
+
+  return <div>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:480}}>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:"1rem"}}>時間振替申請</div>
+      <div style={{marginBottom:10,padding:"8px 12px",background:"#F5F9FE",borderRadius:8,fontSize:12,color:"#1251a3"}}>
+        週所定労働時間：<strong>{emp.weeklyLimit?emp.weeklyLimit+"時間":"未設定"}</strong>
+      </div>
+
+      {/* 不足週 */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>不足週（相殺元）</div>
+        <select value={form.shortWeekStart} onChange={e=>setForm(p=>({...p,shortWeekStart:e.target.value,offsetMin:""}))} style={iS}>
+          <option value="">週を選択</option>
+          {weekOptions.map(w=>{
+            const wMin=getWeekShiftMin(w);
+            const deficit=weeklyLimit?Math.max(0,weeklyLimit-wMin):0;
+            const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===w&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+            const remaining=deficit-alreadyUsed;
+            return <option key={w} value={w} disabled={remaining<=0}>
+              {w}週（シフト{toHStr(wMin)}{deficit>0?`・不足${toHStr(remaining)}`:``}）
+            </option>;
+          })}
+        </select>
+        {form.shortWeekStart&&<div style={{fontSize:11,color:"#854F0B",marginTop:3}}>不足時間：{toHStr(Math.max(0,shortDiff-alreadyOffsetShort))}</div>}
+      </div>
+
+      {/* 超過週 */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過週（相殺先）</div>
+        <select value={form.overWeekStart} onChange={e=>setForm(p=>({...p,overWeekStart:e.target.value,offsetMin:""}))} style={iS}>
+          <option value="">週を選択</option>
+          {weekOptions.map(w=>{
+            const wMin=getWeekShiftMin(w);
+            const excess=weeklyLimit?Math.max(0,wMin-weeklyLimit):0;
+            const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===w&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+            const remaining=excess-alreadyUsed;
+            return <option key={w} value={w} disabled={remaining<=0||w===form.shortWeekStart}>
+              {w}週（シフト{toHStr(wMin)}{excess>0?`・超過${toHStr(remaining)}`:``}）
+            </option>;
+          })}
+        </select>
+        {form.overWeekStart&&<div style={{fontSize:11,color:"#3B6D11",marginTop:3}}>超過時間：{toHStr(Math.max(0,overDiff-alreadyOffsetOver))}</div>}
+      </div>
+
+      {/* 相殺時間（分入力） */}
+      {form.shortWeekStart&&form.overWeekStart&&maxOffset>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>相殺時間（分）　上限：{toHStr(maxOffset)}</div>
+        <input type="number" min={1} max={maxOffset} value={form.offsetMin} onChange={e=>setForm(p=>({...p,offsetMin:e.target.value}))} placeholder={`最大${maxOffset}分`} style={iS}/>
+      </div>}
+
+      {/* 理由 */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
+        <input type="text" value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} placeholder="理由を入力" style={iS}/>
+      </div>
+
+      {err&&<div style={{marginBottom:8,padding:"6px 10px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>{err}</div>}
+      <button onClick={submit} disabled={!canSubmit} style={{...bP,width:"100%",padding:"10px 0",opacity:canSubmit?1:0.4}}>申請する</button>
+      {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
+    </div>
+
+    {/* 申請履歴 */}
+    {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>{["不足週","超過週","相殺時間","理由","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{myReqs.map(r=>(
+          <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+            <td style={tdS}>{r.shortWeekStart}</td>
+            <td style={tdS}>{r.overWeekStart}</td>
+            <td style={{...tdS,fontWeight:500}}>{toHStr(Number(r.offsetMin||0))}</td>
+            <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.reason}</td>
+            <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+          </tr>
+        ))}</tbody>
       </table>
     </div>}
   </div>;
@@ -3731,7 +3952,7 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
 }
 
 // ── RequestTab ────────────────────────────────────────────────────────────────
-function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,transferReqs,shiftConfirmReqs,reload}){
+function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,transferReqs,shiftConfirmReqs,timeTransferReqs,reload}){
   const rule=getOtRule(emp);
   const hasLeave=(()=>{const lv=leaves.find(l=>String(l.empId)===String(emp.id));if(!lv) return false; return calcLeaveRemainingCompat(lv,lvReqs,emp.id)>0||safeParseJSON(lv.records,[]).some(r=>r.type==="grant");})();
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
@@ -3743,6 +3964,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     ...(isOvertimeRequestTarget?[{key:"overtime_request",label:"時間外申請"}]:[]),
     {key:"early",label:"早出申請"},
     ...(isSeishain?[{key:"transfer",label:"振替申請"}]:[]),
+    ...(isSeishain?[{key:"timetransfer",label:"時間振替申請"}]:[]),
     {key:"punchfix",label:"打刻修正申請"},
     {key:"shiftconfirm",label:"シフト確認申請"},
   ];
@@ -3758,6 +3980,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="shiftconfirm"&&<ShiftConfirmRequest emp={emp} punches={punches} shifts={shifts} shiftConfirmReqs={shiftConfirmReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
   </div>;
@@ -4702,12 +4925,13 @@ export default function App(){
   const [weekPatterns,setWeekPatterns]=useState([]);
   const [transferReqs,setTransferReqs]=useState([]);
   const [shiftConfirmReqs,setShiftConfirmReqs]=useState([]);
+  const [timeTransferReqs,setTimeTransferReqs]=useState([]);
 
   const loadAll=useCallback(async()=>{
     try{
       const cy=new Date().getFullYear();
       await Promise.all([fetchHolidays(cy),fetchHolidays(cy+1)]);
-      const [e,s,p,o,lv,lr,pw,sd,pfr,wp,tr,scr]=await Promise.all([
+      const [e,s,p,o,lv,lr,pw,sd,pfr,wp,tr,scr,ttr]=await Promise.all([
         gasGet("従業員"),gasGet("シフト"),gasGet("打刻"),
         gasGet("残業申請"),gasGet("有給"),gasGet("有給申請"),gasGet("パスワード"),
         gasGet("シフト定義").catch(()=>[]),
@@ -4715,6 +4939,7 @@ export default function App(){
         gasGet("週間パターン").catch(()=>[]),
         gasGet("振替申請").catch(()=>[]),
         gasGet("シフト確認申請").catch(()=>[]),
+        gasGet("時間振替申請").catch(()=>[]),
       ]);
       setEmps(e.map(r=>convertFrom(r,EMP_MAP)));
       setShifts(s.map(r=>convertFrom(r,SHIFT_MAP)));
@@ -4727,6 +4952,7 @@ export default function App(){
       setWeekPatterns(wp.map(r=>convertFrom(r,WEEK_PAT_MAP)));
       setTransferReqs(tr.map(r=>convertFrom(r,TRANSFER_MAP)));
       setShiftConfirmReqs(scr.map(r=>convertFrom(r,SHIFT_CONFIRM_MAP)));
+      setTimeTransferReqs(ttr.map(r=>convertFrom(r,TIME_TRANSFER_MAP)));
       // シフト定義を部署別オブジェクトに変換
       if(sd.length>0){
         const byDept={};
@@ -4933,15 +5159,15 @@ export default function App(){
         if(t==="従業員管理") return <EmpManager emps={emps} passwords={passwords} reload={loadAll}/>;
         if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
-        if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true} shiftConfirmReqs={shiftConfirmReqs}/>;
+        if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
-        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")}/>;
+        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")} timeTransferReqs={timeTransferReqs}/>;
         return null;
       })()}
       {!isAdmin&&cur&&(()=>{
         const t=tabName||(tabs.find(x=>x!=="---")||tabs[0]||"");
         if(t==="打刻") return <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} onPunchesUpdate={setPunches}/>;
-        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} shiftConfirmReqs={shiftConfirmReqs} reload={loadAll}/>;
+        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs} reload={loadAll}/>;
         if(t==="マイシフト") return isPTpart
           ?<MyShiftWithReport emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} reload={loadAll}/>
           :<MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
@@ -4965,6 +5191,7 @@ export default function App(){
             transferReqs={transferReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
             punchFixReqs={punchFixReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
             shiftConfirmReqs={shiftConfirmReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
+            timeTransferReqs={timeTransferReqs.filter(r=>leadEmps.find(e=>String(e.id)===String(r.empId)))}
             punches={punches}
             shifts={shifts}
             shiftDefsData={shiftDefsData}
@@ -4977,7 +5204,7 @@ export default function App(){
           />;
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
-        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")}/>;
+        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")} timeTransferReqs={timeTransferReqs}/>;
         return null;
       })()}
     </div>
