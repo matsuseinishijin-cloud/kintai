@@ -2729,7 +2729,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             if(r.earlyLeave){const elMin=r.punch?.out?toMin(r.def.end)-toMin(r.punch.out):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span></span>);}
             if(r.approvedEarlyReq){const earlyMin=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(earlyMin>0) badges.push(<span key="early" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{earlyMin}分</span></span>);}
             if(badges.length===0&&r.awMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
-            if(badges.length===0&&r.isOff&&r.punch) badges.push(<Badge key="offpunch" label="休日出勤" bg="#FAEEDA" color="#854F0B"/>);
+            if(badges.length===0&&r.isOff&&r.punch) badges.push(<Badge key="offpunch" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           }
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
