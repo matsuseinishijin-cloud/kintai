@@ -3253,16 +3253,23 @@ function LeaveRequest({emp,leaves,lvReqs,reload,initDate=null,onClearInitDate=()
 
 // ── TransferRequest (Employee) ────────────────────────────────────────────────
 function TransferRequest({emp,shifts,transferReqs,shiftDefsData,reload}){
-  const [form,setForm]=useState({workDate:today(),workShift:"day",offDate:"",reason:""}),[sub,setSub]=useState(false);
-  const myReqs=(transferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.workDate<a.workDate?-1:1);
   const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
   const shiftOptions=Object.entries(empDefs).filter(([k])=>k!=="off").map(([k,v])=>({key:k,label:v.label,start:v.start,end:v.end}));
+  const defaultShift=shiftOptions[0]?.key||"day";
+  const [form,setForm]=useState({workDate:today(),workShift:defaultShift,offDate:"",reason:""}),[sub,setSub]=useState(false);
+  const myReqs=(transferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.workDate<a.workDate?-1:1);
+  // shiftDefsDataロード後にworkShiftを正しいキーに更新
+  useEffect(()=>{
+    if(shiftOptions.length>0&&!shiftOptions.find(s=>s.key===form.workShift)){
+      setForm(p=>({...p,workShift:shiftOptions[0].key}));
+    }
+  },[shiftDefsData]);
   const submit=async()=>{
     if(!form.workDate||!form.offDate||!form.reason)return;
     try{
       const data=convertTo({id:newId(),empId:emp.id,workDate:form.workDate,workShift:form.workShift,offDate:form.offDate,reason:form.reason,status:"pending"},TRANSFER_INV);
       await gasSave("振替申請",data);
-      setForm({workDate:today(),workShift:"day",offDate:"",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      setForm({workDate:today(),workShift:defaultShift,offDate:"",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
     }catch(e){alert("申請失敗："+e.message);}
   };
