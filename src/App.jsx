@@ -1496,9 +1496,9 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const lvReq=!isPrev?lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending")):null;
                     const isLocked=!isPrev&&lvReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
                     const lvBadge=lvReq?(lvReq.status==="approved"
-                      ?{label:"有休",bg:"#0F6E56",tc:"#fff"}
+                      ?{label:"承認済",bg:"#0F6E56",tc:"#fff"}
                       :{label:"申請中",bg:"#854F0B",tc:"#fff"})
-                      :null;
+                      :(isAnyLeaveShift(shiftRow?.shiftType)?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
                     const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"全日";
                     const tooltipLines=lvReq?[
                       `📅 ${lvReq.date}`,
@@ -3056,7 +3056,7 @@ function PunchEditor({emps,punches:punchesFromProps,shifts,shiftDefsData,punchFi
 }
 
 // ── PunchScreen (Employee) ────────────────────────────────────────────────────
-function PunchScreen({emp,punches:punchesFromProps,shifts,shiftDefsData,reload,onPunchesUpdate=()=>{}}){
+function PunchScreen({emp,punches:punchesFromProps,shifts,shiftDefsData,reload,onPunchesUpdate=()=>{},onGotoRequest=null,lvReqs=[]}){
   const [msg,setMsg]=useState(""),[saving,setSaving]=useState(false);
   const [localPunches,setLocalPunches]=useState(null);
   const punches=localPunches||punchesFromProps;
@@ -3096,10 +3096,35 @@ function PunchScreen({emp,punches:punchesFromProps,shifts,shiftDefsData,reload,o
     }catch(e){setLocalPunches(null);alert("打刻失敗："+e.message);}
     setSaving(false);
   };
+  // 当月内の有休未申請日（シフトがleave系かつ申請なし）
+  const curY=new Date().getFullYear(),curM=new Date().getMonth()+1;
+  const unsubmittedLeaveDays=(()=>{
+    const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    const last=daysInMonth(curY,curM);
+    const days=[];
+    for(let d=1;d<=last;d++){
+      const ds=`${curY}-${pad(curM)}-${pad(d)}`;
+      if(ds>td) continue;
+      const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+      if(!isAnyLeaveShift(shiftRow?.shiftType)) continue;
+      const hasReq=(lvReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending"));
+      if(!hasReq) days.push(ds);
+    }
+    return days;
+  })();
+
   const status=!punch?"未出勤":!punch.out?"勤務中":"退勤済";
   const sc=status==="勤務中"?"#185FA5":status==="退勤済"?"#3B6D11":"var(--color-text-tertiary)";
   const sb=status==="勤務中"?"#E6F1FB":status==="退勤済"?"#EAF3DE":"var(--color-background-secondary)";
   return <div style={{maxWidth:400}}>
+    {/* 有休未申請警告バナー */}
+    {unsubmittedLeaveDays.length>0&&<div style={{...crd,padding:"12px 16px",marginBottom:"1rem",background:"#FFF8E1",border:"1.5px solid #F59E0B",borderRadius:10}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#854F0B",marginBottom:6}}>⚠ 有休申請が未提出です</div>
+      <div style={{fontSize:12,color:"#854F0B",marginBottom:8}}>
+        {unsubmittedLeaveDays.map(ds=>ds.slice(5).replace("-","/")).join("、")} の有休申請が未提出です。
+      </div>
+      {onGotoRequest&&<button onClick={()=>onGotoRequest(unsubmittedLeaveDays[0])} style={{padding:"6px 16px",borderRadius:8,background:"#F59E0B",color:"#fff",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>有給申請へ</button>}
+    </div>}
     <div style={{...crd,padding:"1.25rem",marginBottom:"1rem"}}>
       <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:4}}>本日のシフト</div>
       <div style={{fontSize:17,fontWeight:700,marginBottom:12}}>{def.start?`${def.label}（${def.start}〜${def.end}）`:"休日"}</div>
@@ -3149,9 +3174,13 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 }
 
 // ── LeaveRequest (Employee) ───────────────────────────────────────────────────
-function LeaveRequest({emp,leaves,lvReqs,reload}){
+function LeaveRequest({emp,leaves,lvReqs,reload,initDate=null,onClearInitDate=()=>{}}){
   const isPartt=emp.type==="パート";
-  const [form,setForm]=useState({date:"",half:"full",reason:""}),[sub,setSub]=useState(false);
+  const [form,setForm]=useState({date:initDate||"",half:"full",reason:""}),[sub,setSub]=useState(false);
+  // initDateが変わったら日付を自動セット
+  useEffect(()=>{
+    if(initDate){setForm(p=>({...p,date:initDate}));onClearInitDate();}
+  },[initDate]);
   const leave=leaves.find(l=>String(l.empId)===String(emp.id))||{granted:0,used:0,records:"[]"};
   const rem=calcLeaveRemainingCompat(leave,lvReqs,emp.id);
   const myReqs=lvReqs.filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.date<a.date?-1:1);
@@ -3952,7 +3981,7 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
 }
 
 // ── RequestTab ────────────────────────────────────────────────────────────────
-function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,transferReqs,shiftConfirmReqs,timeTransferReqs,reload}){
+function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftDefsData,transferReqs,shiftConfirmReqs,timeTransferReqs,reload,initLeaveDate=null,onClearInitLeaveDate=()=>{}}){
   const rule=getOtRule(emp);
   const hasLeave=(()=>{const lv=leaves.find(l=>String(l.empId)===String(emp.id));if(!lv) return false; return calcLeaveRemainingCompat(lv,lvReqs,emp.id)>0||safeParseJSON(lv.records,[]).some(r=>r.type==="grant");})();
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
@@ -3969,13 +3998,17 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {key:"shiftconfirm",label:"シフト確認申請"},
   ];
   const firstKey=sections[0]?.key||"punchfix";
-  const [section,setSection]=useState(firstKey);
+  // initLeaveDateがある場合は有給申請セクションを自動表示
+  const [section,setSection]=useState(initLeaveDate&&hasLeave?"leave":firstKey);
+  useEffect(()=>{
+    if(initLeaveDate&&hasLeave){ setSection("leave"); }
+  },[initLeaveDate]);
   const validSection=sections.find(s=>s.key===section)?section:firstKey;
   return <div>
     {sections.length>1&&<div style={{display:"flex",gap:0,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)",flexWrap:"wrap"}}>
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
-    {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload}/>}
+    {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
@@ -4073,10 +4106,14 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       if(!d) return <div key={i} style={{minHeight:72}}/>;
       const ds=`${year}-${pad(month)}-${pad(d)}`;
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+      const _lvPending=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="pending");
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const _myDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
       const def=_myDefs[(isLeave&&!leaveHalf)?"off":shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off;
+      const isLeaveShiftDay=isAnyLeaveShift(shiftRow?.shiftType);
+      // 有休バッジ：承認済→表示なし（緑背景で識別）、申請中→「申請中」、未申請→「未申請」
+      const lvStatusBadge=isLeave?null:_lvPending?{label:"申請中",bg:"#854F0B",tc:"#fff"}:isLeaveShiftDay&&ds<=td?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null;
       const dow=new Date(year,month-1,d).getDay(),isToday=ds===td,hol=isHoliday(ds);
       const leaveLabel=leaveHalf==="am"?"午前有給":leaveHalf==="pm"?"午後有給":"有給";
       const statusBadges=getStatusBadges(ds,def);
@@ -4095,6 +4132,7 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
             {statusBadges.map((b,bi)=><span key={bi} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:b.bg,color:b.color,whiteSpace:"nowrap"}}>{b.label}</span>)}
           </div>}
+          {lvStatusBadge&&<div style={{marginTop:2}}><span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:lvStatusBadge.bg,color:lvStatusBadge.tc,whiteSpace:"nowrap"}}>{lvStatusBadge.label}</span></div>}
         </div>
       </div>;
     })}</div>
@@ -4918,6 +4956,7 @@ export default function App(){
   const [error,setError]=useState(null);
   const [loginId,setLoginId]=useState(null);
   const [tabName,setTabName]=useState("");
+  const [initLeaveDate,setInitLeaveDate]=useState(null);
   const [patternMode,setPatternMode]=useState(false);
   const [showPwChange,setShowPwChange]=useState(false);
   const [shiftDefSaving,setShiftDefSaving]=useState(false);
@@ -5166,8 +5205,8 @@ export default function App(){
       })()}
       {!isAdmin&&cur&&(()=>{
         const t=tabName||(tabs.find(x=>x!=="---")||tabs[0]||"");
-        if(t==="打刻") return <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} onPunchesUpdate={setPunches}/>;
-        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs} reload={loadAll}/>;
+        if(t==="打刻") return <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} onPunchesUpdate={setPunches} lvReqs={lvReqs} onGotoRequest={(date)=>{setInitLeaveDate(date);setTabName("申請");}}/>;
+        if(t==="申請") return <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} otReqs={otReqs} punches={punches} punchFixReqs={punchFixReqs} shiftDefsData={shiftDefsData} transferReqs={transferReqs} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} initLeaveDate={initLeaveDate} onClearInitLeaveDate={()=>setInitLeaveDate(null)}/>;
         if(t==="マイシフト") return isPTpart
           ?<MyShiftWithReport emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} reload={loadAll}/>
           :<MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
@@ -5199,7 +5238,7 @@ export default function App(){
             reload={loadAll}
             showOT={isOTLead}
             showPunchFix={isOTLead}
-            showLeave={isOTLead}
+            showLeave={true}
             showEarly={isOTLead}
           />;
         }
