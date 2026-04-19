@@ -69,7 +69,7 @@ const SHIFTDEF_MAP = { id:"id", "部署":"dept", "キー":"key", "名前":"label
 const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", "申請出勤":"reqIn", "申請退勤":"reqOut", "理由":"reason", "状態":"status", "元出勤":"origIn", "元退勤":"origOut" };
 const TRANSFER_MAP  = { id:"id", "従業員id":"empId", "振替出勤日":"workDate", "振替出勤シフト":"workShift", "振替休日":"offDate", "理由":"reason", "状態":"status" };
 const WEEK_PAT_MAP  = { id:"id", "職種":"role", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
-const SHIFT_CONFIRM_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "理由詳細":"reasonDetail", "開始時刻":"startTime", "終了時刻":"endTime", "承認シフト":"approvedShift", "状態":"status" };
+const SHIFT_CONFIRM_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "理由詳細":"reasonDetail", "開始時刻":"startTime", "終了時刻":"endTime", "休憩時間":"breakMin", "承認シフト":"approvedShift", "状態":"status" };
 const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "不足週開始日":"shortWeekStart", "超過週開始日":"overWeekStart", "相殺時間":"offsetMin", "理由":"reason", "状態":"status" };
 
 // アプリ内キー → 日本語列名
@@ -1889,7 +1889,7 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
 // ── TimecardView ──────────────────────────────────────────────────────────────
 const CLINIC_NAME = "医）松口整形外科クリニック";
 
-function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{},onGotoShiftCalendar=null,timeTransferReqs=[]}){
+function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=false,leadRoles=null,selfView=false,reload=()=>{},onGotoShiftCalendar=null,timeTransferReqs=[],shiftConfirmReqs=[]}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(cur0.year),[month,setMonth]=useState(cur0.month);
   const [rf,setRf]=useState("");
@@ -2424,7 +2424,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
           {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
         </div>
-        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs}/>
+        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>
       </div>;
     })()}
 
@@ -2464,7 +2464,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
-function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null,timeTransferReqs=[]}){
+function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null,timeTransferReqs=[],shiftConfirmReqs=[]}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(outerYear||cur0.year),[month,setMonth]=useState(outerMonth||cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
@@ -2531,6 +2531,17 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     setEditSaving(false);
   };
   const tS=rows.reduce((s,r)=>s+(r.isOff||r.absent?0:r.swMin),0),tO=rows.reduce((s,r)=>s+r.otMin,0);
+  // 理学療法士以外の正社員：承認済みシフト確認申請の残業を加算
+  const scOTMin=(()=>{
+    if(!emp||emp.role==="理学療法士"||emp.type!=="正社員") return 0;
+    return (shiftConfirmReqs||[])
+      .filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&periodDays.includes(r.date))
+      .reduce((s,r)=>{
+        const bk=r.breakMin?Number(r.breakMin):0;
+        const workMin=Math.max(0,toMin(r.endTime||"00:00")-toMin(r.startTime||"00:00")-bk);
+        return s+workMin;
+      },0);
+  })();
   // 実働合計（roundタイプはシフト内時間、その他は±5分丸め）
   const tA=rows.reduce((s,r)=>{
     if(!r.punch?.out||!r.punch?.in||r.isLeave||r.isOff) return s;
@@ -2651,7 +2662,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               </div>
               <div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
-                <div style={{fontSize:20,fontWeight:700,color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{tO>0?toHStr(tO):"―"}</div>
+                <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin)>0?toHStr(tO+scOTMin):"―"}</div>
+                {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
               </div>
               <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div>
@@ -3154,7 +3166,7 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
       await reload();
     }catch(e){alert("申請失敗："+e.message);}
   };
-  if(rule.type!=="approval"&&rule.type!=="round") return <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"1.5rem",color:"var(--color-text-secondary)",fontSize:13}}>残業申請の対象外です。</div>;
+  if(rule.type!=="approval") return <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"1.5rem",color:"var(--color-text-secondary)",fontSize:13}}>残業申請の対象外です。</div>;
   return <div>
     <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:400}}>
       <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>残業申請</div>
@@ -3851,7 +3863,7 @@ function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload})
 
 // ── ShiftConfirmRequest (従業員：シフト確認申請) ──────────────────────────────
 function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,reload}){
-  const [form,setForm]=useState({date:"",reason:"",reasonDetail:"",startTime:"",endTime:""});
+  const [form,setForm]=useState({date:"",reason:"",reasonDetail:"",startTime:"",endTime:"",breakMin:""});
   const [sub,setSub]=useState(false),[err,setErr]=useState("");
 
   // シフトなし打刻の日のみ選択可（当月・先月）
@@ -3889,10 +3901,11 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
         id:newId(),empId:emp.id,date:form.date,
         reason:form.reason,reasonDetail:form.reasonDetail,
         startTime:form.startTime,endTime:form.endTime,
+        breakMin:form.breakMin?Number(form.breakMin):0,
         approvedShift:"",status:"pending"
       },SHIFT_CONFIRM_INV);
       await gasSave("シフト確認申請",data);
-      setForm({date:"",reason:"",reasonDetail:"",startTime:"",endTime:""});
+      setForm({date:"",reason:"",reasonDetail:"",startTime:"",endTime:"",breakMin:""});
       setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
     }catch(e){setErr("申請失敗："+e.message);}
@@ -3949,7 +3962,7 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
             <div style={{marginBottom:6,padding:"8px 12px",background:"#F5F9FE",borderRadius:8,fontSize:12,color:"#1251a3"}}>
               シフトの開始時刻・終了時刻を入力してください
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
               <div>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>開始時刻</div>
                 <input type="time" value={form.startTime} onChange={e=>setForm(p=>({...p,startTime:e.target.value}))} style={iS}/>
@@ -3958,6 +3971,10 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>終了時刻</div>
                 <input type="time" value={form.endTime} onChange={e=>setForm(p=>({...p,endTime:e.target.value}))} style={iS}/>
               </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>休憩時間（分）　※なければ空欄</div>
+              <input type="number" min={0} max={240} value={form.breakMin} onChange={e=>setForm(p=>({...p,breakMin:e.target.value}))} placeholder="例：60" style={iS}/>
             </div>
           </>}
 
@@ -3972,12 +3989,13 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
     {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
       <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>{["日付","理由","シフト時刻","承認シフト","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <thead><tr>{["日付","理由","シフト時刻","休憩","承認シフト","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
         <tbody>{myReqs.map(r=>(
           <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
             <td style={tdS}>{r.date}</td>
             <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.reason}{r.reasonDetail?`（${r.reasonDetail}）`:""}</td>
             <td style={tdS}>{r.startTime}〜{r.endTime}</td>
+            <td style={tdS}>{r.breakMin?r.breakMin+"分":"―"}</td>
             <td style={{...tdS,fontWeight:500}}>{r.approvedShift||"―"}</td>
             <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
           </tr>
@@ -3994,12 +4012,9 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
   const isOvertimeRequestTarget=rule.type==="overtime_request";
   const isSeishain=emp.type==="正社員";
-  // 看護師・医療事務正社員も残業申請対象
-  const isRoundOTTarget=isSeishain&&(emp.role==="看護師"||emp.role==="医療事務");
   const sections=[
     ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
     ...(isOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
-    ...(isRoundOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
     ...(isOvertimeRequestTarget?[{key:"overtime_request",label:"時間外申請"}]:[]),
     {key:"early",label:"早出申請"},
     ...(isSeishain?[{key:"transfer",label:"振替申請"}]:[]),
@@ -4019,7 +4034,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
-    {validSection==="overtime"&&(isOTTarget||isRoundOTTarget)&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
@@ -5213,7 +5228,7 @@ export default function App(){
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
-        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")} timeTransferReqs={timeTransferReqs}/>;
+        if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>;
         return null;
       })()}
       {!isAdmin&&cur&&(()=>{
@@ -5256,7 +5271,7 @@ export default function App(){
           />;
         }
         if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
-        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")} timeTransferReqs={timeTransferReqs}/>;
+        if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>;
         return null;
       })()}
     </div>
