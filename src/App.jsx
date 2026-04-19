@@ -3154,7 +3154,7 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
       await reload();
     }catch(e){alert("申請失敗："+e.message);}
   };
-  if(rule.type!=="approval") return <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"1.5rem",color:"var(--color-text-secondary)",fontSize:13}}>残業申請の対象外です。</div>;
+  if(rule.type!=="approval"&&rule.type!=="round") return <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"1.5rem",color:"var(--color-text-secondary)",fontSize:13}}>残業申請の対象外です。</div>;
   return <div>
     <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:400}}>
       <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>残業申請</div>
@@ -3994,9 +3994,12 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
   const isOvertimeRequestTarget=rule.type==="overtime_request";
   const isSeishain=emp.type==="正社員";
+  // 看護師・医療事務正社員も残業申請対象
+  const isRoundOTTarget=isSeishain&&(emp.role==="看護師"||emp.role==="医療事務");
   const sections=[
     ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
     ...(isOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
+    ...(isRoundOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
     ...(isOvertimeRequestTarget?[{key:"overtime_request",label:"時間外申請"}]:[]),
     {key:"early",label:"早出申請"},
     ...(isSeishain?[{key:"transfer",label:"振替申請"}]:[]),
@@ -4016,7 +4019,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
-    {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="overtime"&&(isOTTarget||isRoundOTTarget)&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
@@ -5090,6 +5093,8 @@ export default function App(){
   const pendOT=otReqs.filter(r=>r.status==="pending").length;
   const pendLV=lvReqs.filter(r=>r.status==="pending").length;
   const pendTR=transferReqs.filter(r=>r.status==="pending").length;
+  // 従業員自身のシフト確認申請pending件数
+  const myPendSC=cur?(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(cur.id)&&r.status==="pending").length:0;
   // シフトなし打刻件数（当月・先月）
   const offPunchCount=(()=>{
     const td=today();
@@ -5196,6 +5201,7 @@ export default function App(){
           {t}
           {isAdmin&&t==="申請許可"&&pendAll>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{pendAll}</span>}
           {(isAdmin||isLead)&&t==="タイムカード"&&offPunchCount>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#5B21B6",color:"white"}}>{offPunchCount}</span>}
+          {!isAdmin&&!isLead&&t==="申請"&&myPendSC>0&&<span style={{marginLeft:4,padding:"1px 5px",borderRadius:99,fontSize:9,background:"#E24B4A",color:"white"}}>{myPendSC}</span>}
         </button>;
       })}
     </div>
