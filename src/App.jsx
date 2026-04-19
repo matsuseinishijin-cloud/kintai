@@ -1498,7 +1498,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const lvBadge=lvReq?(lvReq.status==="approved"
                       ?{label:"承認済",bg:"#0F6E56",tc:"#fff"}
                       :{label:"申請中",bg:"#854F0B",tc:"#fff"})
-                      :(isAnyLeaveShift(shiftRow?.shiftType)?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
+                      :(isAnyLeaveShift(getShift(emp.id,actualDate))?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
                     const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"全日";
                     const tooltipLines=lvReq?[
                       `📅 ${lvReq.date}`,
