@@ -3953,8 +3953,10 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
               <option value="">選択してください</option>
               {offPunchDates.map(ds=>{
                 const dow=new Date(ds).getDay();
-                const already=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status!=="rejected");
-                return <option key={ds} value={ds} disabled={already}>{ds.slice(5).replace("-","/")}（{DOW_JP[dow]}）{already?" ※申請済":""}</option>;
+                const alreadyApproved=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+                const alreadyPending=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="pending");
+                if(alreadyApproved) return null; // 承認済みは除外
+                return <option key={ds} value={ds} disabled={alreadyPending}>{ds.slice(5).replace("-","/")}（{DOW_JP[dow]}）{alreadyPending?" ※申請済":""}</option>;
               })}
             </select>
           </div>
