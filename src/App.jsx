@@ -3433,11 +3433,14 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
   // シフト確認申請の承認処理
   const decideShiftConfirm=async(id,status,approvedShift)=>{
     const req=(shiftConfirmReqs||[]).find(r=>r.id===id);if(!req)return;
-    if(status==="approved"&&!approvedShift){alert("承認シフトを選択してください");return;}
+    const empObj=emps.find(e=>String(e.id)===String(req.empId));
+    const isOTCase=empObj&&empObj.role!=="理学療法士"&&empObj.type==="正社員";
+    // 理学療法士以外の正社員はシフト選択不要
+    if(status==="approved"&&!isOTCase&&!approvedShift){alert("承認シフトを選択してください");return;}
     try{
       await gasSave("シフト確認申請",convertTo({...req,status,approvedShift:approvedShift||""},SHIFT_CONFIRM_INV));
-      if(status==="approved"){
-        const empObj=emps.find(e=>String(e.id)===String(req.empId));
+      if(status==="approved"&&!isOTCase){
+        // 理学療法士等：シフトを自動セット
         const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
         const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
         const matchKey=Object.keys(empDefs).find(k=>{
@@ -3447,6 +3450,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
         const shiftTypeToSave=matchKey||approvedShift||"off";
         await gasSave("シフト",convertTo({id:shiftRow?.id||newId(),empId:req.empId,date:req.date,shiftType:shiftTypeToSave},SHIFT_INV));
       }
+      // 理学療法士以外の正社員はシフトセット不要（残業計上はshiftConfirmReqsから直接計算）
       await reload();
     }catch(e){alert("更新失敗："+e.message);}
   };
@@ -3591,6 +3595,20 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
                   {isApproved&&r._type==="timetransfer"&&<button onClick={()=>decideTT(r.id,"cancelled")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
                   {isPending&&r._type==="shiftconfirm"&&(()=>{
                     const empObj=emps.find(e=>String(e.id)===String(r.empId));
+                    const isOTCase=empObj&&empObj.role!=="理学療法士"&&empObj.type==="正社員";
+                    if(isOTCase){
+                      // 理学療法士以外の正社員：シフト選択不要、直接承認
+                      return <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+                        <div style={{fontSize:10,color:"#854F0B",padding:"2px 6px",background:"#FFF8E1",borderRadius:4,border:"1px solid #F59E0B"}}>
+                          {r.startTime}〜{r.endTime}{r.breakMin?`（休憩${r.breakMin}分）`:""}
+                        </div>
+                        <button onClick={()=>decideShiftConfirm(r.id,"approved","")}
+                          style={{padding:"3px 10px",borderRadius:6,background:"#EAF3DE",color:"#3B6D11",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>承認</button>
+                        <button onClick={()=>decideShiftConfirm(r.id,"rejected","")}
+                          style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
+                      </div>;
+                    }
+                    // 理学療法士等：シフト選択が必要
                     const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
                     const shiftKeys=Object.keys(empDefs).filter(k=>k!=="off"&&empDefs[k].start);
                     return <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
@@ -3942,6 +3960,7 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
               <option value="">選択してください</option>
               <option value="シフト漏れ">シフト漏れ</option>
               <option value="振替出勤">振替出勤</option>
+              {emp.role!=="理学療法士"&&emp.type==="正社員"&&<option value="残業">残業（休日出勤）</option>}
               <option value="その他">その他</option>
             </select>
           </div>
