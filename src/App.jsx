@@ -2729,6 +2729,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             </tr>;
           }
           // 勤務状況バッジ生成
+          const approvedHolidayWork=(shiftConfirmReqs||[]).find(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved"&&sc.reason==="休日出勤");
           const badges=[];
           if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
@@ -2736,6 +2737,11 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           else if(r.isLeave) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
           else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
+            if(approvedHolidayWork){
+              const bk=approvedHolidayWork.breakMin?Number(approvedHolidayWork.breakMin):0;
+              const otMin=Math.max(0,toMin(approvedHolidayWork.endTime||"00:00")-toMin(approvedHolidayWork.startTime||"00:00")-bk);
+              badges.push(<span key="holiday" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="休日出勤" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otMin)}</span></span>);
+            }
             if(r.otMin>0) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
             if(r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
             if(r.earlyLeave){const elMin=r.punch?.out?toMin(r.def.end)-toMin(r.punch.out):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span></span>);}
@@ -3960,7 +3966,7 @@ function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,
               <option value="">選択してください</option>
               <option value="シフト漏れ">シフト漏れ</option>
               <option value="振替出勤">振替出勤</option>
-              {emp.role!=="理学療法士"&&emp.type==="正社員"&&<option value="残業">残業（休日出勤）</option>}
+              {emp.role!=="理学療法士"&&emp.type==="正社員"&&<option value="休日出勤">休日出勤</option>}
               <option value="その他">その他</option>
             </select>
           </div>
