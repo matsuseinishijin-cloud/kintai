@@ -540,16 +540,18 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
 const Badge=({label,color,bg})=><span style={{display:"inline-block",padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:500,background:bg,color,whiteSpace:"nowrap"}}>{label}</span>;
 const statusBadge=(r,isAdmin=false)=>{
   if(r.absent) return <Badge label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>;
+  if(r.missingOut) return <Badge label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>;
+  if(r.missingIn) return <Badge label="出勤忘れ" bg="#FCEBEB" color="#A32D2D"/>;
   if((r.adjusted||r.earlyAdj)&&isAdmin) return <Badge label="打刻調整" bg="#EEEDFE" color="#3C3489"/>;
   if(r.isLeave&&r.leaveHalf==="am") return <Badge label="有給（午前）" bg="#E1F5EE" color="#0F6E56"/>;
   if(r.isLeave&&r.leaveHalf==="pm") return <Badge label="有給（午後）" bg="#E1F5EE" color="#0F6E56"/>;
   if(r.isLeave) return <Badge label="有給" bg="#E1F5EE" color="#0F6E56"/>;
   if(r.isOffPunch) return <Badge label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>;
   if(r.isOff) return <Badge label="休日" bg="#E6F1FB" color="#185FA5"/>;
-  if(r.late&&r.earlyLeave) return <Badge label="遅刻・早退" bg="#FAEEDA" color="#854F0B"/>;
+  if(r.late&&r.earlyLeave) return <span style={{display:"inline-flex",gap:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{(r.earlyLeaveMin||0)>=60&&<Badge label="要確認" bg="#FCEBEB" color="#A32D2D"/>}<Badge label="早退" bg="#FAEEDA" color="#854F0B"/></span>;
   if(r.late) return <Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>;
-  if(r.earlyLeave) return <Badge label="早退" bg="#FAEEDA" color="#854F0B"/>;
-  if(r.otMin>0) return <Badge label="残業" bg="#FAEEDA" color="#854F0B"/>;
+  if(r.earlyLeave){const elMin=r.earlyLeaveMin||0;return <span style={{display:"inline-flex",gap:4,alignItems:"center"}}>{elMin>=60&&<Badge label="要確認" bg="#FCEBEB" color="#A32D2D"/>}<Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B"}}>-{elMin}分</span></span>;}
+  if(r.otMin>0) return <span style={{display:"inline-flex",gap:3,alignItems:"center"}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>;
   if(r.awMin>0) return <Badge label="正常" bg="#EAF3DE" color="#3B6D11"/>;
   return <Badge label="―" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>;
 };
