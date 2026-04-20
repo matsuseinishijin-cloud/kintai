@@ -62,7 +62,7 @@ const EMP_MAP    = { id:"id", "氏名":"name", "職種":"role", "雇用形態":"
 const SHIFT_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト種別":"shiftType" };
 const PUNCH_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "出勤":"in", "退勤":"out", "休憩":"break", "補正済":"adjusted" };
 const OT_MAP     = { id:"id", "従業員id":"empId", "日付":"date", "シフト終了":"shiftEnd", "申請退勤":"requestedEnd", "理由":"reason", "状態":"status", "種別":"type" };
-const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "状態":"status", "半日":"half" };
+const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "状態":"status", "半日":"half", "出勤時刻":"workIn", "退勤時刻":"workOut" };
 const LEAVE_MAP  = { id:"id", "従業員id":"empId", "付与日数":"granted", "取得日数":"used", "履歴":"records" };
 const PW_MAP     = { id:"id", "従業員id":"empId", "パスワード":"password" };
 const SHIFTDEF_MAP = { id:"id", "部署":"dept", "キー":"key", "名前":"label", "開始":"start", "終了":"end", "色":"color", "文字色":"tc", "順番":"order", "休憩":"breakMin" };
@@ -463,6 +463,10 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const isShiftLeave=isAnyLeaveShift(st);
     const isLeave=!!_lvMatch||isShiftLeave;
     const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+    // シフトなし半日有休で出勤時刻が入力されている場合
+    const halfLeaveWorkIn=_lvMatch?.workIn||"";
+    const halfLeaveWorkOut=_lvMatch?.workOut||"";
+    const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
 
     // 早出申請（全職種共通）：承認済みの早出申請
     const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
@@ -476,8 +480,20 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave; // 退勤のみ・出勤忘れ（異常データ）
 
     if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+    // シフトなし半日有休の場合は入力時刻をシフトとして使用
+    if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
 
-    if(punch&&punch.out&&punch.in){
+    if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+      // シフトなし半日有休：入力時刻を基準に遅刻・早退・残業を計算
+      const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+      const im=toMin(punch.in),om=toMin(punch.out);
+      awMin=Math.max(0,om-im);
+      if(im>shiftStartMin+1) late=true;
+      if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+      const rawOt=Math.max(0,om-shiftEndMin);
+      otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
+      diffMin=om-shiftEndMin;
+    } else if(punch&&punch.out&&punch.in){
       const shiftStartMin=toMin(def.start||"00:00"), shiftEndMin=toMin(def.end||"00:00");
       const im=toMin(punch.in), om=toMin(punch.out);
       let imForWork=im;
@@ -1998,6 +2014,9 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const isShiftLeave=isAnyLeaveShift(st);
       const isLeave=!!_lvMatch||isShiftLeave;
       const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const halfLeaveWorkIn=_lvMatch?.workIn||"";
+      const halfLeaveWorkOut=_lvMatch?.workOut||"";
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false;
@@ -2005,7 +2024,17 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
       const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(punch&&punch.out&&punch.in){
+      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
+      if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+        const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+        const im=toMin(punch.in),om=toMin(punch.out);
+        awMin=Math.max(0,om-im);
+        if(im>shiftStartMin+1) late=true;
+        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+        const rawOt=Math.max(0,om-shiftEndMin);
+        otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
+        diffMin=om-shiftEndMin;
+      } else if(punch&&punch.out&&punch.in){
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00");
         const im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
@@ -2508,12 +2537,25 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const isShiftLeave=isAnyLeaveShift(st),isLeave=!!_lvMatch||isShiftLeave,leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const halfLeaveWorkIn=_lvMatch?.workIn||"";
+      const halfLeaveWorkOut=_lvMatch?.workOut||"";
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(punch&&punch.out&&punch.in){
+      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
+      if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+        const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+        const im=toMin(punch.in),om=toMin(punch.out);
+        awMin=Math.max(0,om-im);
+        if(im>shiftStartMin+1) late=true;
+        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+        const rawOt=Math.max(0,om-shiftEndMin);
+        otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
+        diffMin=om-shiftEndMin;
+      } else if(punch&&punch.out&&punch.in){
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00"),im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
         if(!isOff&&def.start&&im<shiftStartMin){if(approvedEarlyReq){imForWork=im;earlyAdj=false;}else{imForWork=shiftStartMin;earlyAdj=true;}}
@@ -3236,9 +3278,9 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 }
 
 // ── LeaveRequest (Employee) ───────────────────────────────────────────────────
-function LeaveRequest({emp,leaves,lvReqs,reload,initDate=null,onClearInitDate=()=>{}}){
+function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initDate=null,onClearInitDate=()=>{}}){
   const isPartt=emp.type==="パート";
-  const [form,setForm]=useState({date:initDate||"",half:"full",reason:""}),[sub,setSub]=useState(false);
+  const [form,setForm]=useState({date:initDate||"",half:"full",reason:"",workIn:"",workOut:""}),[sub,setSub]=useState(false);
   // initDateが変わったら日付を自動セット
   useEffect(()=>{
     if(initDate){setForm(p=>({...p,date:initDate}));onClearInitDate();}
@@ -3247,14 +3289,21 @@ function LeaveRequest({emp,leaves,lvReqs,reload,initDate=null,onClearInitDate=()
   const rem=calcLeaveRemainingCompat(leave,lvReqs,emp.id);
   const myReqs=lvReqs.filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.date<a.date?-1:1);
   const days=isPartt?1:(form.half==="full"?1:0.5);
-  const canSubmit=!!(form.date&&form.reason&&rem>=days);
+  // 選択日のシフトが休日かどうか
+  const isHalfLeave=!isPartt&&(form.half==="am"||form.half==="pm");
+  const shiftRow=form.date?shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===form.date):null;
+  const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+  const shiftDef=shiftRow?empDefs[shiftRow.shiftType]||empDefs.off||SHIFT_DEFS.off:empDefs.off||SHIFT_DEFS.off;
+  const isOffDay=!shiftDef.start; // シフトなし（休日）
+  const needsTimeInput=isHalfLeave&&isOffDay;
+  const canSubmit=!!(form.date&&form.reason&&rem>=days&&(!needsTimeInput||(form.workIn&&form.workOut)));
   const submit=async()=>{
     if(!canSubmit)return;
     try{
       const half=isPartt?null:(form.half==="full"?null:form.half);
-      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half},LV_REQ_INV);
+      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half,workIn:needsTimeInput?form.workIn:"",workOut:needsTimeInput?form.workOut:""},LV_REQ_INV);
       await gasSave("有給申請",data);
-      setForm({date:"",half:"full",reason:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      setForm({date:"",half:"full",reason:"",workIn:"",workOut:""});setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
     }catch(e){alert("申請失敗："+e.message);}
   };
@@ -3275,7 +3324,20 @@ function LeaveRequest({emp,leaves,lvReqs,reload,initDate=null,onClearInitDate=()
           </div>
         </div>}
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
-          <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iS}/></div>
+          <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value,workIn:"",workOut:""}))} style={iS}/></div>
+        {needsTimeInput&&<div style={{marginBottom:8,padding:"8px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #F59E0B"}}>
+          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>この日はシフトがないため出勤時刻を入力してください</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前出勤時刻":"午後出勤時刻"}</div>
+              <input type="time" value={form.workIn} onChange={e=>setForm(p=>({...p,workIn:e.target.value}))} style={iS}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前退勤時刻":"午後退勤時刻"}</div>
+              <input type="time" value={form.workOut} onChange={e=>setForm(p=>({...p,workOut:e.target.value}))} style={iS}/>
+            </div>
+          </div>
+        </div>}
         <div style={{marginBottom:"1rem"}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
           <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={2} placeholder="例：私用のため" style={{...iS,resize:"vertical"}}/></div>
         <button onClick={submit} disabled={!canSubmit} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:canSubmit?1:0.4}}>申請する</button>
@@ -4218,7 +4280,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {sections.length>1&&<div style={{display:"flex",gap:0,marginBottom:"1rem",borderBottom:"2px solid var(--color-border-tertiary)",flexWrap:"wrap"}}>
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
-    {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
+    {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
