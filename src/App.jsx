@@ -469,7 +469,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     // 残業申請（理学療法士パート）または時間外申請（理学療法士正社員）
     const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
 
-    let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false;
+    let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false;
     let adj=punch?.adjusted||false,earlyAdj=false;
     // 打刻忘れ判定
     const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;  // 出勤のみ・退勤忘れ
@@ -1993,7 +1993,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
-      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false;
+      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false;
       let adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
       const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
