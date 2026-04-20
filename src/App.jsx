@@ -530,7 +530,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
     } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
 
-    const isOffPunch=isOff&&!!(punch?.in||punch?.out);
+    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
     const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
     return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
   });
@@ -2054,7 +2054,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           diffMin=om-shiftEndMin;
         } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
-      const isOffPunch=isOff&&!!(punch?.in||punch?.out);
+      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
       return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
@@ -2568,7 +2568,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}diffMin=om-shiftEndMin;}
         else{otMin=0;awMin=0;} // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
-      const isOffPunch=isOff&&!!(punch?.in||punch?.out);
+      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
       return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
@@ -4489,7 +4489,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
     const def=empDefs[shiftRow?.shiftType||"off"]||empDefs["off"]||{label:"休日",start:null,end:null,color:"var(--color-background-secondary)",tc:"var(--color-text-tertiary)",breakMin:0};
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const isOff=!def.start;
-    const isOffPunch=isOff&&!!(punch?.in||punch?.out);
+    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
     const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
     const isLeave=!!_lv;
     const adj=(!isOff&&punch)?calcPTAdj({empId:emp.id,ds,punch,def,otReqs}):{outT:"",workMin:0,lateMin:0,lateDeduct:0,otMin:0,isLate:false,isEarly:false,isOT:false,adjOutRaw:null};
