@@ -4384,6 +4384,8 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const _lvPending=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="pending");
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
+      const halfWorkIn=_lvMatch?.workIn||"";
+      const halfWorkOut=_lvMatch?.workOut||"";
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const _myDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
       // 半日有休の場合はleave_am/leave_pmのシフト定義から出勤時間を取得
@@ -4407,7 +4409,11 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
           <div>
             {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:isOff?"#aaa":"#333",fontWeight:600}}>{def.label}</div>}
-            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{leaveHalf==="pm"?`出勤 ${def.start}〜`:leaveHalf==="am"?`出勤 〜${def.end}`:""}</div>}
+            {isLeave&&leaveHalf&&(halfWorkIn||def.start)&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>
+              {halfWorkIn&&halfWorkOut
+                ?`出勤 ${halfWorkIn}〜${halfWorkOut}`
+                :leaveHalf==="pm"?`出勤 ${def.start}〜`:leaveHalf==="am"?`出勤 〜${def.end}`:""}
+            </div>}
             {!isLeave&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
           </div>
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
