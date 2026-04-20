@@ -466,7 +466,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     // シフトなし半日有休で出勤時刻が入力されている場合
     const halfLeaveWorkIn=_lvMatch?.workIn||"";
     const halfLeaveWorkOut=_lvMatch?.workOut||"";
-    const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
+    const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
 
     // 早出申請（全職種共通）：承認済みの早出申請
     const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
@@ -530,7 +530,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
     } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
 
-    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
+    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime&&!isLeave;
     const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
     return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
   });
@@ -2016,7 +2016,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
       const halfLeaveWorkIn=_lvMatch?.workIn||"";
       const halfLeaveWorkOut=_lvMatch?.workOut||"";
-      const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false;
@@ -2054,7 +2054,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           diffMin=om-shiftEndMin;
         } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
-      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
+      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime&&!isLeave;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
       return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
@@ -2539,7 +2539,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const isShiftLeave=isAnyLeaveShift(st),isLeave=!!_lvMatch||isShiftLeave,leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
       const halfLeaveWorkIn=_lvMatch?.workIn||"";
       const halfLeaveWorkOut=_lvMatch?.workOut||"";
-      const isHalfLeaveWithTime=isLeave&&leaveHalf&&isOff&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
@@ -2568,7 +2568,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}diffMin=om-shiftEndMin;}
         else{otMin=0;awMin=0;} // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
-      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
+      const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime&&!isLeave;
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
       return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
@@ -3295,7 +3295,7 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
   const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
   const shiftDef=shiftRow?empDefs[shiftRow.shiftType]||empDefs.off||SHIFT_DEFS.off:empDefs.off||SHIFT_DEFS.off;
   const isOffDay=!shiftDef.start; // シフトなし（休日）
-  const needsTimeInput=isHalfLeave&&isOffDay;
+  const needsTimeInput=isHalfLeave; // 半日有休は常に時刻入力必須
   const canSubmit=!!(form.date&&form.reason&&rem>=days&&(!needsTimeInput||(form.workIn&&form.workOut)));
   const submit=async()=>{
     if(!canSubmit)return;
@@ -3326,7 +3326,7 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
           <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value,workIn:"",workOut:""}))} style={iS}/></div>
         {needsTimeInput&&<div style={{marginBottom:8,padding:"8px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #F59E0B"}}>
-          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>この日はシフトがないため出勤時刻を入力してください</div>
+          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"この日はシフトがないため出勤時刻を入力してください":"出勤する時間帯の時刻を入力してください"}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div>
               <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前出勤時刻":"午後出勤時刻"}</div>
@@ -4489,7 +4489,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
     const def=empDefs[shiftRow?.shiftType||"off"]||empDefs["off"]||{label:"休日",start:null,end:null,color:"var(--color-background-secondary)",tc:"var(--color-text-tertiary)",breakMin:0};
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const isOff=!def.start;
-    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime;
+    const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime&&!isLeave;
     const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
     const isLeave=!!_lv;
     const adj=(!isOff&&punch)?calcPTAdj({empId:emp.id,ds,punch,def,otReqs}):{outT:"",workMin:0,lateMin:0,lateDeduct:0,otMin:0,isLate:false,isEarly:false,isOT:false,adjOutRaw:null};
