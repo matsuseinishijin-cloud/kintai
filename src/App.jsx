@@ -1436,7 +1436,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
             return <div key={k} onClick={()=>setSelectedShift(k)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,background:v.color,border:isSelected?"2.5px solid #1251a3":"2.5px solid transparent",cursor:"pointer",transition:"border-color 0.1s"}}>
               <span style={{fontSize:14,fontWeight:700,color:v.tc}}>{v.label}</span>
               {hasTime&&<span style={{fontSize:12,color:v.tc,opacity:0.85}}>{v.start}〜{v.end}</span>}
-              {hasTime&&<span style={{fontSize:12,fontWeight:600,color:v.tc}}>{wH+(wM>0?"."+wM*10/6|0:"")}h</span>}
+              {hasTime&&<span style={{fontSize:12,fontWeight:600,color:v.tc}}>{wH>0?wH+"h":""}{wM>0?wM+"m":""}{wH===0&&wM===0?"0h":""}</span>}
               {isSelected&&<span style={{fontSize:10,fontWeight:700,color:"#1251a3",background:"rgba(255,255,255,0.8)",borderRadius:4,padding:"1px 4px"}}>✓</span>}
             </div>;
           })
