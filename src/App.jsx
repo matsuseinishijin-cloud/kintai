@@ -2714,9 +2714,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       </div>
       {(()=>{
         const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
-        const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
-        // 打刻がある日はすべて勤務日数にカウント（有休・半休含む）＋休日出勤承認済み日
-        const attendDays=rows.filter(r=>r.punch?.in&&r.punch?.out&&!r.absent).length+holidayWorkDays;
+        // 打刻がある日はすべて勤務日数にカウント（有休・半休・休日出勤含む）
+        const attendDays=rows.filter(r=>r.punch?.in&&r.punch?.out&&!r.absent).length;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
         // 医療事務・その他roundタイプ：上段3・下段4の2段構成
         if(rule.type==="round"||rule.type==="none"){
