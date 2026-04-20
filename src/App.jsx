@@ -1488,7 +1488,14 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const actualMonth=d<0?prevMonth:month;
                     const ds=`${actualYear}-${pad(actualMonth)}-${pad(actualDate)}`;
                     const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
-                    const def=empShiftDefs[st]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off;
+                    // leave_pm/leave_amの場合はleave_pm/leave_am定義を使う（なければoff）
+                    const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
+                    const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
+                    const def=isLeavePmShift(st)
+                      ?(empShiftDefs["leave_pm"]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off)
+                      :isLeaveAmShift(st)
+                        ?(empShiftDefs["leave_am"]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off)
+                        :(empShiftDefs[st]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off);
                     const isPrev=d<0;
                     const clickable=!!roleFilter&&!isPrev;
                     const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
@@ -1509,7 +1516,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const isHol=!isPrev&&!!getHolidayName(ds);
                     return <td key={d} style={{padding:"2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",cursor:isLocked?"not-allowed":clickable?"pointer":"default",userSelect:"none",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isLocked?"#F0FAF5":isPrev?"#f5f5f5":isHol?"#FFF0F0":"inherit"}} onClick={()=>clickable&&setCell(emp.id,d)}>
                       <div style={{position:"relative",display:"inline-block",width:"100%"}}>
-                        <div style={{background:def.color,color:def.tc,borderRadius:4,padding:"3px 4px",fontSize:isPrev?11:15,minWidth:isPrev?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isPrev?0.5:1}}>{def.label}</div>
+                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"3px 4px",fontSize:isPrev?11:15,minWidth:isPrev?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isPrev?0.5:1}}>{isHalfLeave?halfLeaveLabel:def.label}</div>
                         {lvBadge&&<div
                           style={{position:"absolute",top:-4,right:-2,background:lvBadge.bg,color:lvBadge.tc,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:99,whiteSpace:"nowrap",lineHeight:1.4,boxShadow:"0 1px 3px rgba(0,0,0,0.25)",cursor:"default",zIndex:1}}
                           onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();setTooltip({x:r.left,y:r.bottom+6,lines:tooltipLines});}}
@@ -4296,7 +4303,12 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const _myDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
-      const def=_myDefs[(isLeave&&!leaveHalf)?"off":shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off;
+      // 半日有休の場合はleave_am/leave_pmのシフト定義から出勤時間を取得
+      const def=(isLeave&&!leaveHalf)
+        ?(_myDefs.off||SHIFT_DEFS.off)
+        :(isLeave&&leaveHalf)
+          ?(_myDefs[leaveHalf==="pm"?"leave_pm":"leave_am"]||_myDefs[shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off)
+          :(_myDefs[shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off);
       const isLeaveShiftDay=isAnyLeaveShift(shiftRow?.shiftType);
       // 有休バッジ：承認済→表示なし（緑背景で識別）、申請中→「申請中」、未申請→「未申請」
       const lvStatusBadge=isLeave?null:_lvPending?{label:"申請中",bg:"#854F0B",tc:"#fff"}:isLeaveShiftDay&&ds<=td?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null;
@@ -4312,8 +4324,8 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
           <div>
             {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:isOff?"#aaa":"#333",fontWeight:600}}>{def.label}</div>}
+            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{leaveHalf==="pm"?`出勤 ${def.start}〜`:leaveHalf==="am"?`出勤 〜${def.end}`:""}</div>}
             {!isLeave&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
-            {isLeave&&leaveHalf&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
           </div>
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
             {statusBadges.map((b,bi)=><span key={bi} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:b.bg,color:b.color,whiteSpace:"nowrap"}}>{b.label}</span>)}
