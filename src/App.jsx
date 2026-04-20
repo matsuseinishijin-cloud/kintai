@@ -509,14 +509,14 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
       if(!isOff&&def.start){
         if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1) earlyLeave=true;
+        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
         diffMin=om-shiftEndMin;
       } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
     } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
 
     const isOffPunch=isOff&&!!(punch?.in||punch?.out);
     const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
   });
 }
 
@@ -1956,6 +1956,11 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           if(!isOff&&punch?.in&&!punch?.out){items.push({emp:e,ds,punch,kind:"退勤忘れ"});continue;}
           // 出勤忘れ
           if(!isOff&&!punch?.in&&punch?.out){items.push({emp:e,ds,punch,kind:"出勤忘れ"});continue;}
+          // 30分以上早退
+          if(!isOff&&punch?.out&&def.end){
+            const elMin=toMin(def.end)-toMin(punch.out);
+            if(elMin>=30){items.push({emp:e,ds,punch,kind:"早退",elMin});continue;}
+          }
         }
       }
     }
@@ -2009,13 +2014,13 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
         if(!isOff&&def.start){
           if(im>shiftStartMin+1) late=true;
-          if(om<shiftEndMin-1) earlyLeave=true;
+          if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
           diffMin=om-shiftEndMin;
         } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!(punch?.in||punch?.out);
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
   })();
 
@@ -2452,7 +2457,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 </div></td>
                 <td style={{...tdS,color:"var(--color-text-secondary)"}}>{item.ds.slice(5).replace("-","/")} {isHoliday(item.ds)&&<span style={{fontSize:9,color:"#A32D2D"}}>祝</span>}</td>
                 <td style={{...tdS,color:dc}}>{DOW_JP[dow]}</td>
-                <td style={tdS}><Badge label={item.kind} bg="#FCEBEB" color="#A32D2D"/></td>
+                <td style={tdS}><Badge label={item.kind==="早退"?`早退 -${item.elMin}分`:item.kind} bg={item.kind==="早退"?"#FAEEDA":"#FCEBEB"} color={item.kind==="早退"?"#854F0B":"#A32D2D"}/></td>
                 <td style={tdS}>{item.punch?.in||"―"}</td>
                 <td style={tdS}>{item.punch?.out||"―"}</td>
                 <td style={tdS}>
@@ -2498,7 +2503,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const isShiftLeave=isAnyLeaveShift(st),isLeave=!!_lvMatch||isShiftLeave,leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
-      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
+      let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
       if(punch&&punch.out&&punch.in){
@@ -2511,12 +2516,12 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
         else otMin=rawOtMin;
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
-        if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1) earlyLeave=true;diffMin=om-shiftEndMin;}
+        if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}diffMin=om-shiftEndMin;}
         else{otMin=0;awMin=0;} // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!(punch?.in||punch?.out);
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
   })();
   const saveEdit=async(r)=>{
@@ -2656,7 +2661,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
       {(()=>{
-        const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
+        const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=30))&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
         const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
         const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+holidayWorkDays;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
@@ -2762,8 +2767,12 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               const overM=overDs?overDs.slice(5).replace("-","/"):"";
               badges.push(<Badge key="ttbs" label={`勤怠調整（${overM}に振替${toHStr(Number(ttBShort.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
             } else if(r.earlyLeave&&!ttBShort){
-              const elMin=r.punch?.out?toMin(r.def.end)-toMin(r.punch.out):0;
-              badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span></span>);
+              const elMin=r.earlyLeaveMin||0;
+              badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}>
+                {elMin>=30&&<Badge label="要確認" bg="#FCEBEB" color="#A32D2D"/>}
+                <Badge label="早退" bg="#FAEEDA" color="#854F0B"/>
+                <span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span>
+              </span>);
             }
             // タイプB：超過日（残業の代わりに勤怠調整バッジ）
             if(ttBOver){
