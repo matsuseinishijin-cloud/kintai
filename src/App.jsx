@@ -70,7 +70,7 @@ const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", "申請
 const TRANSFER_MAP  = { id:"id", "従業員id":"empId", "振替出勤日":"workDate", "振替出勤シフト":"workShift", "振替休日":"offDate", "理由":"reason", "状態":"status" };
 const WEEK_PAT_MAP  = { id:"id", "職種":"role", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
 const SHIFT_CONFIRM_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "理由詳細":"reasonDetail", "開始時刻":"startTime", "終了時刻":"endTime", "休憩時間":"breakMin", "承認シフト":"approvedShift", "状態":"status" };
-const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "不足週開始日":"shortWeekStart", "超過週開始日":"overWeekStart", "相殺時間":"offsetMin", "理由":"reason", "状態":"status" };
+const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "タイプ":"transferType", "不足週開始日":"shortWeekStart", "超過週開始日":"overWeekStart", "不足日":"shortDate", "超過日":"overDate", "相殺時間":"offsetMin", "理由":"reason", "状態":"status" };
 
 // アプリ内キー → 日本語列名
 function invertMap(m){ const r={}; Object.entries(m).forEach(([k,v])=>r[v]=k); return r; }
@@ -2564,7 +2564,12 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     }
     return s+Math.max(0,adjOut-adjIn-breakMin);
   },0);
-  const lC=rows.filter(r=>r.late).length,eC=rows.filter(r=>r.earlyLeave).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
+  // タイプB承認済み：不足日・超過日のds一覧
+  const ttBShortDays=new Set((timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="B"&&r.status==="approved").map(r=>r.shortDate));
+  const ttBOverDays=new Set((timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="B"&&r.status==="approved").map(r=>r.overDate));
+  const lC=rows.filter(r=>r.late&&!ttBShortDays.has(r.ds)).length,eC=rows.filter(r=>r.earlyLeave&&!ttBShortDays.has(r.ds)).length,abC=rows.filter(r=>r.absent).length,adjC=rows.filter(r=>r.adjusted||r.earlyAdj).length,lvC=rows.filter(r=>r.isLeave).reduce((s,r)=>s+(r.leaveHalf?0.5:1),0);
+  // タイプB超過日の残業を差し引き
+  const ttBOTAdjMin=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="B"&&r.status==="approved"&&periodDays.includes(r.overDate)).reduce((s,r)=>s+Number(r.offsetMin||0),0);
 
   // 時間外計算（理学療法士正社員・weeklyLimit<40のみ）
   const showOvertimeCell=emp?.role==="理学療法士"&&emp?.type==="正社員"&&emp?.weeklyLimit&&Number(emp.weeklyLimit)<40;
@@ -2666,7 +2671,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               </div>
               <div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
-                <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin)>0?toHStr(tO+scOTMin):"―"}</div>
+                <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin-ttBOTAdjMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin-ttBOTAdjMin)>0?toHStr(tO+scOTMin-ttBOTAdjMin):"―"}</div>
                 {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
               </div>
               <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
@@ -2734,6 +2739,9 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           }
           // 勤務状況バッジ生成
           const approvedHolidayWork=(shiftConfirmReqs||[]).find(sc=>String(sc.empId)===String(emp?.id)&&String(sc.date)===String(r.ds)&&sc.status==="approved"&&String(sc.reason||"").trim()==="休日出勤");
+          // タイプB：この日が不足日（早退）または超過日（残業）として承認済みかチェック
+          const ttBShort=(timeTransferReqs||[]).find(tt=>String(tt.empId)===String(emp?.id)&&tt.transferType==="B"&&tt.shortDate===r.ds&&tt.status==="approved");
+          const ttBOver=(timeTransferReqs||[]).find(tt=>String(tt.empId)===String(emp?.id)&&tt.transferType==="B"&&tt.overDate===r.ds&&tt.status==="approved");
           const badges=[];
           if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
@@ -2748,9 +2756,24 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             } else if(r.isOff&&r.punch){
               badges.push(<Badge key="offpunch" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
             }
-            if(r.otMin>0) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
-            if(r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
-            if(r.earlyLeave){const elMin=r.punch?.out?toMin(r.def.end)-toMin(r.punch.out):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span></span>);}
+            // タイプB：不足日（早退の代わりに勤怠調整バッジ）
+            if(ttBShort){
+              const overDs=ttBShort.overDate;
+              const overM=overDs?overDs.slice(5).replace("-","/"):"";
+              badges.push(<Badge key="ttbs" label={`勤怠調整（${overM}に振替${toHStr(Number(ttBShort.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
+            } else if(r.earlyLeave&&!ttBShort){
+              const elMin=r.punch?.out?toMin(r.def.end)-toMin(r.punch.out):0;
+              badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span></span>);
+            }
+            // タイプB：超過日（残業の代わりに勤怠調整バッジ）
+            if(ttBOver){
+              const shortDs=ttBOver.shortDate;
+              const shortM=shortDs?shortDs.slice(5).replace("-","/"):"";
+              badges.push(<Badge key="ttbo" label={`勤怠調整（${shortM}から振替${toHStr(Number(ttBOver.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
+            } else if(r.otMin>0&&!ttBOver){
+              badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+            }
+            if(!ttBShort&&r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
             if(r.approvedEarlyReq){const earlyMin=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(earlyMin>0) badges.push(<span key="early" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{earlyMin}分</span></span>);}
             if(badges.length===0&&r.awMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
           }
@@ -3732,8 +3755,10 @@ function OvertimeRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 }
 
 // ── TimeTransferRequest (従業員：時間振替申請) ───────────────────────────────
-function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload}){
+function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferReqs,reload}){
+  const [transferType,setTransferType]=useState("A"); // A:週単位 B:日単位
   const [form,setForm]=useState({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
+  const [formB,setFormB]=useState({shortDate:"",overDate:"",offsetMin:"",reason:""});
   const [sub,setSub]=useState(false),[err,setErr]=useState("");
 
   // 週の月曜日を返す
@@ -3764,6 +3789,22 @@ function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload})
     return total;
   };
 
+  // 日単位：1日の打刻 vs シフトの差分計算
+  const getDayDiff=(ds)=>{
+    if(!ds) return {deficit:0,excess:0};
+    const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
+    const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
+    const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+    if(!def.start||!def.end) return {deficit:0,excess:0};
+    const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+    if(!punch?.in||!punch?.out) return {deficit:0,excess:0};
+    const bk=def.breakMin!=null?Number(def.breakMin):0;
+    const shiftMin=toMin(def.end)-toMin(def.start)-bk;
+    const actualMin=toMin(punch.out)-toMin(punch.in)-bk;
+    const diff=actualMin-shiftMin;
+    return {deficit:diff<0?Math.abs(diff):0, excess:diff>0?diff:0};
+  };
+
   const weeklyLimit=emp.weeklyLimit?Number(emp.weeklyLimit)*60:null;
 
   // 対象週の選択肢（当月・翌月）
@@ -3784,90 +3825,167 @@ function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload})
     return [...new Set(opts)].sort();
   })();
 
+  // 日単位：対象日の選択肢（当月・翌月で打刻がある日）
+  const dayOptions=(()=>{
+    const opts=[];
+    const now=new Date();
+    const td=today();
+    for(let mo=0;mo<=1;mo++){
+      const y=now.getMonth()+1+mo>12?now.getFullYear()+1:now.getFullYear();
+      const m=((now.getMonth()+mo)%12)+1;
+      const last=daysInMonth(y,m);
+      for(let d=1;d<=last;d++){
+        const ds=`${y}-${pad(m)}-${pad(d)}`;
+        if(ds>td) continue;
+        const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
+        if(!punch?.in||!punch?.out) continue;
+        const {deficit,excess}=getDayDiff(ds);
+        if(deficit>0||excess>0) opts.push({ds,deficit,excess});
+      }
+    }
+    return opts;
+  })();
+
+  // タイプA
   const shortWeekMin=form.shortWeekStart?getWeekShiftMin(form.shortWeekStart):0;
   const overWeekMin=form.overWeekStart?getWeekShiftMin(form.overWeekStart):0;
-  const shortDiff=weeklyLimit?Math.max(0,weeklyLimit-shortWeekMin):0; // 不足分
-  const overDiff=weeklyLimit?Math.max(0,overWeekMin-weeklyLimit):0;   // 超過分
-
-  // 既存の承認済み申請での相殺済み時間を考慮
-  const alreadyOffsetShort=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===form.shortWeekStart&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
-  const alreadyOffsetOver=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===form.overWeekStart&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const shortDiff=weeklyLimit?Math.max(0,weeklyLimit-shortWeekMin):0;
+  const overDiff=weeklyLimit?Math.max(0,overWeekMin-weeklyLimit):0;
+  const alreadyOffsetShort=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===form.shortWeekStart&&r.status==="approved"&&(r.transferType||"A")==="A").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const alreadyOffsetOver=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===form.overWeekStart&&r.status==="approved"&&(r.transferType||"A")==="A").reduce((s,r)=>s+Number(r.offsetMin||0),0);
   const maxOffset=Math.min(shortDiff-alreadyOffsetShort, overDiff-alreadyOffsetOver);
-
-  const canSubmit=form.shortWeekStart&&form.overWeekStart&&form.offsetMin&&form.reason&&
+  const canSubmitA=form.shortWeekStart&&form.overWeekStart&&form.offsetMin&&form.reason&&
     Number(form.offsetMin)>0&&Number(form.offsetMin)<=maxOffset&&form.shortWeekStart!==form.overWeekStart;
+
+  // タイプB
+  const shortDayDiff=getDayDiff(formB.shortDate);
+  const overDayDiff=getDayDiff(formB.overDate);
+  const alreadyOffsetShortB=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortDate===formB.shortDate&&r.status==="approved"&&r.transferType==="B").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const alreadyOffsetOverB=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overDate===formB.overDate&&r.status==="approved"&&r.transferType==="B").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const maxOffsetB=Math.min(shortDayDiff.deficit-alreadyOffsetShortB, overDayDiff.excess-alreadyOffsetOverB);
+  const canSubmitB=formB.shortDate&&formB.overDate&&formB.offsetMin&&formB.reason&&
+    Number(formB.offsetMin)>0&&Number(formB.offsetMin)<=maxOffsetB&&formB.shortDate!==formB.overDate;
 
   const submit=async()=>{
     setErr("");
-    if(!canSubmit){setErr("入力内容を確認してください");return;}
-    try{
-      const data=convertTo({id:newId(),empId:emp.id,shortWeekStart:form.shortWeekStart,overWeekStart:form.overWeekStart,offsetMin:Number(form.offsetMin),reason:form.reason,status:"pending"},TIME_TRANSFER_INV);
-      await gasSave("時間振替申請",data);
-      setForm({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
-      setSub(true);setTimeout(()=>setSub(false),3000);
-      await reload();
-    }catch(e){setErr("申請失敗："+e.message);}
+    if(transferType==="A"){
+      if(!canSubmitA){setErr("入力内容を確認してください");return;}
+      try{
+        const data=convertTo({id:newId(),empId:emp.id,transferType:"A",shortWeekStart:form.shortWeekStart,overWeekStart:form.overWeekStart,shortDate:"",overDate:"",offsetMin:Number(form.offsetMin),reason:form.reason,status:"pending"},TIME_TRANSFER_INV);
+        await gasSave("時間振替申請",data);
+        setForm({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
+        setSub(true);setTimeout(()=>setSub(false),3000);
+        await reload();
+      }catch(e){setErr("申請失敗："+e.message);}
+    } else {
+      if(!canSubmitB){setErr("入力内容を確認してください");return;}
+      try{
+        const data=convertTo({id:newId(),empId:emp.id,transferType:"B",shortWeekStart:"",overWeekStart:"",shortDate:formB.shortDate,overDate:formB.overDate,offsetMin:Number(formB.offsetMin),reason:formB.reason,status:"pending"},TIME_TRANSFER_INV);
+        await gasSave("時間振替申請",data);
+        setFormB({shortDate:"",overDate:"",offsetMin:"",reason:""});
+        setSub(true);setTimeout(()=>setSub(false),3000);
+        await reload();
+      }catch(e){setErr("申請失敗："+e.message);}
+    }
   };
 
-  const myReqs=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.overWeekStart<a.overWeekStart?-1:1);
+  const myReqs=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)).sort((a,b)=>b.status<a.status?-1:1);
 
   return <div>
-    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:480}}>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:500}}>
       <div style={{fontSize:14,fontWeight:700,marginBottom:"1rem"}}>時間振替申請</div>
-      <div style={{marginBottom:10,padding:"8px 12px",background:"#F5F9FE",borderRadius:8,fontSize:12,color:"#1251a3"}}>
-        週所定労働時間：<strong>{emp.weeklyLimit?emp.weeklyLimit+"時間":"未設定"}</strong>
+
+      {/* タイプ選択 */}
+      <div style={{display:"flex",gap:8,marginBottom:"1rem"}}>
+        {[["A","週単位（シフト超過・不足）"],["B","日単位（打刻超過・不足）"]].map(([t,l])=>(
+          <button key={t} onClick={()=>setTransferType(t)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:transferType===t?"2px solid #1251a3":"1px solid var(--color-border-secondary)",background:transferType===t?"#E6F1FB":"var(--color-background-primary)",color:transferType===t?"#1251a3":"var(--color-text-secondary)",fontSize:12,fontWeight:transferType===t?600:400,cursor:"pointer"}}>{l}</button>
+        ))}
       </div>
 
-      {/* 不足週 */}
-      <div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>不足週（相殺元）</div>
-        <select value={form.shortWeekStart} onChange={e=>setForm(p=>({...p,shortWeekStart:e.target.value,offsetMin:""}))} style={iS}>
-          <option value="">週を選択</option>
-          {weekOptions.map(w=>{
-            const wMin=getWeekShiftMin(w);
-            const deficit=weeklyLimit?Math.max(0,weeklyLimit-wMin):0;
-            const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===w&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
-            const remaining=deficit-alreadyUsed;
-            return <option key={w} value={w} disabled={remaining<=0}>
-              {w}週（シフト{toHStr(wMin)}{deficit>0?`・不足${toHStr(remaining)}`:``}）
-            </option>;
-          })}
-        </select>
-        {form.shortWeekStart&&<div style={{fontSize:11,color:"#854F0B",marginTop:3}}>不足時間：{toHStr(Math.max(0,shortDiff-alreadyOffsetShort))}</div>}
-      </div>
+      {/* タイプA：週単位 */}
+      {transferType==="A"&&<>
+        <div style={{marginBottom:10,padding:"8px 12px",background:"#F5F9FE",borderRadius:8,fontSize:12,color:"#1251a3"}}>
+          週所定労働時間：<strong>{emp.weeklyLimit?emp.weeklyLimit+"時間":"未設定"}</strong>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>不足週（相殺元）</div>
+          <select value={form.shortWeekStart} onChange={e=>setForm(p=>({...p,shortWeekStart:e.target.value,offsetMin:""}))} style={iS}>
+            <option value="">週を選択</option>
+            {weekOptions.map(w=>{
+              const wMin=getWeekShiftMin(w);
+              const deficit=weeklyLimit?Math.max(0,weeklyLimit-wMin):0;
+              const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortWeekStart===w&&r.status==="approved"&&(r.transferType||"A")==="A").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+              const remaining=deficit-alreadyUsed;
+              return <option key={w} value={w} disabled={remaining<=0}>{w}週（シフト{toHStr(wMin)}{deficit>0?`・不足${toHStr(remaining)}`:``}）</option>;
+            })}
+          </select>
+          {form.shortWeekStart&&<div style={{fontSize:11,color:"#854F0B",marginTop:3}}>不足時間：{toHStr(Math.max(0,shortDiff-alreadyOffsetShort))}</div>}
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過週（相殺先）</div>
+          <select value={form.overWeekStart} onChange={e=>setForm(p=>({...p,overWeekStart:e.target.value,offsetMin:""}))} style={iS}>
+            <option value="">週を選択</option>
+            {weekOptions.map(w=>{
+              const wMin=getWeekShiftMin(w);
+              const excess=weeklyLimit?Math.max(0,wMin-weeklyLimit):0;
+              const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===w&&r.status==="approved"&&(r.transferType||"A")==="A").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+              const remaining=excess-alreadyUsed;
+              return <option key={w} value={w} disabled={remaining<=0||w===form.shortWeekStart}>{w}週（シフト{toHStr(wMin)}{excess>0?`・超過${toHStr(remaining)}`:``}）</option>;
+            })}
+          </select>
+          {form.overWeekStart&&<div style={{fontSize:11,color:"#3B6D11",marginTop:3}}>超過時間：{toHStr(Math.max(0,overDiff-alreadyOffsetOver))}</div>}
+        </div>
+        {form.shortWeekStart&&form.overWeekStart&&maxOffset>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>相殺時間（分）　上限：{toHStr(maxOffset)}</div>
+          <input type="number" min={1} max={maxOffset} value={form.offsetMin} onChange={e=>setForm(p=>({...p,offsetMin:e.target.value}))} placeholder={`最大${maxOffset}分`} style={iS}/>
+        </div>}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
+          <input type="text" value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} placeholder="理由を入力" style={iS}/>
+        </div>
+      </>}
 
-      {/* 超過週 */}
-      <div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過週（相殺先）</div>
-        <select value={form.overWeekStart} onChange={e=>setForm(p=>({...p,overWeekStart:e.target.value,offsetMin:""}))} style={iS}>
-          <option value="">週を選択</option>
-          {weekOptions.map(w=>{
-            const wMin=getWeekShiftMin(w);
-            const excess=weeklyLimit?Math.max(0,wMin-weeklyLimit):0;
-            const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overWeekStart===w&&r.status==="approved").reduce((s,r)=>s+Number(r.offsetMin||0),0);
-            const remaining=excess-alreadyUsed;
-            return <option key={w} value={w} disabled={remaining<=0||w===form.shortWeekStart}>
-              {w}週（シフト{toHStr(wMin)}{excess>0?`・超過${toHStr(remaining)}`:``}）
-            </option>;
-          })}
-        </select>
-        {form.overWeekStart&&<div style={{fontSize:11,color:"#3B6D11",marginTop:3}}>超過時間：{toHStr(Math.max(0,overDiff-alreadyOffsetOver))}</div>}
-      </div>
-
-      {/* 相殺時間（分入力） */}
-      {form.shortWeekStart&&form.overWeekStart&&maxOffset>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>相殺時間（分）　上限：{toHStr(maxOffset)}</div>
-        <input type="number" min={1} max={maxOffset} value={form.offsetMin} onChange={e=>setForm(p=>({...p,offsetMin:e.target.value}))} placeholder={`最大${maxOffset}分`} style={iS}/>
-      </div>}
-
-      {/* 理由 */}
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
-        <input type="text" value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} placeholder="理由を入力" style={iS}/>
-      </div>
+      {/* タイプB：日単位 */}
+      {transferType==="B"&&<>
+        <div style={{marginBottom:10,padding:"8px 12px",background:"#F5F9FE",borderRadius:8,fontSize:12,color:"#1251a3"}}>
+          打刻とシフトの差分（不足日・超過日）を相殺します
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>不足日（早退した日）</div>
+          <select value={formB.shortDate} onChange={e=>setFormB(p=>({...p,shortDate:e.target.value,offsetMin:""}))} style={iS}>
+            <option value="">日付を選択</option>
+            {dayOptions.filter(o=>o.deficit>0).map(o=>{
+              const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.shortDate===o.ds&&r.status==="approved"&&r.transferType==="B").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+              const remaining=o.deficit-alreadyUsed;
+              return <option key={o.ds} value={o.ds} disabled={remaining<=0}>{o.ds.slice(5).replace("-","/")}（不足{toHStr(remaining)}）</option>;
+            })}
+          </select>
+          {formB.shortDate&&<div style={{fontSize:11,color:"#854F0B",marginTop:3}}>不足時間：{toHStr(Math.max(0,shortDayDiff.deficit-alreadyOffsetShortB))}</div>}
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過日（残業した日）</div>
+          <select value={formB.overDate} onChange={e=>setFormB(p=>({...p,overDate:e.target.value,offsetMin:""}))} style={iS}>
+            <option value="">日付を選択</option>
+            {dayOptions.filter(o=>o.excess>0).map(o=>{
+              const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overDate===o.ds&&r.status==="approved"&&r.transferType==="B").reduce((s,r)=>s+Number(r.offsetMin||0),0);
+              const remaining=o.excess-alreadyUsed;
+              return <option key={o.ds} value={o.ds} disabled={remaining<=0||o.ds===formB.shortDate}>{o.ds.slice(5).replace("-","/")}（超過{toHStr(remaining)}）</option>;
+            })}
+          </select>
+          {formB.overDate&&<div style={{fontSize:11,color:"#3B6D11",marginTop:3}}>超過時間：{toHStr(Math.max(0,overDayDiff.excess-alreadyOffsetOverB))}</div>}
+        </div>
+        {formB.shortDate&&formB.overDate&&maxOffsetB>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>相殺時間（分）　上限：{toHStr(maxOffsetB)}</div>
+          <input type="number" min={1} max={maxOffsetB} value={formB.offsetMin} onChange={e=>setFormB(p=>({...p,offsetMin:e.target.value}))} placeholder={`最大${maxOffsetB}分`} style={iS}/>
+        </div>}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>理由</div>
+          <input type="text" value={formB.reason} onChange={e=>setFormB(p=>({...p,reason:e.target.value}))} placeholder="理由を入力" style={iS}/>
+        </div>
+      </>}
 
       {err&&<div style={{marginBottom:8,padding:"6px 10px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>{err}</div>}
-      <button onClick={submit} disabled={!canSubmit} style={{...bP,width:"100%",padding:"10px 0",opacity:canSubmit?1:0.4}}>申請する</button>
+      <button onClick={submit} disabled={transferType==="A"?!canSubmitA:!canSubmitB} style={{...bP,width:"100%",padding:"10px 0",opacity:(transferType==="A"?canSubmitA:canSubmitB)?1:0.4}}>申請する</button>
       {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
     </div>
 
@@ -3875,20 +3993,22 @@ function TimeTransferRequest({emp,shifts,shiftDefsData,timeTransferReqs,reload})
     {myReqs.length>0&&<div style={{...crd,overflow:"hidden"}}>
       <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>申請履歴</div>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-        <thead><tr>{["不足週","超過週","相殺時間","理由","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <thead><tr>{["タイプ","不足","超過","相殺時間","理由","状態"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
         <tbody>{myReqs.map(r=>(
           <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-            <td style={tdS}>{r.shortWeekStart}</td>
-            <td style={tdS}>{r.overWeekStart}</td>
+            <td style={tdS}>{(r.transferType||"A")==="A"?"週単位":"日単位"}</td>
+            <td style={tdS}>{(r.transferType||"A")==="A"?r.shortWeekStart+"週":r.shortDate}</td>
+            <td style={tdS}>{(r.transferType||"A")==="A"?r.overWeekStart+"週":r.overDate}</td>
             <td style={{...tdS,fontWeight:500}}>{toHStr(Number(r.offsetMin||0))}</td>
             <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.reason}</td>
-            <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
+            <td style={tdS}>{r.status==="pending"?<Badge label="承認待ち" bg="#FAEEDA" color="#854F0B"/>:r.status==="approved"?<Badge label="承認済" bg="#EAF3DE" color="#3B6D11"/>:r.status==="cancelled"?<Badge label="取消" bg="#F5F5F5" color="#666"/>:<Badge label="却下" bg="#FCEBEB" color="#A32D2D"/>}</td>
           </tr>
         ))}</tbody>
       </table>
     </div>}
   </div>;
 }
+
 
 // ── ShiftConfirmRequest (従業員：シフト確認申請) ──────────────────────────────
 function ShiftConfirmRequest({emp,punches,shifts,shiftConfirmReqs,shiftDefsData,reload}){
@@ -4070,7 +4190,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
-    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
+    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="shiftconfirm"&&<ShiftConfirmRequest emp={emp} punches={punches} shifts={shifts} shiftConfirmReqs={shiftConfirmReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
   </div>;
