@@ -532,7 +532,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
 
     const isOffPunch=isOff&&!!(punch?.in||punch?.out);
     const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+    return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
   });
 }
 
@@ -2056,7 +2056,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!(punch?.in||punch?.out);
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
   })();
 
@@ -2404,6 +2404,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               const badges=[];
               if(r.absent) badges.push(<Badge key="ab" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.missingOut) badges.push(<Badge key="mo" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
+              else if(r.isLeave&&r.isHalfLeaveWithTime) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
               else {
@@ -2570,7 +2571,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!(punch?.in||punch?.out);
       const bg=isLeave?"#F0FAF5":absent||missingOut||missingIn?"#FFF5F5":adj||earlyAdj?"#F5F4FE":isOffPunch?"#F5F9FE":late||earlyLeave||otMin>0?"#FFFCF5":"";
-      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
+      return {d,dow,ds,st,def,isOff,swMin,punch,awMin,otMin,diffMin,late,earlyLeave,earlyLeaveMin,absent,missingOut,missingIn,adjusted:adj,earlyAdj,isLeave,leaveHalf,isHalfLeaveWithTime,isOffPunch,rowBg:bg,approvedOTReq,approvedEarlyReq};
     });
   })();
   const saveEdit=async(r)=>{
@@ -2800,6 +2801,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingIn) badges.push(<Badge key="missingIn" label="出勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
+          else if(r.isLeave&&r.isHalfLeaveWithTime) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"} bg="#E1F5EE" color="#0F6E56"/>);
           else if(r.isLeave) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
