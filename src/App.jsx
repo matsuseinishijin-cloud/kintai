@@ -2652,7 +2652,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       </div>
       {(()=>{
         const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
-        const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length;
+        const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
+        const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+holidayWorkDays;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
         // 医療事務・その他roundタイプ：上段3・下段4の2段構成
         if(rule.type==="round"||rule.type==="none"){
