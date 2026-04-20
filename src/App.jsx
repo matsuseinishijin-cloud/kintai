@@ -1959,7 +1959,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           // 30分以上早退
           if(!isOff&&punch?.out&&def.end){
             const elMin=toMin(def.end)-toMin(punch.out);
-            if(elMin>=30){items.push({emp:e,ds,punch,kind:"早退",elMin});continue;}
+            if(elMin>=60){items.push({emp:e,ds,punch,kind:"早退",elMin});continue;}
           }
         }
       }
@@ -2661,7 +2661,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
       {(()=>{
-        const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=30))&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
+        const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
         const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
         const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+holidayWorkDays;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
@@ -2769,7 +2769,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             } else if(r.earlyLeave&&!ttBShort){
               const elMin=r.earlyLeaveMin||0;
               badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}>
-                {elMin>=30&&<Badge label="要確認" bg="#FCEBEB" color="#A32D2D"/>}
+                {elMin>=60&&<Badge label="要確認" bg="#FCEBEB" color="#A32D2D"/>}
                 <Badge label="早退" bg="#FAEEDA" color="#854F0B"/>
                 <span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{elMin>0?"-"+elMin+"分":""}</span>
               </span>);
