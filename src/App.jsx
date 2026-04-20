@@ -1975,7 +1975,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           const hasApprovedSC=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           if(hasApprovedSC) continue;
           // シフトなし・打刻あり
-          if(isOff&&punch?.out){items.push({emp:e,ds,punch,kind:"シフト確認"});continue;}
+          if(isOff&&(punch?.in||punch?.out)){items.push({emp:e,ds,punch,kind:"シフト確認"});continue;}
           // シフトあり・打刻なし（欠勤）
           if(!isOff&&!punch){items.push({emp:e,ds,punch:null,kind:"シフト確認"});continue;}
           // 退勤忘れ
@@ -2713,7 +2713,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
       {(()=>{
-        const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
+        const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
         const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
         // 打刻がある日はすべて勤務日数にカウント（有休・半休含む）＋休日出勤承認済み日
         const attendDays=rows.filter(r=>r.punch?.in&&r.punch?.out&&!r.absent).length+holidayWorkDays;
@@ -4409,11 +4409,8 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:4}}>
           <div>
             {isLeave?<div style={{fontSize:13,color:"#0F6E56",fontWeight:600}}>{leaveLabel}</div>:<div style={{fontSize:13,color:isOff?"#aaa":"#333",fontWeight:600}}>{def.label}</div>}
-            {isLeave&&leaveHalf&&(halfWorkIn||def.start)&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>
-              {halfWorkIn&&halfWorkOut
-                ?`出勤 ${halfWorkIn}〜${halfWorkOut}`
-                :leaveHalf==="pm"?`出勤 ${def.start}〜`:leaveHalf==="am"?`出勤 〜${def.end}`:""}
-            </div>}
+            {isLeave&&leaveHalf&&halfWorkIn&&halfWorkOut&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>出勤 {halfWorkIn}〜{halfWorkOut}</div>}
+            {isLeave&&leaveHalf&&!halfWorkIn&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{leaveHalf==="pm"?`出勤 ${def.start}〜`:leaveHalf==="am"?`出勤 〜${def.end}`:""}</div>}
             {!isLeave&&def.start&&<div style={{fontSize:11,color:"#555",opacity:0.85}}>{def.start}〜{def.end}</div>}
           </div>
           {statusBadges.length>0&&<div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
@@ -4540,7 +4537,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
             {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
           </div>
         ))}
-        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
+        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id||"")&&sc.date===r.ds&&sc.status==="approved")).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
         {[["欠勤",absentDays+"日"],["遅刻",lateDays+"回"],["早退",earlyDays+"回"]].map(([l,v])=>(
@@ -4860,7 +4857,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
             <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
-        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
+        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id||"")&&sc.date===r.ds&&sc.status==="approved")).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       {/* 下段：時間帯内訳 */}
       <div style={{display:"flex",gap:6}}>
@@ -5044,7 +5041,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
         {(()=>{
           const lvDays=(lvReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&days.includes(r.date)).reduce((s,r)=>s+(r.half?0.5:1),0);
-          const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;
+          const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id||"")&&sc.date===r.ds&&sc.status==="approved")).length;
           return [
             ...([["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"],["有給",lvDays>0?lvDays+"日":"―"]].map(([l,v])=>(
               <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
@@ -5396,7 +5393,7 @@ export default function App(){
           if(isAnyLeaveShift(st)) continue; // leave系シフトは除外
           const hasApprovedSC2=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           if(hasApprovedSC2) continue; // 承認済みシフト確認申請がある日は除外
-          if(!def.start&&punch?.out) count++; // シフトなし打刻
+          if(!def.start&&(punch?.in||punch?.out)) count++; // シフトなし打刻
           else if(def.start&&!punch) count++; // シフトあり打刻なし
           else if(def.start&&punch?.in&&!punch?.out) count++; // 退勤忘れ
           else if(def.start&&!punch?.in&&punch?.out) count++; // 出勤忘れ
