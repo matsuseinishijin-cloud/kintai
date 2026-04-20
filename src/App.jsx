@@ -3771,7 +3771,7 @@ function OvertimeRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 }
 
 // ── TimeTransferRequest (従業員：時間振替申請) ───────────────────────────────
-function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferReqs,reload}){
+function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferReqs,shiftConfirmReqs=[],reload}){
   const [transferType,setTransferType]=useState("A"); // A:週単位 B:日単位
   const [form,setForm]=useState({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
   const [formB,setFormB]=useState({shortDate:"",overDate:"",offsetMin:"",reason:""});
@@ -3805,9 +3805,16 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
     return total;
   };
 
-  // 日単位：1日の打刻 vs シフトの差分計算
+  // 日単位：1日の打刻 vs シフトの差分計算（休日出勤も含む）
   const getDayDiff=(ds)=>{
     if(!ds) return {deficit:0,excess:0};
+    // 休日出勤の場合
+    const holidayWork=(shiftConfirmReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤");
+    if(holidayWork){
+      const bk=holidayWork.breakMin?Number(holidayWork.breakMin):0;
+      const excess=Math.max(0,toMin(holidayWork.endTime||"00:00")-toMin(holidayWork.startTime||"00:00")-bk);
+      return {deficit:0,excess};
+    }
     const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
     const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
     const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
@@ -3841,7 +3848,7 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
     return [...new Set(opts)].sort();
   })();
 
-  // 日単位：対象日の選択肢（当月・翌月で打刻がある日）
+  // 日単位：対象日の選択肢（当月・翌月で打刻がある日 + 休日出勤承認済み日）
   const dayOptions=(()=>{
     const opts=[];
     const now=new Date();
@@ -3854,9 +3861,18 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
         const ds=`${y}-${pad(m)}-${pad(d)}`;
         if(ds>td) continue;
         const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
-        if(!punch?.in||!punch?.out) continue;
-        const {deficit,excess}=getDayDiff(ds);
-        if(deficit>0||excess>0) opts.push({ds,deficit,excess});
+        // 通常の打刻超過・不足
+        if(punch?.in&&punch?.out){
+          const {deficit,excess}=getDayDiff(ds);
+          if(deficit>=30||excess>=30){opts.push({ds,deficit:deficit>=30?deficit:0,excess:excess>=30?excess:0,kind:"punch"});continue;}
+        }
+        // 休日出勤（承認済みシフト確認申請）
+        const holidayWork=(shiftConfirmReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤");
+        if(holidayWork){
+          const bk=holidayWork.breakMin?Number(holidayWork.breakMin):0;
+          const excess=Math.max(0,toMin(holidayWork.endTime||"00:00")-toMin(holidayWork.startTime||"00:00")-bk);
+          if(excess>=30) opts.push({ds,deficit:0,excess,kind:"holidayWork"});
+        }
       }
     }
     return opts;
@@ -3979,13 +3995,14 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
           {formB.shortDate&&<div style={{fontSize:11,color:"#854F0B",marginTop:3}}>不足時間：{toHStr(Math.max(0,shortDayDiff.deficit-alreadyOffsetShortB))}</div>}
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過日（残業した日）</div>
+          <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>超過日（残業・休日出勤した日）</div>
           <select value={formB.overDate} onChange={e=>setFormB(p=>({...p,overDate:e.target.value,offsetMin:""}))} style={iS}>
             <option value="">日付を選択</option>
             {dayOptions.filter(o=>o.excess>0).map(o=>{
               const alreadyUsed=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.overDate===o.ds&&r.status==="approved"&&r.transferType==="B").reduce((s,r)=>s+Number(r.offsetMin||0),0);
               const remaining=o.excess-alreadyUsed;
-              return <option key={o.ds} value={o.ds} disabled={remaining<=0||o.ds===formB.shortDate}>{o.ds.slice(5).replace("-","/")}（超過{toHStr(remaining)}）</option>;
+              const kindLabel=o.kind==="holidayWork"?"休日出勤":"残業";
+              return <option key={o.ds} value={o.ds} disabled={remaining<=0||o.ds===formB.shortDate}>{o.ds.slice(5).replace("-","/")}（{kindLabel} {toHStr(remaining)}）</option>;
             })}
           </select>
           {formB.overDate&&<div style={{fontSize:11,color:"#3B6D11",marginTop:3}}>超過時間：{toHStr(Math.max(0,overDayDiff.excess-alreadyOffsetOverB))}</div>}
@@ -4206,7 +4223,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
-    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
+    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="shiftconfirm"&&<ShiftConfirmRequest emp={emp} punches={punches} shifts={shifts} shiftConfirmReqs={shiftConfirmReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
   </div>;
