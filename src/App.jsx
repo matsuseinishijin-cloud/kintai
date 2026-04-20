@@ -2692,7 +2692,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   })();
 
   const diff=tA-tS;
-  const disp=filter==="issues"?rows.filter(r=>r.absent||r.adjusted||r.earlyAdj||r.late||r.earlyLeave||r.otMin>0):rows;
+  const disp=filter==="issues"?rows.filter(r=>r.absent||r.adjusted||r.earlyAdj||r.late||r.earlyLeave||r.otMin>0||r.isOffPunch||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60)):rows;
   const prevM=()=>month===1?(setYear(y=>y-1),setMonth(12)):setMonth(m=>m-1);
   const nextM=()=>month===12?(setYear(y=>y+1),setMonth(1)):setMonth(m=>m+1);
   return <div>
@@ -2759,9 +2759,9 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         </>;
       })()}
       <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap",alignItems:"center"}}>
-        <span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>
+        {rule.type!=="round"&&rule.type!=="none"&&<span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>}
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
-        <span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>
+        {rule.type!=="round"&&rule.type!=="none"&&<span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>}
         {rule.type==="overtime_request"&&<span>時間外申請済：<strong style={{color:"#185FA5"}}>{toHStr(approvedOTMin)}</strong></span>}
         {rule.type==="overtime_request"&&unapprovedOTMin>0&&<span>未申請残業：<strong style={{color:"#A32D2D"}}>{toHStr(unapprovedOTMin)}</strong></span>}
         {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
@@ -5383,6 +5383,9 @@ export default function App(){
           const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
           const _lv2=(lvReqs||[]).find(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           if(_lv2) continue;
+          if(isAnyLeaveShift(st)) continue; // leave系シフトは除外
+          const hasApprovedSC2=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
+          if(hasApprovedSC2) continue; // 承認済みシフト確認申請がある日は除外
           if(!def.start&&punch?.out) count++; // シフトなし打刻
           else if(def.start&&!punch) count++; // シフトあり打刻なし
           else if(def.start&&punch?.in&&!punch?.out) count++; // 退勤忘れ
