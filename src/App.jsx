@@ -2715,7 +2715,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       {(()=>{
         const cd=rows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
         const holidayWorkDays=(shiftConfirmReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.status==="approved"&&String(r.reason||"").trim()==="休日出勤"&&periodDays.includes(r.date)).length;
-        const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length+holidayWorkDays;
+        // 打刻がある日はすべて勤務日数にカウント（有休・半休含む）＋休日出勤承認済み日
+        const attendDays=rows.filter(r=>r.punch?.in&&r.punch?.out&&!r.absent).length+holidayWorkDays;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
         // 医療事務・その他roundタイプ：上段3・下段4の2段構成
         if(rule.type==="round"||rule.type==="none"){
@@ -4533,7 +4534,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
             {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
           </div>
         ))}
-        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
+        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
         {[["欠勤",absentDays+"日"],["遅刻",lateDays+"回"],["早退",earlyDays+"回"]].map(([l,v])=>(
@@ -4853,7 +4854,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
             <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
           </div>
         ))}
-        {(()=>{const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
+        {(()=>{const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;return <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"#fff",border:cd>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}><div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div><div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"#111"}}>{cd>0?cd+"日":"―"}</div></div>;})()} 
       </div>
       {/* 下段：時間帯内訳 */}
       <div style={{display:"flex",gap:6}}>
@@ -5037,7 +5038,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
         {(()=>{
           const lvDays=(lvReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&days.includes(r.date)).reduce((s,r)=>s+(r.half?0.5:1),0);
-          const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
+          const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave).length;
           return [
             ...([["合計就労時間",totalWorkMin>0?toHStr(totalWorkMin):"―"],["出勤日数",totalDays+"日"],["有給",lvDays>0?lvDays+"日":"―"]].map(([l,v])=>(
               <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
