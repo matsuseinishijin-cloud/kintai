@@ -1945,6 +1945,9 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           const isLeave=!!_lv;
           if(isLeave) continue;
+          // 承認済みシフト確認申請がある日は要確認から除外
+          const hasApprovedSC=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
+          if(hasApprovedSC) continue;
           // シフトなし・打刻あり
           if(isOff&&punch?.out){items.push({emp:e,ds,punch,kind:"シフト確認"});continue;}
           // シフトあり・打刻なし（欠勤）
@@ -2535,7 +2538,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const scOTMin=(()=>{
     if(!emp||emp.role==="理学療法士"||emp.type!=="正社員") return 0;
     return (shiftConfirmReqs||[])
-      .filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&periodDays.includes(r.date))
+      .filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&periodDays.includes(r.date)&&String(r.reason||"").trim()==="休日出勤")
       .reduce((s,r)=>{
         const bk=r.breakMin?Number(r.breakMin):0;
         const workMin=Math.max(0,toMin(r.endTime||"00:00")-toMin(r.startTime||"00:00")-bk);
@@ -2648,7 +2651,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
       </div>
       {(()=>{
-        const cd=rows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
+        const cd=rows.filter(r=>(r.isOffPunch||r.absent||r.missingOut||r.missingIn)&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id)&&sc.date===r.ds&&sc.status==="approved")).length;
         const attendDays=rows.filter(r=>!r.absent&&!r.isOff&&r.awMin>0).length;
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
         // 医療事務・その他roundタイプ：上段3・下段4の2段構成
