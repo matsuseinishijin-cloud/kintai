@@ -2152,7 +2152,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     return <tr style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
       <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
       <td style={tdS}>{DOW_JP[r.dow]}</td>
-      <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+      <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
       <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
       <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
       <td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>
@@ -2404,7 +2404,6 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               const badges=[];
               if(r.absent) badges.push(<Badge key="ab" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
               else if(r.missingOut) badges.push(<Badge key="mo" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
-              else if(r.isLeave&&r.isHalfLeaveWithTime) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isLeave) badges.push(<Badge key="lv" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
               else if(r.isOff&&!r.punch) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
               else {
@@ -2420,7 +2419,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
                 <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
                 <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-                <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+                <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
                 <td style={tdS}>{r.punch?.in||"―"}</td>
                 <td style={tdS}>{r.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
                 <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
@@ -2448,7 +2447,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
             return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
               <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
               <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
               <td style={tdS}>{r.punch?.in||"―"}</td>
               <td style={tdS}>{r.punch?.out||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
               <td style={tdS}><button onClick={()=>startEdit(r)} style={{...bS,padding:"3px 10px",fontSize:11}}>{r.punch?"修正":"追加"}</button></td>
@@ -2781,7 +2780,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
             return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
               <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
               <td style={tdS}>{DOW_JP[r.dow]}</td>
-              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+              <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
               <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
               <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
               {emp?.type!=="正社員"&&<td style={{...tdS,fontWeight:500,color:"#1251a3"}}>{wm!=null?toHStr(wm):"―"}</td>}
@@ -2801,7 +2800,6 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingIn) badges.push(<Badge key="missingIn" label="出勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
-          else if(r.isLeave&&r.isHalfLeaveWithTime) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"} bg="#E1F5EE" color="#0F6E56"/>);
           else if(r.isLeave) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
@@ -2840,7 +2838,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:(r.punch?.adjusted||r.earlyAdj)&&!(rule.type==="round"&&emp?.type==="正社員")?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
             {emp?.type!=="正社員"&&<td style={{...tdS,fontWeight:500}}>{(()=>{
@@ -4573,7 +4571,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.outT||(r.punch?<span style={{color:"#A32D2D",fontWeight:500}}>退勤忘れ</span>:"―")}</td>
             <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
@@ -4885,7 +4883,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
           if(isEditing) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
             <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
             <td style={tdS}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{padding:"4px 6px"}}><input type="time" value={editForm.in} onChange={e=>setEditForm(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
             <td style={{padding:"4px 6px"}}><input type="time" value={editForm.out} onChange={e=>setEditForm(p=>({...p,out:e.target.value}))} disabled={!editForm.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editForm.in?1:0.4}}/></td>
             <td colSpan={5} style={tdS}><div style={{display:"flex",gap:6}}>
@@ -4897,7 +4895,7 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
             <td style={{...tdS,color:r.amMin>0?"#111":"var(--color-text-tertiary)"}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
@@ -5081,7 +5079,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           if(isEditing) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:"#F0F4FF"}}>
             <td style={tdS}><strong>{r.ds.slice(5).replace("-","/")}</strong></td>
             <td style={tdS}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{padding:"4px 6px"}}><input type="time" value={editFormR.in} onChange={e=>setEditFormR(p=>({...p,in:e.target.value}))} style={{...iS,width:105,fontSize:13,padding:"5px 8px"}}/></td>
             <td style={{padding:"4px 6px"}}><input type="time" value={editFormR.out} onChange={e=>setEditFormR(p=>({...p,out:e.target.value}))} disabled={!editFormR.in} style={{...iS,width:105,fontSize:13,padding:"5px 8px",opacity:editFormR.in?1:0.4}}/></td>
             <td colSpan={5} style={tdS}><div style={{display:"flex",gap:6}}>
@@ -5093,7 +5091,7 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
           return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:bg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {r.isHol&&<span style={{fontSize:9,marginLeft:3,color:"#185FA5"}}>祝</span>}{isHoliday(r.ds)&&r.isSunday&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝日</span>}</td>
             <td style={{...tdS,color:dc,fontWeight:r.isSunday?700:400}}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.in||"―"}</td>
             <td style={{...tdS,color:r.attended?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{punch?.out||"―"}</td>
             <td style={{...tdS,color:r.amMin>0?"#111":"var(--color-text-tertiary)"}}>{r.amMin>0?toHStr(r.amMin):"―"}</td>
@@ -5169,7 +5167,7 @@ function PunchHistory({emp,punches,shifts,otReqs,lvReqs,shiftDefsData,isAdmin=fa
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:rowBg}}>
             <td style={tdS}>{r.ds.slice(5).replace("-","/")} {isHoliday(r.ds)&&<span style={{fontSize:9,marginLeft:3,color:"#A32D2D"}}>祝</span>}</td>
             <td style={{...tdS,color:dc}}>{DOW_JP[r.dow]}</td>
-            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
+            <td style={tdS}><span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:r.isHalfLeaveWithTime?"#E1F5EE":r.def.color,color:r.isHalfLeaveWithTime?"#0F6E56":r.def.tc}}>{r.isHalfLeaveWithTime?(r.leaveHalf==="am"?"半休シフト(午前)":"半休シフト(午後)"):r.def.label}</span></td>
             <td style={{...tdS,color:r.punch?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{r.punch?.in||"―"}</td>
             <td style={{...tdS,color:isAdmin&&(r.punch?.adjusted||r.earlyAdj)?"#534AB7":"var(--color-text-primary)"}}>{r.punch?.out||(r.punch?"未退勤":"―")}</td>
             <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.swMin>0?toHStr(r.swMin):"―"}</td>
