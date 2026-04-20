@@ -1968,6 +1968,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           const _lv=(lvReqs||[]).find(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           const isLeave=!!_lv;
           if(isLeave) continue;
+          if(isAnyLeaveShift(st)) continue; // leave系シフトは除外
           // 承認済みシフト確認申請がある日は要確認から除外
           const hasApprovedSC=(shiftConfirmReqs||[]).some(r=>String(r.empId)===String(e.id)&&r.date===ds&&r.status==="approved");
           if(hasApprovedSC) continue;
