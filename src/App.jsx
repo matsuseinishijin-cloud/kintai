@@ -1808,6 +1808,27 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
               })}</tbody>
             </table>}
         </div>
+        {/* 承認済み申請一覧 */}
+        {allRows.filter(r=>r._type==="req"&&r.req.status==="approved").length>0&&<div style={{...crd,overflow:"hidden",marginBottom:"1rem"}}>
+          <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500}}>
+            承認済み有休申請 <span style={{fontSize:11,fontWeight:400,color:"var(--color-text-secondary)"}}>{allRows.filter(r=>r._type==="req"&&r.req.status==="approved").length}件</span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr>{["日付","種別","理由","操作"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>{allRows.filter(r=>r._type==="req"&&r.req.status==="approved").map((row,i)=>{
+              const r=row.req;
+              const halfLabel=r.half==="am"?"午前休":r.half==="pm"?"午後休":"全日";
+              return <tr key={r.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                <td style={tdS}>{r.date}</td>
+                <td style={tdS}><Badge label={halfLabel} bg="#E1F5EE" color="#0F6E56"/></td>
+                <td style={{...tdS,color:"var(--color-text-secondary)"}}>{r.reason||"―"}</td>
+                <td style={tdS}>
+                  <button onClick={()=>cancelApproved(r.id)} style={{padding:"2px 10px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer",fontWeight:500}}>取消</button>
+                </td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>}
       </>;
     })()}
     <div style={{display:"grid",gridTemplateColumns:canGrant?"1fr 1fr":"1fr 1fr",gap:"1rem",marginBottom:"1rem"}}>
@@ -3708,6 +3729,7 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
                     <button onClick={()=>decideTT(r.id,"rejected")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"none",fontSize:11,cursor:"pointer",fontWeight:500}}>却下</button>
                   </>}
                   {isApproved&&r._type==="timetransfer"&&<button onClick={()=>decideTT(r.id,"cancelled")} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
+                  {isApproved&&r._type==="leave"&&<button onClick={()=>cancelLv(r.id)} style={{padding:"3px 10px",borderRadius:6,background:"#FCEBEB",color:"#A32D2D",border:"1px solid #F09595",fontSize:11,cursor:"pointer",fontWeight:500}}>取消</button>}
                   {isPending&&r._type==="shiftconfirm"&&(()=>{
                     const empObj=emps.find(e=>String(e.id)===String(r.empId));
                     const isOTCase=empObj&&empObj.role!=="理学療法士"&&empObj.type==="正社員";
