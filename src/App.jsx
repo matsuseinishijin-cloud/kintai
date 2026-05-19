@@ -1510,10 +1510,10 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
                     const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
                     const def=isLeavePmShift(st)
-                      ?(empShiftDefs["leave_pm"]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off)
+                      ?(empShiftDefs?.["leave_pm"]||empShiftDefs?.off||SHIFT_DEFS.off)
                       :isLeaveAmShift(st)
-                        ?(empShiftDefs["leave_am"]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off)
-                        :(empShiftDefs[st]||empShiftDefs.off||DEFAULT_SHIFT_DEFS_BY_DEPT["理学療法士"].off);
+                        ?(empShiftDefs?.["leave_am"]||empShiftDefs?.off||SHIFT_DEFS.off)
+                        :(empShiftDefs?.[st]||empShiftDefs?.off||SHIFT_DEFS.off);
                     const isPrev=d<0;
                     const clickable=!!roleFilter&&!isPrev;
                     const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
