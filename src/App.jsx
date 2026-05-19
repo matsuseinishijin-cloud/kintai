@@ -2355,7 +2355,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const absentDays=adjRows.filter(r=>r.absent).length;
       const lateDays=adjRows.filter(r=>r.isLate).length;
       const earlyDays=adjRows.filter(r=>r.isEarly).length;
-      const confirmDays=adjRows.filter(r=>r.isOffPunch||r.absent||r.missingOut||r.missingIn).length;
+      const confirmDays=adjRows.filter(r=>((r.isOffPunch||r.absent||r.missingOut||r.missingIn)||(r.earlyLeave&&(r.earlyLeaveMin||0)>=60))&&!r.isLeave&&!(shiftConfirmReqs||[]).some(sc=>String(sc.empId)===String(emp?.id||"")&&sc.date===r.ds&&sc.status==="approved")).length;
       return <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
           <div style={{fontSize:13,fontWeight:700}}>月次レポート</div>
