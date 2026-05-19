@@ -5286,7 +5286,7 @@ export default function App(){
         gasGet("時間振替申請").catch(()=>[]),
       ]);
       setEmps(e.map(r=>convertFrom(r,EMP_MAP)));
-      setShifts(s.map(r=>convertFrom(r,SHIFT_MAP)));
+      setShifts(s.map(r=>{const c=convertFrom(r,SHIFT_MAP);return {...c,shiftType:String(c.shiftType||"off")};}));
       setPunches(p.map(r=>convertFrom(r,PUNCH_MAP)));
       setOtReqs(o.map(r=>convertFrom(r,OT_MAP)));
       setLeaves(lv.map(r=>convertFrom(r,LEAVE_MAP)));
@@ -5306,7 +5306,8 @@ export default function App(){
         converted.forEach(d=>{
           if(!d.dept||!d.key) return;
           if(!byDept[d.dept]) byDept[d.dept]={};
-          byDept[d.dept][d.key]={_id:d.id,_order:Number(d.order)||999,label:d.label,start:d.start||null,end:d.end||null,color:d.color,tc:d.tc,breakMin:(d.breakMin!=null&&d.breakMin!=="")?Number(d.breakMin):0};
+          const keyStr=String(d.key); // 数値の場合に文字列に変換
+          byDept[d.dept][keyStr]={_id:d.id,_order:Number(d.order)||999,label:d.label,start:d.start||null,end:d.end||null,color:d.color,tc:d.tc,breakMin:(d.breakMin!=null&&d.breakMin!=="")?Number(d.breakMin):0};
         });
         // offが無ければ各部署にデフォルトを補完
         Object.keys(DEPT_GROUPS).forEach(dept=>{
