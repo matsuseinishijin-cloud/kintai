@@ -1923,20 +1923,20 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
           {allBuckets.length===0
             ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>付与履歴がありません</div>
             :(()=>{
-              // LIFOロジックで各申請をバケツに割り当て
+              // LIFOロジックで各申請をバケツに割り当て（calcBucketsWithRemainingと同一ロジック）
+              const rawBuckets=buildBuckets(leave?.records).map(b=>({...b,remaining:b.days}));
               const approvedReqs=(lvReqs||[])
-                .filter(r=>String(r.empId)===String(sel)&&r.status==="approved")
+                .filter(r=>String(r.empId)===String(sel)&&r.status==="approved"&&r.date<=td)
                 .sort((a,b2)=>a.date<b2.date?-1:1);
               // バケツごとに消化された申請IDを記録
-              const bucketAssign={}; // bucketId -> [reqId]
-              const reqConsumed={}; // reqId -> {bucketId, consume}
+              const bucketAssign={};
               const bucketRemaining={};
-              allBuckets.forEach(b=>{bucketRemaining[b.id]=b.days;bucketAssign[b.id]=[];});
+              rawBuckets.forEach(b=>{bucketRemaining[b.id]=b.days;bucketAssign[b.id]=[];});
               approvedReqs.forEach(r=>{
                 const days=r.half?0.5:1.0;
                 let toConsume=days;
-                // 取得日時点で有効なバケツをLIFO（新しい順）で消化
-                const validBuckets=[...allBuckets]
+                // 取得日時点で有効なバケツをLIFO（新しい付与順）で消化
+                const validBuckets=[...rawBuckets]
                   .filter(b=>b.grantedAt<=r.date&&b.expiresAt>=r.date)
                   .sort((a,b2)=>a.grantedAt<b2.grantedAt?1:-1);
                 for(const b of validBuckets){
