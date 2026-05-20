@@ -4330,7 +4330,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
   const rule=getOtRule(emp);
   const hasLeave=(()=>{const lv=leaves.find(l=>String(l.empId)===String(emp.id));if(!lv) return false; return calcLeaveRemainingCompat(lv,lvReqs,emp.id)>0||safeParseJSON(lv.records,[]).some(r=>r.type==="grant");})();
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
-  const isOvertimeRequestTarget=rule.type==="overtime_request";
+  const isOvertimeRequestTarget=emp.role==="理学療法士"&&emp.type==="正社員";
   const isSeishain=emp.type==="正社員";
   const isEarlyTarget=(emp.role==="看護師"||emp.role==="医療事務")&&emp.type==="正社員";
   const sections=[
