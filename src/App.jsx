@@ -1923,15 +1923,13 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
           {allBuckets.length===0
             ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>付与履歴がありません</div>
             :(()=>{
-              // LIFOロジックで各申請をバケツに割り当て（calcBucketsWithRemainingと同一ロジック）
+              // calcBucketsWithRemainingと完全同一ロジックで申請をバケツに割り当て
               const rawBuckets=buildBuckets(leave?.records).map(b=>({...b,remaining:b.days}));
               const approvedReqs=(lvReqs||[])
                 .filter(r=>String(r.empId)===String(sel)&&r.status==="approved"&&r.date<=td)
                 .sort((a,b2)=>a.date<b2.date?-1:1);
-              // バケツごとに消化された申請IDを記録
               const bucketAssign={};
-              const bucketRemaining={};
-              rawBuckets.forEach(b=>{bucketRemaining[b.id]=b.days;bucketAssign[b.id]=[];});
+              rawBuckets.forEach(b=>{bucketAssign[b.id]=[];});
               approvedReqs.forEach(r=>{
                 const days=r.half?0.5:1.0;
                 let toConsume=days;
@@ -1940,9 +1938,9 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
                   .filter(b=>b.grantedAt<=r.date&&b.expiresAt>=r.date)
                   .sort((a,b2)=>a.grantedAt<b2.grantedAt?1:-1);
                 for(const b of validBuckets){
-                  if(bucketRemaining[b.id]<=0) continue;
-                  const consume=Math.min(toConsume,bucketRemaining[b.id]);
-                  bucketRemaining[b.id]-=consume;
+                  if(b.remaining<=0) continue;
+                  const consume=Math.min(toConsume,b.remaining);
+                  b.remaining-=consume; // calcBucketsWithRemainingと同様に直接書き換え
                   bucketAssign[b.id].push(r.id);
                   toConsume-=consume;
                   if(toConsume<=0) break;
@@ -1950,7 +1948,8 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
               });
               return allBuckets.slice().reverse().map(b=>{
                 const isExpired=b.expiresAt<td;
-                const remaining=bucketRemaining[b.id]??b.days;
+                const rawB=rawBuckets.find(rb=>rb.id===b.id);
+                const remaining=rawB?.remaining??b.days;
                 const assignedReqs=approvedReqs.filter(r=>bucketAssign[b.id]?.includes(r.id));
                 return <div key={b.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",padding:"8px 14px",opacity:isExpired?0.7:1}}>
                   {/* バケツヘッダー */}
