@@ -2824,7 +2824,11 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           if(r.absent) badges.push(<Badge key="absent" label="シフト確認" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingOut) badges.push(<Badge key="missingOut" label="退勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
           else if(r.missingIn) badges.push(<Badge key="missingIn" label="出勤忘れ" bg="#FCEBEB" color="#A32D2D"/>);
-          else if(r.isLeave) badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
+          else if(r.isLeave){
+            badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
+            // 有休日でも残業がある場合は残業バッジを追加
+            if(!ttBOver&&r.otMin>0) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+          }
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
             if(approvedHolidayWork){
