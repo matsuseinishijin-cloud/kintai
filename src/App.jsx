@@ -1377,7 +1377,18 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     return groups;
   })();
   const mergedWeekGroups=weekGroups;
-  const getWeekHoursGroup=(empId,wi)=>calcWeekHours(empId,weekGroups[wi]);
+  const getWeekHoursGroup=(empId,wi)=>{
+    // 第1週が月曜始まりでない（不完全）かつ最終週も不完全な場合、両者を合算
+    const firstWeek=weekGroups[0];
+    const lastWeek=weekGroups[weekGroups.length-1];
+    const firstIsIncomplete=firstWeek&&new Date(firstWeek[0]).getDay()!==1;
+    const lastIsIncomplete=lastWeek&&new Date(lastWeek[lastWeek.length-1]).getDay()!==0;
+    if(firstIsIncomplete&&lastIsIncomplete&&weekGroups.length>1&&(wi===0||wi===weekGroups.length-1)){
+      const combinedDays=[...firstWeek,...lastWeek];
+      return calcWeekHours(empId,combinedDays);
+    }
+    return calcWeekHours(empId,weekGroups[wi]);
+  };
   const calcWeekHours=(empId,weekDays)=>{
     const emp=emps.find(e=>String(e.id)===String(empId));
     const empDefs=getEmpShiftDefs(emp||{role:"理学療法士"});
@@ -1751,7 +1762,8 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
       const totalPending=lvReqs.filter(r=>r.status==="pending").length;
 
       return <>
-        {/* 締め期間ナビゲーター */}
+        {/* 締め期間ナビゲーター（管理者のみ） */}
+        {canGrant&&<>
         <div style={{display:"flex",alignItems:"center",gap:8,margin:"1rem 0 0.75rem",flexWrap:"wrap"}}>
           <button onClick={prevPeriod} style={bS}>‹</button>
           <span style={{fontSize:14,fontWeight:600,color:"#1251a3"}}>{period.label}</span>
@@ -1821,6 +1833,7 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
             })}</tbody>
           </table>
         </div>}
+        </>}
       </>;
     })()}
     <div style={{display:"grid",gridTemplateColumns:canGrant?"1fr 1fr":"1fr 1fr",gap:"1rem",marginBottom:"1rem"}}>
