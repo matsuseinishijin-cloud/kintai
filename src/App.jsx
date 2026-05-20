@@ -1227,11 +1227,13 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   const [periodYear,setPeriodYear]=useState(cur0.year);
   const [periodMonth,setPeriodMonth]=useState(cur0.month);
   const period=getPeriodRange(periodYear,periodMonth);
-  // 期間内の全日付を生成（前月16日〜当月15日）
+  // 期間内の全日付を生成（前月16日〜当月15日）タイムゾーン安全
   const periodDays=(()=>{
     const days=[];
-    let cur=new Date(period.start);
-    const endD=new Date(period.end);
+    const [sy,sm,sd]=period.start.split("-").map(Number);
+    const [ey,em,ed]=period.end.split("-").map(Number);
+    let cur=new Date(sy,sm-1,sd);
+    const endD=new Date(ey,em-1,ed);
     while(cur<=endD){
       days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
       cur.setDate(cur.getDate()+1);
