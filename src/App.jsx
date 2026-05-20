@@ -1469,7 +1469,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               const dayNum=dObj.getDate();
               const mo=dObj.getMonth()+1;
               const hn=getHolidayName(ds);
-              const isNextMonth=mo!==Number(period.start.slice(5,7)); // 翌月分（1〜15日）
+              const isNextMonth=ds>period.end; // 翌月分（1〜15日）
               return <th key={ds} style={{padding:"4px 3px",textAlign:"center",borderBottom:"0.5px solid var(--color-border-tertiary)",fontWeight:400,color:dow===0||hn?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)",minWidth:52,borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":hn?"#FFF0F0":"inherit"}} title={hn||""}>
                 <div style={{fontSize:isNextMonth?9:undefined}}>{isNextMonth?mo+"/"+dayNum:dayNum}</div>
                 <div style={{fontSize:9}}>{hn?"祝":DOW_JP[dow]}</div>
@@ -1500,7 +1500,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const dayNum=dObj.getDate();
                     const mo=dObj.getMonth()+1;
                     const dow=dObj.getDay();
-                    const isNextMonth=mo!==Number(period.start.slice(5,7));
+                    const isNextMonth=ds>period.end; // 翌月分
                     const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
                     const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
                     const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
@@ -1552,7 +1552,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                   const dObj=new Date(ds);
                   const dow=dObj.getDay();
                   const mo=dObj.getMonth()+1;
-                  const isNextMonth=mo!==Number(period.start.slice(5,7));
+                  const isNextMonth=ds>period.end; // 翌月分
                   const cnt=calcSlotCount(ds,slot);
                   return <td key={ds} style={{padding:"4px 2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":"inherit"}}>
                     <div style={{fontSize:13,fontWeight:600,color:isNextMonth?"#d1d5db":cnt===0?"#d1d5db":cnt<=2?"#854F0B":"#1251a3"}}>{isNextMonth?"":cnt}</div>
