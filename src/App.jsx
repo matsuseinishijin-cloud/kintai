@@ -1365,28 +1365,34 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     if(periodMonth===12){fetchHolidays(periodYear+1);setPeriodYear(y=>y+1);setPeriodMonth(1);}
     else setPeriodMonth(m=>m+1);
   });
-  // 週グループ（16日〜翌月15日、月曜始まり）
+  // 週グループ（16日を含む週をW1として、月曜始まりで完全な週を構成）
   const weekGroups=(()=>{
+    // 16日の曜日を確認し、月曜から始まる完全な週の日付リストを生成
+    const startDs=period.start; // 前月16日
+    const [sy,sm,sd]=startDs.split("-").map(Number);
+    const startDow=new Date(sy,sm-1,sd).getDay(); // 0=日,1=月...
+    // 月曜起算で16日の前にある日数（先週月曜〜15日前まで）
+    const prevCount=startDow===0?6:startDow===1?0:startDow-1;
+    // 先週の日付を追加（前月の日付）
+    const allDs=[];
+    for(let i=prevCount;i>0;i--){
+      const d=new Date(sy,sm-1,sd-i);
+      allDs.push(d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()));
+    }
+    periodDays.forEach(ds=>allDs.push(ds));
+    // 週に分割（月曜始まり）
     const groups=[];
     let wk=[];
-    periodDays.forEach(ds=>{
+    allDs.forEach(ds=>{
       wk.push(ds);
       const dow=new Date(ds).getDay();
-      if(dow===0||ds===periodDays[periodDays.length-1]){groups.push([...wk]);wk=[];}
+      if(dow===0||ds===allDs[allDs.length-1]){groups.push([...wk]);wk=[];}
     });
     return groups;
   })();
   const mergedWeekGroups=weekGroups;
   const getWeekHoursGroup=(empId,wi)=>{
-    // 第1週が月曜始まりでない（不完全）かつ最終週も不完全な場合、両者を合算
-    const firstWeek=weekGroups[0];
-    const lastWeek=weekGroups[weekGroups.length-1];
-    const firstIsIncomplete=firstWeek&&new Date(firstWeek[0]).getDay()!==1;
-    const lastIsIncomplete=lastWeek&&new Date(lastWeek[lastWeek.length-1]).getDay()!==0;
-    if(firstIsIncomplete&&lastIsIncomplete&&weekGroups.length>1&&(wi===0||wi===weekGroups.length-1)){
-      const combinedDays=[...firstWeek,...lastWeek];
-      return calcWeekHours(empId,combinedDays);
-    }
+    // 前月分の日付（period.startより前）は計算に含める（W1の合算のため）
     return calcWeekHours(empId,weekGroups[wi]);
   };
   const calcWeekHours=(empId,weekDays)=>{
@@ -1480,7 +1486,8 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               const dayNum=dObj.getDate();
               const mo=dObj.getMonth()+1;
               const hn=getHolidayName(ds);
-              const isNextMonth=ds>period.end; // 翌月分（1〜15日）
+              const isOutOfPeriod=ds<period.start||ds>period.end; // 期間外（前月分 or 翌月15日超）
+              const isNextMonth=isOutOfPeriod;
               return <th key={ds} style={{padding:"4px 3px",textAlign:"center",borderBottom:"0.5px solid var(--color-border-tertiary)",fontWeight:400,color:dow===0||hn?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)",minWidth:52,borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":hn?"#FFF0F0":"inherit"}} title={hn||""}>
                 <div style={{fontSize:isNextMonth?9:undefined}}>{isNextMonth?mo+"/"+dayNum:dayNum}</div>
                 <div style={{fontSize:9}}>{hn?"祝":DOW_JP[dow]}</div>
@@ -1511,7 +1518,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const dayNum=dObj.getDate();
                     const mo=dObj.getMonth()+1;
                     const dow=dObj.getDay();
-                    const isNextMonth=ds>period.end; // 翌月分
+                    const isNextMonth=ds<period.start||ds>period.end; // 期間外
                     const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
                     const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
                     const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
@@ -1563,7 +1570,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                   const dObj=new Date(ds);
                   const dow=dObj.getDay();
                   const mo=dObj.getMonth()+1;
-                  const isNextMonth=ds>period.end; // 翌月分
+                  const isNextMonth=ds<period.start||ds>period.end; // 期間外
                   const cnt=calcSlotCount(ds,slot);
                   return <td key={ds} style={{padding:"4px 2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":"inherit"}}>
                     <div style={{fontSize:13,fontWeight:600,color:isNextMonth?"#d1d5db":cnt===0?"#d1d5db":cnt<=2?"#854F0B":"#1251a3"}}>{isNextMonth?"":cnt}</div>
