@@ -1223,8 +1223,23 @@ function ShiftDefManager({shiftDefsData,reload,limitDepts=null,onSavingChange=nu
 
 // ── ShiftCalendar ─────────────────────────────────────────────────────────────
 function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRoles:initLeadRoles=null,lvReqs=[],onGotoShiftSetting=null,onGotoPattern=null}){
-  const [year,setYear]=useState(new Date().getFullYear());
-  const [month,setMonth]=useState(new Date().getMonth()+1);
+  const cur0=getCurrentPeriod();
+  const [periodYear,setPeriodYear]=useState(cur0.year);
+  const [periodMonth,setPeriodMonth]=useState(cur0.month);
+  const period=getPeriodRange(periodYear,periodMonth);
+  // 期間内の全日付を生成（前月16日〜当月15日）
+  const periodDays=(()=>{
+    const days=[];
+    let cur=new Date(period.start);
+    const endD=new Date(period.end);
+    while(cur<=endD){
+      days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
+      cur.setDate(cur.getDate()+1);
+    }
+    return days;
+  })();
+  const year=periodYear;
+  const month=periodMonth;
   const [tooltip,setTooltip]=useState(null); // {x,y,lines[]}
   // localEdits: ローカルで編集中の差分 key:"empId_date" → shiftType
   const [localEdits,setLocalEdits]=useState({});
@@ -1266,6 +1281,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   const getEmpShiftDefs=emp=>getShiftDefsByRole(emp.role,shiftDefsData);
   const currentShiftDefs=currentDept?getShiftDefsByDept(currentDept,shiftDefsData):getShiftDefsByDept("理学療法士",shiftDefsData);
   const [selectedShift,setSelectedShift]=useState(Object.keys(currentShiftDefs)[0]||"day");
+  // periodDaysを使用するのでlast/daysは参照用のみ残す
   const last=daysInMonth(year,month),days=Array.from({length:last},(_,i)=>i+1);
 
   const getShift=(empId,d)=>{
@@ -1273,14 +1289,12 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     return shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
   };
   // セルクリック：ローカルに記録するだけ（GAS呼び出しなし）
-  const setCell=(empId,d)=>{
-    const ds=`${year}-${pad(month)}-${pad(d)}`;
+  const setCell=(empId,ds)=>{
     // 承認済み有休がある日はロック
     const lockedByLeave=lvReqs.some(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
     if(lockedByLeave){alert("この日は有休が承認済みのためシフト変更できません。\n有給管理から承認済み有休を取り消してください。");return;}
     const key=String(empId)+"_"+ds;
     const current=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
-    // 同じシフトをクリックしたらoffに（トグル）
     const next=current===selectedShift?"off":selectedShift;
     setLocalEdits(prev=>({...prev,[key]:next}));
   };
@@ -1341,52 +1355,31 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     setLocalEdits({});
     changeFn();
   };
-  const prevM=()=>confirmAndChange(()=>{if(month===1){fetchHolidays(year-1);setYear(y=>y-1);setMonth(12);}else setMonth(m=>m-1);});
-  const nextM=()=>confirmAndChange(()=>{if(month===12){fetchHolidays(year+1);setYear(y=>y+1);setMonth(1);}else setMonth(m=>m+1);});
-  // 週グループ（月曜始まり）
-  // 先月末の「今月1日が含まれる週」の月曜〜前月末までの日（マイナス日付で管理）
-  const firstDowOfMonth=new Date(year,month-1,1).getDay(); // 0=日,1=月...
-  // 月曜起算で今月1日の前にある日数（先月分）
-  const prevDaysCount=firstDowOfMonth===0?6:firstDowOfMonth-1; // 月曜=0日前, 火曜=1日前...
-  const prevYear=month===1?year-1:year;
-  const prevMonth=month===1?12:month-1;
-  const prevMonthLast=daysInMonth(prevYear,prevMonth);
-  // 先月末からprevDaysCount日分をマイナスオフセットで管理（-1から始まる）
-  const prevDays=prevDaysCount>0?Array.from({length:prevDaysCount},(_,i)=>-(prevDaysCount-i)):[];
-  // prevDaysを含めた全日
-  const allDays=[...prevDays,...days];
-  const weekGroups=[];
-  let wk=[];
-  allDays.forEach(d=>{
-    wk.push(d);
-    const actualDate=d<0?prevMonthLast+d+1:d;
-    const actualYear=d<0?prevYear:year;
-    const actualMonth=d<0?prevMonth:month;
-    const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
-    if(dow===0||(d>0&&d===last)){weekGroups.push([...wk]);wk=[];}
+  const prevM=()=>confirmAndChange(()=>{
+    if(periodMonth===1){fetchHolidays(periodYear-1);setPeriodYear(y=>y-1);setPeriodMonth(12);}
+    else setPeriodMonth(m=>m-1);
   });
-  // 第1週が月曜始まりでない場合の週合計合算
-  // 表示はweekGroupsそのまま、合計計算のみ第1週と最終週を合算
-  const mergedWeekGroups=weekGroups; // 表示はそのまま
-  const getWeekHoursGroup=(empId,wi)=>{
-    // 第1週が先月末のみで、最終週と合算する場合
-    const firstWeek=weekGroups[0];
-    const hasCurrentMonth=firstWeek.some(d=>d>0);
-    if(!hasCurrentMonth&&(wi===0||wi===weekGroups.length-1)){
-      // 第1週または最終週の場合、両方合算して返す
-      const combinedDays=[...firstWeek,...weekGroups[weekGroups.length-1]];
-      return calcWeekHours(empId,combinedDays);
-    }
-    return calcWeekHours(empId,weekGroups[wi]);
-  };
+  const nextM=()=>confirmAndChange(()=>{
+    if(periodMonth===12){fetchHolidays(periodYear+1);setPeriodYear(y=>y+1);setPeriodMonth(1);}
+    else setPeriodMonth(m=>m+1);
+  });
+  // 週グループ（16日〜翌月15日、月曜始まり）
+  const weekGroups=(()=>{
+    const groups=[];
+    let wk=[];
+    periodDays.forEach(ds=>{
+      wk.push(ds);
+      const dow=new Date(ds).getDay();
+      if(dow===0||ds===periodDays[periodDays.length-1]){groups.push([...wk]);wk=[];}
+    });
+    return groups;
+  })();
+  const mergedWeekGroups=weekGroups;
+  const getWeekHoursGroup=(empId,wi)=>calcWeekHours(empId,weekGroups[wi]);
   const calcWeekHours=(empId,weekDays)=>{
     const emp=emps.find(e=>String(e.id)===String(empId));
     const empDefs=getEmpShiftDefs(emp||{role:"理学療法士"});
-    return weekDays.reduce((sum,d)=>{
-      const actualDate=d<0?prevMonthLast+d+1:d;
-      const actualYear=d<0?prevYear:year;
-      const actualMonth=d<0?prevMonth:month;
-      const ds=`${actualYear}-${pad(actualMonth)}-${pad(actualDate)}`;
+    return weekDays.reduce((sum,ds)=>{
       const st=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
       const def=empDefs[st];
       if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; return sum+Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
@@ -1394,9 +1387,10 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     },0);
   };
   // 時間帯別在席人数（選択職種の全従業員）
-  const calcSlotCount=(d,slot)=>{
+  const calcSlotCount=(ds,slot)=>{
     return slotEmps.filter(emp=>{
-      const st=getShift(emp.id,d); const def=getEmpShiftDefs(emp)[st];
+      const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
+      const def=getEmpShiftDefs(emp)[st];
       return coversSlot(def,slot);
     }).length;
   };
@@ -1412,7 +1406,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     </div>}
     {/* ツールバー：1段目（月ナビ・保存・職種） */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"nowrap",minHeight:38}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:15,fontWeight:500}}>{year}年{month}月</span><button onClick={nextM} style={bS}>›</button></div>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><button onClick={prevM} style={bS}>‹</button><span style={{fontSize:14,fontWeight:500}}>{period.label}</span><button onClick={nextM} style={bS}>›</button></div>
       <button onClick={saveAll} disabled={!hasEdits||saving} style={{...bP,padding:"6px 14px",fontSize:12,flexShrink:0,background:saving?"#6b7280":hasEdits?"#1251a3":"#9ca3af",opacity:(!hasEdits||saving)?0.4:1,cursor:hasEdits&&!saving?"pointer":"default"}}>{saving?(saveMsg||"保存中..."):hasEdits?"シフト保存 ("+Object.keys(localEdits).length+"件)":"シフト保存"}</button>
       <button onClick={()=>setLocalEdits({})} disabled={!hasEdits} style={{...bS,padding:"6px 12px",fontSize:12,flexShrink:0,color:hasEdits?"#A32D2D":"var(--color-text-tertiary)",borderColor:hasEdits?"#F09595":"var(--color-border-secondary)",opacity:hasEdits?1:0.4,cursor:hasEdits?"pointer":"default"}}>変更を破棄</button>
       <div style={{display:"flex",gap:4,flexWrap:"nowrap",overflowX:"auto"}}>
@@ -1467,16 +1461,15 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
         <thead><tr>
           <th style={{...thS,minWidth:120,position:"sticky",left:0,zIndex:2,background:"#fef9f3"}}>従業員</th>
           {mergedWeekGroups.map((wk,wi)=>[
-            ...wk.map(d=>{
-              const actualDate=d<0?prevMonthLast+d+1:d;
-              const actualYear=d<0?prevYear:year;
-              const actualMonth=d<0?prevMonth:month;
-              const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
-              const ds=`${actualYear}-${pad(actualMonth)}-${pad(actualDate)}`;
+            ...wk.map(ds=>{
+              const dObj=new Date(ds);
+              const dow=dObj.getDay();
+              const dayNum=dObj.getDate();
+              const mo=dObj.getMonth()+1;
               const hn=getHolidayName(ds);
-              const isPrev=d<0;
-              return <th key={d} style={{padding:"4px 3px",textAlign:"center",borderBottom:"0.5px solid var(--color-border-tertiary)",fontWeight:400,color:isPrev?"#c0c0c0":dow===0||hn?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)",minWidth:52,borderLeft:dow===1?"2px solid #d1d5db":"none",background:isPrev?"#f5f5f5":hn?"#FFF0F0":"inherit"}} title={hn||""}>
-                <div style={{fontSize:isPrev?9:undefined}}>{isPrev?prevMonth+"/"+actualDate:actualDate}</div>
+              const isNextMonth=mo!==Number(period.start.slice(5,7)); // 翌月分（1〜15日）
+              return <th key={ds} style={{padding:"4px 3px",textAlign:"center",borderBottom:"0.5px solid var(--color-border-tertiary)",fontWeight:400,color:dow===0||hn?"#A32D2D":dow===6?"#185FA5":"var(--color-text-secondary)",minWidth:52,borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":hn?"#FFF0F0":"inherit"}} title={hn||""}>
+                <div style={{fontSize:isNextMonth?9:undefined}}>{isNextMonth?mo+"/"+dayNum:dayNum}</div>
                 <div style={{fontSize:9}}>{hn?"祝":DOW_JP[dow]}</div>
               </th>;
             }),
@@ -1500,13 +1493,13 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                 const over=weekLimit&&(wMins/60)>weekLimit;
                 const near=weekLimit&&!over&&(wMins/60)>weekLimit*0.9;
                 return [
-                  ...wk.map(d=>{
-                    const actualDate=d<0?prevMonthLast+d+1:d;
-                    const actualYear=d<0?prevYear:year;
-                    const actualMonth=d<0?prevMonth:month;
-                    const ds=`${actualYear}-${pad(actualMonth)}-${pad(actualDate)}`;
+                  ...wk.map(ds=>{
+                    const dObj=new Date(ds);
+                    const dayNum=dObj.getDate();
+                    const mo=dObj.getMonth()+1;
+                    const dow=dObj.getDay();
+                    const isNextMonth=mo!==Number(period.start.slice(5,7));
                     const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
-                    // leave_pm/leave_amの場合はleave_pm/leave_am定義を使う（なければoff）
                     const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
                     const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
                     const def=isLeavePmShift(st)
@@ -1514,16 +1507,13 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       :isLeaveAmShift(st)
                         ?(empShiftDefs?.["leave_am"]||empShiftDefs?.off||SHIFT_DEFS.off)
                         :(empShiftDefs?.[st]||empShiftDefs?.off||SHIFT_DEFS.off);
-                    const isPrev=d<0;
-                    const clickable=!!roleFilter&&!isPrev;
-                    const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
-                    // 有休申請の状態を取得（承認済み・承認待ち）
-                    const lvReq=!isPrev?lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending")):null;
-                    const isLocked=!isPrev&&lvReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+                    const clickable=!!roleFilter;
+                    const lvReq=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending"));
+                    const isLocked=lvReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
                     const lvBadge=lvReq?(lvReq.status==="approved"
                       ?{label:"承認済",bg:"#0F6E56",tc:"#fff"}
                       :{label:"申請中",bg:"#854F0B",tc:"#fff"})
-                      :(isAnyLeaveShift(getShift(emp.id,actualDate))?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
+                      :(isAnyLeaveShift(st)?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
                     const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"全日";
                     const tooltipLines=lvReq?[
                       `📅 ${lvReq.date}`,
@@ -1531,10 +1521,10 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       `理由：${lvReq.reason||"―"}`,
                       `状態：${lvReq.status==="approved"?"✅ 承認済み":"⏳ 承認待ち"}`,
                     ]:[];
-                    const isHol=!isPrev&&!!getHolidayName(ds);
-                    return <td key={d} style={{padding:"2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",cursor:isLocked?"not-allowed":clickable?"pointer":"default",userSelect:"none",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isLocked?"#F0FAF5":isPrev?"#f5f5f5":isHol?"#FFF0F0":"inherit"}} onClick={()=>clickable&&setCell(emp.id,d)}>
+                    const isHol=!!getHolidayName(ds);
+                    return <td key={ds} style={{padding:"2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",cursor:isLocked?"not-allowed":clickable?"pointer":"default",userSelect:"none",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isLocked?"#F0FAF5":isNextMonth?"#f5f5f5":isHol?"#FFF0F0":"inherit"}} onClick={()=>clickable&&!isLocked&&setCell(emp.id,ds)}>
                       <div style={{position:"relative",display:"inline-block",width:"100%"}}>
-                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"3px 4px",fontSize:isPrev?11:15,minWidth:isPrev?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isPrev?0.5:1}}>{isHalfLeave?halfLeaveLabel:def.label}</div>
+                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"3px 4px",fontSize:isNextMonth?11:15,minWidth:isNextMonth?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isNextMonth?0.5:1}}>{isHalfLeave?halfLeaveLabel:def.label}</div>
                         {lvBadge&&<div
                           style={{position:"absolute",top:-4,right:-2,background:lvBadge.bg,color:lvBadge.tc,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:99,whiteSpace:"nowrap",lineHeight:1.4,boxShadow:"0 1px 3px rgba(0,0,0,0.25)",cursor:"default",zIndex:1}}
                           onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();setTooltip({x:r.left,y:r.bottom+6,lines:tooltipLines});}}
@@ -1556,14 +1546,14 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
             <tr key={"slot"+si} style={{background:"#fef9f3",borderTop:si===0?"2px solid #e9ddd0":"none"}}>
               <td style={{padding:"4px 10px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:12,fontWeight:600,color:"#4b5563",whiteSpace:"nowrap",position:"sticky",left:0,background:"#fef9f3",zIndex:1}}>{slot.label}</td>
               {mergedWeekGroups.map((wk,wi)=>[
-                ...wk.map(d=>{
-                  const actualDate=d<0?prevMonthLast+d+1:d;
-                  const actualYear=d<0?prevYear:year;
-                  const actualMonth=d<0?prevMonth:month;
-                  const cnt=d>0?calcSlotCount(d,slot):0;
-                  const dow=new Date(actualYear,actualMonth-1,actualDate).getDay();
-                  return <td key={d} style={{padding:"4px 2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:dow===1?"2px solid #d1d5db":"none",background:d<0?"#f5f5f5":"inherit"}}>
-                    <div style={{fontSize:13,fontWeight:600,color:d<0?"#d1d5db":cnt===0?"#d1d5db":cnt<=2?"#854F0B":"#1251a3"}}>{d<0?"":cnt}</div>
+                ...wk.map(ds=>{
+                  const dObj=new Date(ds);
+                  const dow=dObj.getDay();
+                  const mo=dObj.getMonth()+1;
+                  const isNextMonth=mo!==Number(period.start.slice(5,7));
+                  const cnt=calcSlotCount(ds,slot);
+                  return <td key={ds} style={{padding:"4px 2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isNextMonth?"#f5f5f5":"inherit"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:isNextMonth?"#d1d5db":cnt===0?"#d1d5db":cnt<=2?"#854F0B":"#1251a3"}}>{isNextMonth?"":cnt}</div>
                   </td>;
                 }),
                 <td key={"w"+wi+"s"+si} style={{borderLeft:"2px solid #1251a3",background:"#f0f4ff",borderBottom:"0.5px solid var(--color-border-tertiary)"}}/>
