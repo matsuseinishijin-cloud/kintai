@@ -237,7 +237,7 @@ const getShiftDefsByDept = (dept, shiftDefsData) => {
 const OT_RULES = {
   "医療事務_正社員":       { type:"round", roundMin:15 },
   "医療事務_パート":       { type:"round", roundMin:10 },
-  "理学療法士_正社員":     { type:"overtime_request", limitH:20, roundMin:15 },
+  "理学療法士_正社員":     { type:"round", roundMin:15 }, // 残業は15分切り捨て・時間外は週シフト超過で別途計上
   "理学療法士_パート":     { type:"approval", capMin:10 },
   "リハマネ_正社員":       { type:"round", roundMin:10 },
   "リハマネ_パート":       { type:"round", roundMin:10 },
@@ -2698,9 +2698,9 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   const ttBOTAdjMin=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="B"&&r.status==="approved"&&periodDays.includes(r.overDate)).reduce((s,r)=>s+Number(r.offsetMin||0),0);
 
   // 時間外計算（理学療法士正社員・weeklyLimit<40のみ）
-  const showOvertimeCell=emp?.role==="理学療法士"&&emp?.type==="正社員"&&emp?.weeklyLimit&&Number(emp.weeklyLimit)<40;
+  const showOvertimeCell=emp?.role==="理学療法士"&&emp?.type==="正社員"&&!!emp?.weeklyLimit;
   const overtimeMin=(()=>{
-    if(!showOvertimeCell||!emp?.weeklyLimit) return 0;
+    if(!showOvertimeCell||!emp?.weeklyLimit||emp?.role!=="理学療法士") return 0;
     const wLimit=Number(emp.weeklyLimit)*60;
     const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
     // 週ごとにシフト定義合計を計算
@@ -2736,20 +2736,18 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     });
     return Math.max(0,total);
   })();
-  const isFixedOT=rule.type==="fixed"||rule.type==="overtime_request";
+  const isFixedOT=rule.type==="fixed";
   const otAlert=isFixedOT&&tO>(rule.limitH||20)*60;
 
-  // 理学療法士正社員：時間外申請済みの残業時間と未申請の残業時間を分離
-  const approvedOTMin=rule.type==="overtime_request"
-    ?rows.reduce((s,r)=>s+(r.approvedOTReq?r.otMin:0),0):0;
-  const unapprovedOTMin=rule.type==="overtime_request"
-    ?rows.reduce((s,r)=>s+(!r.approvedOTReq&&r.otMin>0?r.otMin:0),0):0;
-  const unapprovedAlert=rule.type==="overtime_request"&&unapprovedOTMin>(rule.limitH||20)*60;
+  // 理学療法士正社員：残業（打刻超過）・時間外（週シフト超過）は別管理
+  const approvedOTMin=0; // overtime_requestタイプ廃止
+  const unapprovedOTMin=0;
+  const unapprovedAlert=false;
 
   // 週超過残業の計算（理学療法士正社員・週上限時間設定あり）
   const weekLimit=emp?.weekLimit?Number(emp.weekLimit):null;
   const weeklyOT=(()=>{
-    if(!weekLimit||rule.type!=="overtime_request") return 0;
+    if(!weekLimit||emp?.role!=="理学療法士"||emp?.type!=="正社員") return 0;
     const weekMap={};
     rows.forEach(r=>{
       const weekStart=new Date(r.ds); // r.dsから直接生成（月ズレ防止）
@@ -2834,11 +2832,9 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {rule.type!=="round"&&rule.type!=="none"&&<span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>}
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
         {rule.type!=="round"&&rule.type!=="none"&&<span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>}
-        {rule.type==="overtime_request"&&<span>時間外申請済：<strong style={{color:"#185FA5"}}>{toHStr(approvedOTMin)}</strong></span>}
-        {rule.type==="overtime_request"&&unapprovedOTMin>0&&<span>未申請残業：<strong style={{color:"#A32D2D"}}>{toHStr(unapprovedOTMin)}</strong></span>}
-        {weeklyOT>0&&<span>週超過：<strong style={{color:"#854F0B"}}>{toHStr(weeklyOT)}</strong></span>}
+        {showOvertimeCell&&<span>時間外（週超過）：<strong style={{color:overtimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{overtimeMin>0?toHStr(overtimeMin):"―"}</strong></span>}
+        {weeklyOT>0&&<span>週超過（未申請）：<strong style={{color:"#A32D2D"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
-        {unapprovedAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 未申請残業が月{rule.limitH}h超過</span>}
       </div>
     </div>}
     <div style={{...crd,overflow:"hidden"}}>
