@@ -1891,31 +1891,67 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
           ))}
         </div>
       </div>}
-      {/* 右カード：期間別取得日数 */}
+      {/* 右カード：付与・取得履歴 */}
       <div style={{...crd,overflow:"hidden",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span>期間別取得日数<span style={{fontSize:11,fontWeight:400,color:"var(--color-text-tertiary)",marginLeft:6}}>（15日締め）</span></span>
-          <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>合計 <strong style={{color:"#1251a3"}}>{totalUsedAll}日</strong></span>
+          <span>付与・取得履歴</span>
+          <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>合計取得 <strong style={{color:"#1251a3"}}>{totalUsedAll}日</strong></span>
         </div>
-        <div style={{overflowY:"auto",maxHeight:460}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr>
-              <th style={{...thS,position:"sticky",top:0,zIndex:1}}>期間</th>
-              <th style={{...thS,textAlign:"right",position:"sticky",top:0,zIndex:1}}>取得</th>
-            </tr></thead>
-            <tbody>{periodHistory.map((p,i)=>(
-              <tr key={i} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:p.isNext?"#FAFAFA":p.isCurrent?"#F0F4FF":""}}>
-                <td style={{...tdS,fontSize:11}}>
-                  {p.isNext&&<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:"#854F0B",color:"#fff",marginRight:5}}>来月</span>}
-                  {p.isCurrent&&<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:"#1251a3",color:"#fff",marginRight:5}}>当月</span>}
-                  {p.label}
-                </td>
-                <td style={{...tdS,textAlign:"right",fontWeight:p.used>0?700:400,color:p.used>0?"#1251a3":"var(--color-text-tertiary)"}}>
-                  {p.used>0?p.used+"日":"―"}
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
+        <div style={{overflowY:"auto",maxHeight:460,padding:"8px 0"}}>
+          {allBuckets.length===0
+            ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>付与履歴がありません</div>
+            :allBuckets.slice().reverse().map(b=>{
+              const isExpired=b.expiresAt<td;
+              // このバケツに紐づく承認済み取得申請（取得日昇順）
+              const bucketReqs=(lvReqs||[])
+                .filter(r=>String(r.empId)===String(sel)&&r.status==="approved")
+                .sort((a,b2)=>a.date<b2.date?-1:1);
+              // バケツへの消化割り当てをシミュレート（calcBucketsWithRemainingと同じLIFOロジック）
+              // このバケツに消化された申請を特定するため全バケツで再計算
+              const bucketsCalc=calcBucketsWithRemaining(leave?.records,lvReqs,sel);
+              const thisBucket=bucketsCalc.find(bc=>bc.id===b.id);
+              const usedDays=thisBucket?b.days-thisBucket.remaining:0;
+              return <div key={b.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",padding:"8px 14px",opacity:isExpired?0.7:1}}>
+                {/* バケツヘッダー */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <div>
+                    <span style={{fontSize:12,fontWeight:700,color:"#1251a3"}}>{b.grantedAt}付与</span>
+                    <span style={{fontSize:11,color:"var(--color-text-secondary)",marginLeft:8}}>{b.days}日</span>
+                    {b.note&&<span style={{fontSize:10,color:"var(--color-text-tertiary)",marginLeft:6}}>（{b.note}）</span>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:isExpired?"#A32D2D":thisBucket?.remaining===0?"#854F0B":"#3B6D11"}}>{thisBucket?.remaining??b.days}日残</span>
+                    {isExpired&&<span style={{marginLeft:6,fontSize:10,color:"#A32D2D",background:"#FCEBEB",padding:"1px 5px",borderRadius:4}}>失効</span>}
+                    <div style={{fontSize:10,color:isExpired?"#A32D2D":b.expiresAt<addDays(td,30)?"#854F0B":"var(--color-text-tertiary)"}}>期限：{b.expiresAt}</div>
+                  </div>
+                </div>
+                {/* 取得申請一覧（このバケツから消化された分） */}
+                {bucketReqs.filter(r=>{
+                  // 取得日時点でこのバケツが有効かチェック
+                  return b.grantedAt<=r.date&&b.expiresAt>=r.date;
+                }).length===0
+                  ?<div style={{fontSize:11,color:"var(--color-text-tertiary)",padding:"4px 0 0 8px"}}>取得なし</div>
+                  :<div style={{marginTop:4}}>
+                    {bucketReqs.filter(r=>b.grantedAt<=r.date&&b.expiresAt>=r.date).map(r=>{
+                      const halfLabel=r.half==="am"?"午前休":r.half==="pm"?"午後休":"全日";
+                      const days=r.half?0.5:1.0;
+                      return <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0 3px 8px",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                        <div style={{fontSize:11}}>
+                          <span style={{color:"var(--color-text-secondary)"}}>{r.date}</span>
+                          <span style={{marginLeft:6,padding:"1px 5px",borderRadius:4,background:"#E1F5EE",color:"#0F6E56",fontSize:10,fontWeight:600}}>{halfLabel}</span>
+                          <span style={{marginLeft:6,color:"var(--color-text-tertiary)"}}>{r.reason||"―"}</span>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:11,fontWeight:600,color:"#1251a3"}}>{days}日</span>
+                          <button onClick={()=>cancelApproved(r.id)} style={{padding:"2px 8px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer",fontWeight:500}}>取消</button>
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+                }
+              </div>;
+            })
+          }
         </div>
       </div>
     </div>
