@@ -1922,57 +1922,74 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
         <div style={{overflowY:"auto",maxHeight:460,padding:"8px 0"}}>
           {allBuckets.length===0
             ?<div style={{padding:"1.5rem",textAlign:"center",color:"var(--color-text-tertiary)",fontSize:13}}>付与履歴がありません</div>
-            :allBuckets.slice().reverse().map(b=>{
-              const isExpired=b.expiresAt<td;
-              // このバケツに紐づく承認済み取得申請（取得日昇順）
-              const bucketReqs=(lvReqs||[])
+            :(()=>{
+              // LIFOロジックで各申請をバケツに割り当て
+              const approvedReqs=(lvReqs||[])
                 .filter(r=>String(r.empId)===String(sel)&&r.status==="approved")
                 .sort((a,b2)=>a.date<b2.date?-1:1);
-              // バケツへの消化割り当てをシミュレート（calcBucketsWithRemainingと同じLIFOロジック）
-              // このバケツに消化された申請を特定するため全バケツで再計算
-              const bucketsCalc=calcBucketsWithRemaining(leave?.records,lvReqs,sel);
-              const thisBucket=bucketsCalc.find(bc=>bc.id===b.id);
-              const usedDays=thisBucket?b.days-thisBucket.remaining:0;
-              return <div key={b.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",padding:"8px 14px",opacity:isExpired?0.7:1}}>
-                {/* バケツヘッダー */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                  <div>
-                    <span style={{fontSize:12,fontWeight:700,color:"#1251a3"}}>{b.grantedAt}付与</span>
-                    <span style={{fontSize:11,color:"var(--color-text-secondary)",marginLeft:8}}>{b.days}日</span>
-                    {b.note&&<span style={{fontSize:10,color:"var(--color-text-tertiary)",marginLeft:6}}>（{b.note}）</span>}
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <span style={{fontSize:12,fontWeight:700,color:isExpired?"#A32D2D":thisBucket?.remaining===0?"#854F0B":"#3B6D11"}}>{thisBucket?.remaining??b.days}日残</span>
-                    {isExpired&&<span style={{marginLeft:6,fontSize:10,color:"#A32D2D",background:"#FCEBEB",padding:"1px 5px",borderRadius:4}}>失効</span>}
-                    <div style={{fontSize:10,color:isExpired?"#A32D2D":b.expiresAt<addDays(td,30)?"#854F0B":"var(--color-text-tertiary)"}}>期限：{b.expiresAt}</div>
-                  </div>
-                </div>
-                {/* 取得申請一覧（このバケツから消化された分） */}
-                {bucketReqs.filter(r=>{
-                  // 取得日時点でこのバケツが有効かチェック
-                  return b.grantedAt<=r.date&&b.expiresAt>=r.date;
-                }).length===0
-                  ?<div style={{fontSize:11,color:"var(--color-text-tertiary)",padding:"4px 0 0 8px"}}>取得なし</div>
-                  :<div style={{marginTop:4}}>
-                    {bucketReqs.filter(r=>b.grantedAt<=r.date&&b.expiresAt>=r.date).map(r=>{
-                      const halfLabel=r.half==="am"?"午前休":r.half==="pm"?"午後休":"全日";
-                      const days=r.half?0.5:1.0;
-                      return <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0 3px 8px",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
-                        <div style={{fontSize:11}}>
-                          <span style={{color:"var(--color-text-secondary)"}}>{r.date}</span>
-                          <span style={{marginLeft:6,padding:"1px 5px",borderRadius:4,background:"#E1F5EE",color:"#0F6E56",fontSize:10,fontWeight:600}}>{halfLabel}</span>
-                          <span style={{marginLeft:6,color:"var(--color-text-tertiary)"}}>{r.reason||"―"}</span>
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:11,fontWeight:600,color:"#1251a3"}}>{days}日</span>
-                          <button onClick={()=>cancelApproved(r.id)} style={{padding:"2px 8px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer",fontWeight:500}}>取消</button>
-                        </div>
-                      </div>;
-                    })}
-                  </div>
+              // バケツごとに消化された申請IDを記録
+              const bucketAssign={}; // bucketId -> [reqId]
+              const reqConsumed={}; // reqId -> {bucketId, consume}
+              const bucketRemaining={};
+              allBuckets.forEach(b=>{bucketRemaining[b.id]=b.days;bucketAssign[b.id]=[];});
+              approvedReqs.forEach(r=>{
+                const days=r.half?0.5:1.0;
+                let toConsume=days;
+                // 取得日時点で有効なバケツをLIFO（新しい順）で消化
+                const validBuckets=[...allBuckets]
+                  .filter(b=>b.grantedAt<=r.date&&b.expiresAt>=r.date)
+                  .sort((a,b2)=>a.grantedAt<b2.grantedAt?1:-1);
+                for(const b of validBuckets){
+                  if(bucketRemaining[b.id]<=0) continue;
+                  const consume=Math.min(toConsume,bucketRemaining[b.id]);
+                  bucketRemaining[b.id]-=consume;
+                  bucketAssign[b.id].push(r.id);
+                  toConsume-=consume;
+                  if(toConsume<=0) break;
                 }
-              </div>;
-            })
+              });
+              return allBuckets.slice().reverse().map(b=>{
+                const isExpired=b.expiresAt<td;
+                const remaining=bucketRemaining[b.id]??b.days;
+                const assignedReqs=approvedReqs.filter(r=>bucketAssign[b.id]?.includes(r.id));
+                return <div key={b.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",padding:"8px 14px",opacity:isExpired?0.7:1}}>
+                  {/* バケツヘッダー */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div>
+                      <span style={{fontSize:12,fontWeight:700,color:"#1251a3"}}>{b.grantedAt}付与</span>
+                      <span style={{fontSize:11,color:"var(--color-text-secondary)",marginLeft:8}}>{b.days}日</span>
+                      {b.note&&<span style={{fontSize:10,color:"var(--color-text-tertiary)",marginLeft:6}}>（{b.note}）</span>}
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <span style={{fontSize:12,fontWeight:700,color:isExpired?"#A32D2D":remaining===0?"#854F0B":"#3B6D11"}}>{remaining}日残</span>
+                      {isExpired&&<span style={{marginLeft:6,fontSize:10,color:"#A32D2D",background:"#FCEBEB",padding:"1px 5px",borderRadius:4}}>失効</span>}
+                      <div style={{fontSize:10,color:isExpired?"#A32D2D":b.expiresAt<addDays(td,30)?"#854F0B":"var(--color-text-tertiary)"}}>期限：{b.expiresAt}</div>
+                    </div>
+                  </div>
+                  {/* 取得申請一覧（LIFOで割り当てられた申請のみ） */}
+                  {assignedReqs.length===0
+                    ?<div style={{fontSize:11,color:"var(--color-text-tertiary)",padding:"4px 0 0 8px"}}>取得なし</div>
+                    :<div style={{marginTop:4}}>
+                      {assignedReqs.map(r=>{
+                        const halfLabel=r.half==="am"?"午前休":r.half==="pm"?"午後休":"全日";
+                        const days=r.half?0.5:1.0;
+                        return <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0 3px 8px",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                          <div style={{fontSize:11}}>
+                            <span style={{color:"var(--color-text-secondary)"}}>{r.date}</span>
+                            <span style={{marginLeft:6,padding:"1px 5px",borderRadius:4,background:"#E1F5EE",color:"#0F6E56",fontSize:10,fontWeight:600}}>{halfLabel}</span>
+                            <span style={{marginLeft:6,color:"var(--color-text-tertiary)"}}>{r.reason||"―"}</span>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:11,fontWeight:600,color:"#1251a3"}}>{days}日</span>
+                            <button onClick={()=>cancelApproved(r.id)} style={{padding:"2px 8px",borderRadius:5,border:"1px solid #F09595",background:"#FFF5F5",color:"#A32D2D",fontSize:10,cursor:"pointer",fontWeight:500}}>取消</button>
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                  }
+                </div>;
+              });
+            })()
           }
         </div>
       </div>
@@ -2712,11 +2729,14 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const mon=new Date(d);mon.setDate(d.getDate()+diff);
       const wk=mon.toISOString().slice(0,10);
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-      const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+      const st=shiftRow?.shiftType||"off";
       if(!weekMap[wk]) weekMap[wk]=0;
-      if(def.start&&def.end){
-        const bk=def.breakMin!=null?Number(def.breakMin):0;
-        weekMap[wk]+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);
+      // 有休1日=480分、半休=240分としてカウント
+      if(st==="leave"){weekMap[wk]+=480;}
+      else if(st==="leave_am"||st==="leave_pm"){weekMap[wk]+=240;}
+      else{
+        const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
+        if(def.start&&def.end){const bk=def.breakMin!=null?Number(def.breakMin):0;weekMap[wk]+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);}
       }
     });
     // 週ごとの超過分を合算
@@ -3883,21 +3903,29 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
 
   // 週の月曜日を返す
   const getMondayOf=(ds)=>{
-    const d=new Date(ds);const dow=d.getDay();const diff=dow===0?-6:1-dow;
-    d.setDate(d.getDate()+diff);
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const [y,m,d]=ds.split("-").map(Number);
+    const date=new Date(y,m-1,d);
+    const dow=date.getDay();const diff=dow===0?-6:1-dow;
+    date.setDate(date.getDate()+diff);
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
   };
 
-  // 週のシフト合計時間（分）
+  // 週のシフト合計時間（分）タイムゾーン安全
+  // 有休1日=480分、半休=240分としてカウント
   const getWeekShiftMin=(weekStart)=>{
     if(!weekStart) return 0;
     const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
     let total=0;
+    const [wy,wm,wd]=weekStart.split("-").map(Number);
     for(let i=0;i<7;i++){
-      const d=new Date(weekStart);d.setDate(d.getDate()+i);
+      const d=new Date(wy,wm-1,wd+i);
       const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-      const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+      const st=shiftRow?.shiftType||"off";
+      // 有休シフトは固定時間でカウント
+      if(st==="leave") { total+=480; continue; }
+      if(st==="leave_am"||st==="leave_pm") { total+=240; continue; }
+      const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
       if(def.start&&def.end){const bk=def.breakMin!=null?Number(def.breakMin):0;total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);}
     }
     return total;
@@ -3909,10 +3937,10 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
     const opts=[];
     const now=new Date();
     const seen=new Set();
-    for(let mo=-2;mo<=0;mo++){
+    for(let mo=-2;mo<=1;mo++){  // 先々月〜翌月（当月末に翌週が含まれる場合対応）
       const raw=now.getMonth()+1+mo;
-      const y=raw<=0?now.getFullYear()-1:now.getFullYear();
-      const m=raw<=0?raw+12:raw;
+      const y=raw<=0?now.getFullYear()-1:raw>12?now.getFullYear()+1:now.getFullYear();
+      const m=raw<=0?raw+12:raw>12?raw-12:raw;
       const last=daysInMonth(y,m);
       for(let d=1;d<=last;d++){
         const ds=`${y}-${pad(m)}-${pad(d)}`;
