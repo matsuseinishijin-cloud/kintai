@@ -1748,8 +1748,8 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
         const d=r.date||r.grantedAt||"";
         return (r.type==="grant"||r.type==="cancel")&&d>=period.start&&d<=period.end;
       });
-      // 期間内の申請（承認待ち＋承認済み）
-      const periodReqs=lvReqs.filter(r=>r.date>=period.start&&r.date<=period.end&&(r.status==="pending"||r.status==="approved")).sort((a,b)=>a.date<b.date?-1:1);
+      // 期間内の申請（承認待ち＋承認済み）※対象従業員のみ
+      const periodReqs=lvReqs.filter(r=>String(r.empId)===String(emp.id)&&r.date>=period.start&&r.date<=period.end&&(r.status==="pending"||r.status==="approved")).sort((a,b)=>a.date<b.date?-1:1);
       // 付与レコードを日付付きオブジェクトに変換
       const grantRows=grantRecs.map(r=>({_type:"record",rec:r,date:r.date||r.grantedAt||""}));
       // 申請を行に変換
@@ -4288,11 +4288,12 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
   const isOTTarget=emp.role==="理学療法士"&&emp.type==="パート";
   const isOvertimeRequestTarget=rule.type==="overtime_request";
   const isSeishain=emp.type==="正社員";
+  const isEarlyTarget=(emp.role==="看護師"||emp.role==="医療事務")&&emp.type==="正社員";
   const sections=[
     ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
     ...(isOTTarget?[{key:"overtime",label:"残業申請"}]:[]),
     ...(isOvertimeRequestTarget?[{key:"overtime_request",label:"時間外申請"}]:[]),
-    {key:"early",label:"早出申請"},
+    ...(isEarlyTarget?[{key:"early",label:"早出申請"}]:[]),
     ...(isSeishain?[{key:"transfer",label:"振替申請"}]:[]),
     ...(isSeishain?[{key:"timetransfer",label:"時間振替申請"}]:[]),
     {key:"punchfix",label:"打刻修正申請"},
@@ -4312,7 +4313,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
-    {validSection==="early"&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
+    {validSection==="early"&&isEarlyTarget&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
