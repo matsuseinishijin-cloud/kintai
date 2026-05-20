@@ -3903,15 +3903,16 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
     return total;
   };
 
-  // 対象週の選択肢（当月・翌月で所定超過している週、タイプA/C申請済みは除外）
+  // 対象週の選択肢（先々月・先月・当月の3ヶ月分で所定超過している週、タイプA/C申請済みは除外）
   const weekOptions=(()=>{
     if(!weeklyLimit) return [];
     const opts=[];
     const now=new Date();
     const seen=new Set();
-    for(let mo=0;mo<=1;mo++){
-      const y=now.getMonth()+1+mo>12?now.getFullYear()+1:now.getFullYear();
-      const m=((now.getMonth()+mo)%12)+1;
+    for(let mo=-2;mo<=0;mo++){
+      const raw=now.getMonth()+1+mo;
+      const y=raw<=0?now.getFullYear()-1:now.getFullYear();
+      const m=raw<=0?raw+12:raw;
       const last=daysInMonth(y,m);
       for(let d=1;d<=last;d++){
         const ds=`${y}-${pad(m)}-${pad(d)}`;
