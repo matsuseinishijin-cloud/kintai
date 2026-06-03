@@ -2864,7 +2864,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       <div style={{display:"flex",gap:12,marginTop:10,fontSize:12,color:"var(--color-text-secondary)",flexWrap:"wrap",alignItems:"center"}}>
         {rule.type!=="round"&&rule.type!=="none"&&<span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>}
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
-        {rule.type!=="round"&&rule.type!=="none"&&<span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>}
+        {rule.type!=="round"&&rule.type!=="none"&&(emp?.role!=="理学療法士"||isAdmin)&&<span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>}
         {showOvertimeCell&&<span>時間外（週超過）：<strong style={{color:totalOvertimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{totalOvertimeMin>0?toHStr(totalOvertimeMin):"―"}</strong></span>}
         {weeklyOT>0&&<span>週超過（未申請）：<strong style={{color:"#A32D2D"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
@@ -5358,7 +5358,7 @@ function PunchHistory({emp,punches,shifts,otReqs,lvReqs,shiftDefsData,isAdmin=fa
       <button onClick={nextM} style={bS}>›</button>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:"1rem"}}>
-      {[["所定合計",toHStr(tS),""],["実働合計",toHStr(tA),""],["残業合計",toHStr(tO),tO>0?"#854F0B":""],["欠勤",abC+"日",abC>0?"#A32D2D":""]].map(([l,v,c])=>(
+      {[["所定合計",toHStr(tS),""],["実働合計",toHStr(tA),""],...(emp?.role!=="理学療法士"?[["残業合計",toHStr(tO),tO>0?"#854F0B":""]]:[]),(["欠勤",abC+"日",abC>0?"#A32D2D":""])].map(([l,v,c])=>(
         <div key={l} style={{background:"var(--color-background-secondary)",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
           <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{l}</div>
           <div style={{fontSize:18,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
