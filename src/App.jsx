@@ -4876,7 +4876,7 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
       {[
         ["出勤日数", totalDays+"日", ""],
         ["就労時間", totalWorkMin>0?toHStr(totalWorkMin):"―", ""],
-        ["残業", totalOtMin>0?toHStr(totalOtMin):"―", totalOtMin>0?"#854F0B":""],
+        // 理学療法士スタッフ画面では残業非表示
         ["遅刻", lateCount+"回", lateCount>0?"#854F0B":""],
         ["早出", earlyCount+"回", ""],
       ].map(([l,v,c])=>(
@@ -4890,7 +4890,7 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
     {/* 日別テーブル */}
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-        <thead><tr>{["日付","曜","シフト","出勤","就労時間","残業","遅刻","早出"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <thead><tr>{["日付","曜","シフト","出勤","就労時間","遅刻","早出"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
         <tbody>{rows.map(r=>{
           const dc=r.dow===0?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           if(r.isOff) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
@@ -4905,7 +4905,6 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
             <td style={tdS}><span style={{fontSize:11,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,textAlign:"center",fontSize:15}}>{r.attended?"○":"―"}</td>
             <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
-            <td style={{...tdS,color:r.otMin>0?"#854F0B":"var(--color-text-tertiary)"}}>{r.otMin>0?toHStr(r.otMin):"―"}</td>
             <td style={{...tdS,color:r.lateMin>0?"#854F0B":"var(--color-text-tertiary)"}}>{r.lateMin>0?r.lateMin+"分":"―"}</td>
             <td style={{...tdS,color:r.earlyMin>0?"#3B6D11":"var(--color-text-tertiary)"}}>{r.earlyMin>0?r.earlyMin+"分":"―"}</td>
           </tr>;
