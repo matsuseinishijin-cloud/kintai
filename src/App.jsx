@@ -2826,7 +2826,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>勤務日数</div>
                 <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{attendDays}日</div>
               </div>
-              {(isAdmin||!(emp?.role==="理学療法士"&&emp?.type==="正社員"))&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+              {(isAdmin&&!(emp?.role==="理学療法士"&&emp?.type==="正社員"))&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
                 <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin-ttBOTAdjMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin-ttBOTAdjMin)>0?toHStr(tO+scOTMin-ttBOTAdjMin):"―"}</div>
                 {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
@@ -2904,7 +2904,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           else if(r.isLeave){
             badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
             // 有休日でも残業がある場合は残業バッジを追加
-            if(!ttBOver&&r.otMin>0&&(isAdmin||!(emp?.role==="理学療法士"&&emp?.type==="正社員"))) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+            if(!ttBOver&&r.otMin>0&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
           }
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
@@ -2933,7 +2933,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               const shortDs=ttBOver.shortDate;
               const shortM=shortDs?shortDs.slice(5).replace("-","/"):"";
               badges.push(<Badge key="ttbo" label={`勤怠調整（${shortM}から振替${toHStr(Number(ttBOver.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
-            } else if(r.otMin>0&&!ttBOver&&(isAdmin||!(emp?.role==="理学療法士"&&emp?.type==="正社員"))){
+            } else if(r.otMin>0&&!ttBOver&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)){
               badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
             }
             if(!ttBShort&&r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
