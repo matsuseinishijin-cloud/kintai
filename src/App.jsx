@@ -489,7 +489,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       const im=toMin(punch.in),om=toMin(punch.out);
       awMin=Math.max(0,om-im);
       if(im>shiftStartMin+1) late=true;
-      if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+      if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
       const rawOt=Math.max(0,om-shiftEndMin);
       otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
       diffMin=om-shiftEndMin;
@@ -527,7 +527,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
       if(!isOff&&def.start){
         if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+        if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
         diffMin=om-shiftEndMin;
       } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
     } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
@@ -2120,7 +2120,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
         if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+        if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
         const rawOt=Math.max(0,om-shiftEndMin);
         otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
         diffMin=om-shiftEndMin;
@@ -2141,7 +2141,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
         if(!isOff&&def.start){
           if(im>shiftStartMin+1) late=true;
-          if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+          if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
           diffMin=om-shiftEndMin;
         } else { otMin=0; awMin=0; } // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
@@ -2642,7 +2642,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
         if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}
+        if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
         const rawOt=Math.max(0,om-shiftEndMin);
         otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
         diffMin=om-shiftEndMin;
@@ -2657,7 +2657,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
         else otMin=rawOtMin;
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
-        if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;earlyLeaveMin=shiftEndMin-om;}diffMin=om-shiftEndMin;}
+        if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}diffMin=om-shiftEndMin;}
         else{otMin=0;awMin=0;} // シフトなし打刻は残業・実働計上しない
       } else if(!isOff&&!isLeave&&!missingOut&&!missingIn) absent=true;
       const isOffPunch=isOff&&!!(punch?.in||punch?.out)&&!isHalfLeaveWithTime&&!isLeave;
