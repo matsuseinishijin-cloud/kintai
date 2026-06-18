@@ -498,30 +498,31 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       const im=toMin(punch.in), om=toMin(punch.out);
       let imForWork=im;
 
-      // 早出処理（全職種共通）：承認済みなら残業に組み入れ
+      // 早出処理（全職種共通）：承認済みなら申請開始時刻基準で残業に組み入れ
       let earlyApprovedMin=0;
       if(!isOff&&def.start&&im<shiftStartMin){
         if(approvedEarlyReq){
           imForWork=shiftStartMin;
           earlyAdj=false;
-          earlyApprovedMin=shiftStartMin-im;
+          const reqStartMin=approvedEarlyReq.requestedEnd?toMin(approvedEarlyReq.requestedEnd):im;
+          earlyApprovedMin=Math.max(0,shiftStartMin-reqStartMin);
         } else {
           imForWork=shiftStartMin;
           earlyAdj=true;
         }
       }
 
-      // 残業処理
-      let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
+      // 残業処理：通常残業は丸め、早出分はそのまま加算
+      let normalOtMin=Math.max(0,om-shiftEndMin);
 
       if(isApprovalType){
-        otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
+        otMin=(approvedOTReq?roundDownMin(normalOtMin,roundMin):0)+earlyApprovedMin;
       } else if(isOvertimeRequest){
-        otMin=rawOtMin;
+        otMin=normalOtMin+earlyApprovedMin;
       } else if(roundMin>0&&!isOff){
-        otMin=roundDownMin(rawOtMin,roundMin);
+        otMin=roundDownMin(normalOtMin,roundMin)+earlyApprovedMin;
       } else {
-        otMin=rawOtMin;
+        otMin=normalOtMin+earlyApprovedMin;
       }
 
       awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
@@ -2128,16 +2129,20 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00");
         const im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
-        let earlyApprovedMin=0; // 承認済み早出分（シフト開始-早出開始）→残業に組み入れ・実働からは除外
+        let earlyApprovedMin=0; // 承認済み早出分（シフト開始-申請早出開始時刻）→残業に組み入れ・実働からは除外
         if(!isOff&&def.start&&im<shiftStartMin){
-          if(approvedEarlyReq){imForWork=shiftStartMin;earlyAdj=false;earlyApprovedMin=shiftStartMin-im;}
+          if(approvedEarlyReq){
+            imForWork=shiftStartMin;earlyAdj=false;
+            const reqStartMin=approvedEarlyReq.requestedEnd?toMin(approvedEarlyReq.requestedEnd):im;
+            earlyApprovedMin=Math.max(0,shiftStartMin-reqStartMin);
+          }
           else{imForWork=shiftStartMin;earlyAdj=true;}
         }
-        let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
-        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
-        else if(isOvertimeRequest) otMin=rawOtMin;
-        else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
-        else otMin=rawOtMin;
+        let normalOtMin=Math.max(0,om-shiftEndMin);
+        if(isApprovalType) otMin=(approvedOTReq?roundDownMin(normalOtMin,roundMin):0)+earlyApprovedMin;
+        else if(isOvertimeRequest) otMin=normalOtMin+earlyApprovedMin;
+        else if(roundMin>0&&!isOff) otMin=roundDownMin(normalOtMin,roundMin)+earlyApprovedMin;
+        else otMin=normalOtMin+earlyApprovedMin;
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
         if(!isOff&&def.start){
           if(im>shiftStartMin+1) late=true;
@@ -2650,12 +2655,18 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00"),im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
         let earlyApprovedMin=0;
-        if(!isOff&&def.start&&im<shiftStartMin){if(approvedEarlyReq){imForWork=shiftStartMin;earlyAdj=false;earlyApprovedMin=shiftStartMin-im;}else{imForWork=shiftStartMin;earlyAdj=true;}}
-        let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
-        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
-        else if(isOvertimeRequest) otMin=rawOtMin;
-        else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
-        else otMin=rawOtMin;
+        if(!isOff&&def.start&&im<shiftStartMin){
+          if(approvedEarlyReq){
+            imForWork=shiftStartMin;earlyAdj=false;
+            const reqStartMin=approvedEarlyReq.requestedEnd?toMin(approvedEarlyReq.requestedEnd):im;
+            earlyApprovedMin=Math.max(0,shiftStartMin-reqStartMin);
+          }else{imForWork=shiftStartMin;earlyAdj=true;}
+        }
+        let normalOtMin=Math.max(0,om-shiftEndMin);
+        if(isApprovalType) otMin=(approvedOTReq?roundDownMin(normalOtMin,roundMin):0)+earlyApprovedMin;
+        else if(isOvertimeRequest) otMin=normalOtMin+earlyApprovedMin;
+        else if(roundMin>0&&!isOff) otMin=roundDownMin(normalOtMin,roundMin)+earlyApprovedMin;
+        else otMin=normalOtMin+earlyApprovedMin;
         awMin=Math.max(0,om-imForWork-(punch.break!=null?punch.break:shiftBreakMin));
         if(!isOff&&def.start){if(im>shiftStartMin+1) late=true;if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}diffMin=om-shiftEndMin;}
         else{otMin=0;awMin=0;} // シフトなし打刻は残業・実働計上しない
