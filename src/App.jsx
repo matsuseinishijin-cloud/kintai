@@ -2126,12 +2126,13 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00");
         const im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
+        let earlyApprovedMin=0; // 承認済み早出分（シフト開始-早出開始）→残業に組み入れ・実働からは除外
         if(!isOff&&def.start&&im<shiftStartMin){
-          if(approvedEarlyReq){imForWork=im;earlyAdj=false;}
+          if(approvedEarlyReq){imForWork=shiftStartMin;earlyAdj=false;earlyApprovedMin=shiftStartMin-im;}
           else{imForWork=shiftStartMin;earlyAdj=true;}
         }
-        let rawOtMin=Math.max(0,om-shiftEndMin);
-        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+        let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
+        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
         else if(isOvertimeRequest) otMin=rawOtMin;
         else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
         else otMin=rawOtMin;
@@ -4842,21 +4843,20 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
         if(reqEnd>shiftEnd) otMin=reqEnd-shiftEnd;
       }
 
-      // 早出：シフト開始 - 申請開始時刻（打刻ではなく申請時刻基準）
+      // 早出：シフト開始 - 申請開始時刻（打刻ではなく申請時刻基準）→残業に組み入れ
       const approvedEarly=otReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       if(approvedEarly&&approvedEarly.requestedEnd){
         const reqStart=toMin(approvedEarly.requestedEnd); // early申請のrequestedEndに早出開始時刻を格納
-        if(reqStart<shiftStart) earlyMin=shiftStart-reqStart;
+        if(reqStart<shiftStart) otMin+=(shiftStart-reqStart);
       }
 
-      // 就労時間 = 所定時間 + 残業申請時間 + 早出申請時間 - 遅刻時間
-      workMin=Math.max(0, swMin + otMin + earlyMin - lateMin);
+      // 就労時間 = 所定時間 + 残業時間（申請ベース） - 遅刻時間
+      workMin=Math.max(0, swMin + otMin - lateMin);
 
       totalDays++;
       totalOtMin+=otMin;
       totalWorkMin+=workMin;
       if(lateMin>0) lateCount++;
-      if(earlyMin>0) earlyCount++;
     }
 
     return {ds,dow,def,isOff,attended,otMin,lateMin,earlyMin,workMin};
@@ -4876,9 +4876,8 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
       {[
         ["出勤日数", totalDays+"日", ""],
         ["就労時間", totalWorkMin>0?toHStr(totalWorkMin):"―", ""],
-        // 理学療法士スタッフ画面では残業非表示
+        ["残業", totalOtMin>0?toHStr(totalOtMin):"―", totalOtMin>0?"#854F0B":""],
         ["遅刻", lateCount+"回", lateCount>0?"#854F0B":""],
-        ["早出", earlyCount+"回", ""],
       ].map(([l,v,c])=>(
         <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
           <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
@@ -4890,7 +4889,7 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
     {/* 日別テーブル */}
     <div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-        <thead><tr>{["日付","曜","シフト","出勤","就労時間","遅刻","早出"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <thead><tr>{["日付","曜","シフト","出勤","就労時間","残業","遅刻"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
         <tbody>{rows.map(r=>{
           const dc=r.dow===0?"#A32D2D":r.dow===6?"#185FA5":"var(--color-text-secondary)";
           if(r.isOff) return <tr key={r.ds} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
@@ -4905,8 +4904,8 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
             <td style={tdS}><span style={{fontSize:11,padding:"2px 5px",borderRadius:4,background:r.def.color,color:r.def.tc}}>{r.def.label}</span></td>
             <td style={{...tdS,textAlign:"center",fontSize:15}}>{r.attended?"○":"―"}</td>
             <td style={{...tdS,fontWeight:500}}>{r.workMin>0?toHStr(r.workMin):"―"}</td>
+            <td style={{...tdS,color:r.otMin>0?"#854F0B":"var(--color-text-tertiary)"}}>{r.otMin>0?toHStr(r.otMin):"―"}</td>
             <td style={{...tdS,color:r.lateMin>0?"#854F0B":"var(--color-text-tertiary)"}}>{r.lateMin>0?r.lateMin+"分":"―"}</td>
-            <td style={{...tdS,color:r.earlyMin>0?"#3B6D11":"var(--color-text-tertiary)"}}>{r.earlyMin>0?r.earlyMin+"分":"―"}</td>
           </tr>;
         })}</tbody>
       </table>
