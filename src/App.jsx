@@ -498,11 +498,13 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       const im=toMin(punch.in), om=toMin(punch.out);
       let imForWork=im;
 
-      // 早出処理（全職種共通）
+      // 早出処理（全職種共通）：承認済みなら残業に組み入れ
+      let earlyApprovedMin=0;
       if(!isOff&&def.start&&im<shiftStartMin){
         if(approvedEarlyReq){
-          imForWork=im;
+          imForWork=shiftStartMin;
           earlyAdj=false;
+          earlyApprovedMin=shiftStartMin-im;
         } else {
           imForWork=shiftStartMin;
           earlyAdj=true;
@@ -510,10 +512,10 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
       }
 
       // 残業処理
-      let rawOtMin=Math.max(0,om-shiftEndMin);
+      let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
 
       if(isApprovalType){
-        otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+        otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
       } else if(isOvertimeRequest){
         otMin=rawOtMin;
       } else if(roundMin>0&&!isOff){
@@ -2501,7 +2503,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 if(r.isOT&&hasApprovedOT&&otRounded>0&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span></span>);
                 if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
                 if(r.isEarly){const earlyDiff=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{earlyDiff>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(earlyDiff)}</span>}</span>);}
-                if(r.approvedEarlyReq){const em=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(em>0) badges.push(<span key="ey" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{toHStr(Math.round(em/10)*10)}</span></span>);}
+                
                 if(badges.length===0&&r.workMin>0) badges.push(<Badge key="ok" label="○" bg="#EAF3DE" color="#3B6D11"/>);
               }
               const rowBg=r.absent||r.missingOut?"#FFF5F5":r.isLate||r.isEarly||r.isOT?"#FFFCF5":r.isLeave?"#F0FAF5":"";
@@ -2647,9 +2649,10 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       } else if(punch&&punch.out&&punch.in){
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00"),im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
-        if(!isOff&&def.start&&im<shiftStartMin){if(approvedEarlyReq){imForWork=im;earlyAdj=false;}else{imForWork=shiftStartMin;earlyAdj=true;}}
-        let rawOtMin=Math.max(0,om-shiftEndMin);
-        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):0;
+        let earlyApprovedMin=0;
+        if(!isOff&&def.start&&im<shiftStartMin){if(approvedEarlyReq){imForWork=shiftStartMin;earlyAdj=false;earlyApprovedMin=shiftStartMin-im;}else{imForWork=shiftStartMin;earlyAdj=true;}}
+        let rawOtMin=Math.max(0,om-shiftEndMin)+earlyApprovedMin;
+        if(isApprovalType) otMin=approvedOTReq?roundDownMin(rawOtMin,roundMin):earlyApprovedMin;
         else if(isOvertimeRequest) otMin=rawOtMin;
         else if(roundMin>0&&!isOff) otMin=roundDownMin(rawOtMin,roundMin);
         else otMin=rawOtMin;
@@ -2938,7 +2941,6 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
             }
             if(!ttBShort&&r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
-            if(r.approvedEarlyReq){const earlyMin=r.punch&&r.def.start?Math.max(0,toMin(r.def.start)-toMin(r.punch.in)):0;if(earlyMin>0) badges.push(<span key="early" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="早出" bg="#EAF3DE" color="#3B6D11"/><span style={{fontSize:11,color:"#3B6D11",fontWeight:500}}>+{earlyMin}分</span></span>);}
             if(badges.length===0&&r.awMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
           }
           return <tr key={r.d} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",background:r.rowBg}}>
