@@ -3443,7 +3443,7 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
           </div>
         </div>}
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
-          <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value,workIn:"",workOut:""}))} style={iS}/></div>
+          <input type="date" value={form.date} min={`${new Date().getFullYear()-3}-01-01`} max={`${new Date().getFullYear()+3}-12-31`} onChange={e=>setForm(p=>({...p,date:e.target.value,workIn:"",workOut:""}))} style={iS}/></div>
         {needsTimeInput&&<div style={{marginBottom:8,padding:"8px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #F59E0B"}}>
           <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"この日はシフトがないため出勤時刻を入力してください":"出勤する時間帯の時刻を入力してください"}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
