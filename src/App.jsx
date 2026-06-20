@@ -460,13 +460,13 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
-    const isShiftLeave=isAnyLeaveShift(st);
-    const isLeave=!!_lvMatch||isShiftLeave;
-    const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+    const isLeave=!!_lvMatch;
+    const leaveHalf=_lvMatch?.half||null;
     // シフトなし半日有休で出勤時刻が入力されている場合
     const halfLeaveWorkIn=_lvMatch?.workIn||"";
     const halfLeaveWorkOut=_lvMatch?.workOut||"";
     const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+    const isFullLeave=isLeave&&!leaveHalf;
 
     // 早出申請（全職種共通）：承認済みの早出申請
     const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
@@ -479,11 +479,12 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;  // 出勤のみ・退勤忘れ
     const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave; // 退勤のみ・出勤忘れ（異常データ）
 
-    if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+    if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
     // シフトなし半日有休の場合は入力時刻をシフトとして使用
     if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
 
-    if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+    if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
+    else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
       // シフトなし半日有休：入力時刻を基準に遅刻・早退・残業を計算
       const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
       const im=toMin(punch.in),om=toMin(punch.out);
@@ -1319,7 +1320,9 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
       setSaveMsg("");
       setLocalEdits({});
       await reload();
-      // 保存後：過去・当日の有休シフトを即時消化
+      // ※leave系シフト運用廃止のため、保存時の自動有休消化処理は一時無効化
+      // （指定有休専用の新仕組みに置き換え予定）
+      /*
       const td=today();
       const toProcess=entries.filter(([key,shiftType])=>{
         const sepIdx=key.indexOf("_"); const date=key.slice(sepIdx+1);
@@ -1351,6 +1354,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
         }
         await reload();
       }
+      */
     }catch(e){alert("保存失敗："+e.message);}
     setSaving(false);
   };
@@ -1513,8 +1517,9 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               {mergedWeekGroups.map((wk,wi)=>{
                 const wMins=getWeekHoursGroup(emp.id,wi);
                 const wH=(wMins/60).toFixed(1);
-                const over=weekLimit&&(wMins/60)>weekLimit;
-                const near=weekLimit&&!over&&(wMins/60)>weekLimit*0.9;
+                const ratio=weekLimit?(wMins/60)/weekLimit:0;
+                const over=weekLimit&&ratio>1; // 101%以上
+                const exact=weekLimit&&ratio===1; // 100%
                 return [
                   ...wk.map(ds=>{
                     const dObj=new Date(ds);
@@ -1533,11 +1538,11 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const clickable=!!roleFilter;
                     const lvReq=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending"));
                     const isLocked=lvReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+                    const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"1日";
                     const lvBadge=lvReq?(lvReq.status==="approved"
-                      ?{label:"承認済",bg:"#0F6E56",tc:"#fff"}
-                      :{label:"申請中",bg:"#854F0B",tc:"#fff"})
-                      :(isAnyLeaveShift(st)?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null);
-                    const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"全日";
+                      ?{label:halfLabel,bg:"#0F6E56",tc:"#fff"}
+                      :{label:halfLabel,bg:"#A32D2D",tc:"#fff"})
+                      :null;
                     const tooltipLines=lvReq?[
                       `📅 ${lvReq.date}`,
                       `種別：${halfLabel}（${lvReq.half?"0.5日":"1日"}）`,
@@ -1557,8 +1562,8 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       </div>
                     </td>;
                   }),
-                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:over?"#FCEBEB":near?"#FFF8E6":"#f0f4ff"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:over?"#A32D2D":near?"#854F0B":"#1251a3"}}>{wH}{"h"}</div>
+                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:over?"#FCEBEB":exact?"#F3F4F6":"#f0f4ff"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:over?"#A32D2D":exact?"#111827":"#1251a3"}}>{wH}{"h"}</div>
                     {weekLimit&&<div style={{fontSize:10,color:over?"#A32D2D":"#9ca3af"}}>{"/"+(weekLimit)+"h"}</div>}
                   </td>
                 ];
@@ -1612,7 +1617,7 @@ function getCurrentPeriod(){
   return {year:y,month:m};
 }
 
-function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
+function LeaveManager({emps,leaves,lvReqs,shifts=[],shiftDefsData={},reload,canGrant=true}){
   const cur0=getCurrentPeriod();
   const [sel,setSel]=useState(emps[0]?.id||""),[form,setForm]=useState({days:"",note:"",grantedAt:today()});
   const [editBucket,setEditBucket]=useState(null);
@@ -1684,12 +1689,34 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
   const decide=async(id,status)=>{
     const req=lvReqs.find(r=>r.id===id);if(!req)return;
     try{
+      if(status==="approved"){
+        const empObj=emps.find(e=>String(e.id)===String(req.empId));
+        const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
+        const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
+        const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+        const hasShift=!!def.start;
+        if(hasShift){
+          if(!req.half){
+            alert(`${req.date} は既にシフトが入っているため承認できません。先にシフトを休日に変更してください。`);
+            return;
+          } else {
+            const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+            const midPoint=(shiftStart+shiftEnd)/2;
+            const overlapsAm=req.half==="am"&&shiftStart<midPoint;
+            const overlapsPm=req.half==="pm"&&shiftEnd>midPoint;
+            if(overlapsAm||overlapsPm){
+              alert(`${req.date} は${req.half==="am"?"午前":"午後"}にシフトが入っているため承認できません。先にシフトを調整してください。`);
+              return;
+            }
+          }
+        }
+      }
       const td=today();
       if(status==="approved"&&req.date>td){
         // 未来日付の承認 → 「承認済み予約」として保存（日付到達後に自動消化）
         // reasonに "予約" を付加して区別し、起動時チェックで approved に昇格
         await gasSave("有給申請",convertTo({...req,status:"approved",reason:(req.reason||"")},LV_REQ_INV));
-        alert(`${req.date} は未来の日付のため、日付到達時に自動消化されます。`);
+        alert(`${req.date} は未来の日付のため承認しました。`);
       } else {
         // 過去・当日 → 即時消化
         await gasSave("有給申請",convertTo({...req,status},LV_REQ_INV));
@@ -1698,19 +1725,12 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],reload,canGrant=true}){
     }catch(e){alert("更新失敗："+e.message);}
   };
 
-  // 承認済み有休の取消 → rejected化 ＋ 未来日付かつleave系シフトなら自動でoffに変更
+  // 承認済み有休の取消 → rejected化（シフトには手を加えない）
   const cancelApproved=async(id)=>{
     const req=lvReqs.find(r=>r.id===id);if(!req)return;
     if(!confirm(`${req.date} の承認済み有休を取り消しますか？\n有給日数が返還されます。`))return;
     try{
       await gasSave("有給申請",convertTo({...req,status:"rejected"},LV_REQ_INV));
-      // leave/designated系シフトの場合はoffに変更（過去・当日・未来すべて）
-      const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
-      // 同日に他の承認済み申請がある場合はシフトを変更しない
-      const otherApproved=lvReqs.filter(r=>r.id!==id&&String(r.empId)===String(req.empId)&&r.date===req.date&&r.status==="approved");
-      if(otherApproved.length===0&&shiftRow&&isAnyLeaveShift(shiftRow.shiftType)){
-        await gasSave("シフト",convertTo({...shiftRow,shiftType:"off"},SHIFT_INV));
-      }
       await reload();
     }catch(e){alert("取消失敗："+e.message);}
   };
@@ -2102,21 +2122,22 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
-      const isShiftLeave=isAnyLeaveShift(st);
-      const isLeave=!!_lvMatch||isShiftLeave;
-      const leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const isLeave=!!_lvMatch;
+      const leaveHalf=_lvMatch?.half||null;
       const halfLeaveWorkIn=_lvMatch?.workIn||"";
       const halfLeaveWorkOut=_lvMatch?.workOut||"";
       const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const isFullLeave=isLeave&&!leaveHalf; // 全日有休：所定・実働とも0
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false;
       let adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
       const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
-      if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+      if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
       if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
-      if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+      if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
+      else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
         const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
@@ -2632,17 +2653,19 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
-      const isShiftLeave=isAnyLeaveShift(st),isLeave=!!_lvMatch||isShiftLeave,leaveHalf=_lvMatch?.half||leaveShiftHalf(st)||null;
+      const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
       const halfLeaveWorkIn=_lvMatch?.workIn||"";
       const halfLeaveWorkOut=_lvMatch?.workOut||"";
       const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const isFullLeave=isLeave&&!leaveHalf;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
-      if(!isOff&&def.start) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
+      if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
       if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
-      if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
+      if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
+      else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
         const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
@@ -3578,17 +3601,33 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
         const days=req.half?0.5:1;
         if(rem<days){ alert(`有給残日数が不足しています（残${rem}日、必要${days}日）`); return; }
       }
+      // 承認時：シフトとの重なりチェック（シフトは変更しない方針）
       if(status==="approved"){
-        const td=today();
-        const leaveShiftKey=req.half==="am"?"leave_am":req.half==="pm"?"leave_pm":"leave";
+        const empObj=emps.find(e=>String(e.id)===String(req.empId));
         const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
-        // 過去・当日・未来すべてシフトをleave系に同期（まだleave系でない場合）
-        if(!shiftRow||!isAnyLeaveShift(shiftRow.shiftType)){
-          await gasSave("シフト",convertTo({id:shiftRow?.id||newId(),empId:req.empId,date:req.date,shiftType:leaveShiftKey},SHIFT_INV));
+        const empDefs=getShiftDefsByRole(empObj?.role||"",shiftDefsData||{});
+        const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+        const hasShift=!!def.start; // 休日（off）以外は勤務シフトあり
+        if(hasShift){
+          if(!req.half){
+            // 全日有休：シフトが入っている＝重なるので承認不可
+            alert(`${req.date} は既にシフトが入っているため承認できません。先にシフトを休日に変更してください。`);
+            return;
+          } else {
+            // 半日有休：シフトの中間点で午前/午後を判定し、申請区分と重なるか確認
+            const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+            const midPoint=(shiftStart+shiftEnd)/2;
+            const overlapsAm=req.half==="am"&&shiftStart<midPoint;
+            const overlapsPm=req.half==="pm"&&shiftEnd>midPoint;
+            if(overlapsAm||overlapsPm){
+              alert(`${req.date} は${req.half==="am"?"午前":"午後"}にシフトが入っているため承認できません。先にシフトを調整してください。`);
+              return;
+            }
+          }
         }
-        if(req.date>td){
+        if(req.date>today()){
           await gasSave("有給申請",convertTo({...req,status:"approved"},LV_REQ_INV));
-          alert(`${req.date} は未来の日付のため、日付到達時に自動消化されます。`);
+          alert(`${req.date} は未来の日付のため承認しました。`);
         } else {
           await gasSave("有給申請",convertTo({...req,status},LV_REQ_INV));
         }
@@ -3604,12 +3643,6 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
     if(!confirm(`${req.date} の承認済み有休を取り消しますか？\n有給日数が返還されます。`))return;
     try{
       await gasSave("有給申請",convertTo({...req,status:"rejected"},LV_REQ_INV));
-      const shiftRow=shifts.find(s=>String(s.empId)===String(req.empId)&&s.date===req.date);
-      // 同日に他の承認済み申請がある場合はシフトを変更しない
-      const otherApproved=lvReqs.filter(r=>r.id!==id&&String(r.empId)===String(req.empId)&&r.date===req.date&&r.status==="approved");
-      if(otherApproved.length===0&&shiftRow&&isAnyLeaveShift(shiftRow.shiftType)){
-        await gasSave("シフト",convertTo({...shiftRow,shiftType:"off"},SHIFT_INV));
-      }
       await reload();
     }catch(e){alert("取消失敗："+e.message);}
   };
@@ -4685,8 +4718,13 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
           ?(_myDefs[leaveHalf==="pm"?"leave_pm":"leave_am"]||_myDefs[shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off)
           :(_myDefs[shiftRow?.shiftType||"off"]||_myDefs.off||SHIFT_DEFS.off);
       const isLeaveShiftDay=isAnyLeaveShift(shiftRow?.shiftType);
-      // 有休バッジ：承認済→表示なし（緑背景で識別）、申請中→「申請中」、未申請→「未申請」
-      const lvStatusBadge=isLeave?null:_lvPending?{label:"申請中",bg:"#854F0B",tc:"#fff"}:isLeaveShiftDay&&ds<=td?{label:"未申請",bg:"#E67E22",tc:"#fff"}:null;
+      const _lvAny=_lvMatch||_lvPending;
+      const lvHalfLabel=_lvAny?.half==="am"?"午前":_lvAny?.half==="pm"?"午後":"1日";
+      // 有給バッジ：承認済→緑、未承認（申請中）→赤、申請なし→バッジなし
+      const lvStatusBadge=_lvAny?(_lvMatch
+        ?{label:lvHalfLabel,bg:"#0F6E56",tc:"#fff"}
+        :{label:lvHalfLabel,bg:"#A32D2D",tc:"#fff"})
+        :null;
       const dow=new Date(year,month-1,d).getDay(),isToday=ds===td,hol=isHoliday(ds);
       const leaveLabel=leaveHalf==="am"?"午前有給":leaveHalf==="pm"?"午後有給":"有給";
       const statusBadges=getStatusBadges(ds,def);
@@ -5635,10 +5673,11 @@ export default function App(){
     return ()=>clearInterval(id);
   },[]);
   // shifts・lvReqs・leavesが揃ったら指定有休を自動処理
-  useEffect(()=>{
-    if(!loading&&emps.length>0&&shifts.length>=0)
-      processDesignatedLeave(emps,shifts,lvReqs,leaves);
-  },[loading]);
+  // ※leave系シフト運用廃止のため一時無効化（指定有休専用の新仕組みに置き換え予定）
+  // useEffect(()=>{
+  //   if(!loading&&emps.length>0&&shifts.length>=0)
+  //     processDesignatedLeave(emps,shifts,lvReqs,leaves);
+  // },[loading]);
 
   if(loading) return <Loading/>;
   if(error) return <Err msg={error}/>;
@@ -5780,7 +5819,7 @@ export default function App(){
         if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs} otherReqs={otherReqs}/>;
-        if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} reload={loadAll}/>;
+        if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>;
         if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>;
         return null;
       })()}
@@ -5824,7 +5863,7 @@ export default function App(){
             showEarly={isOTLead}
           />;
         }
-        if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} reload={loadAll} canGrant={false}/>;
+        if(t==="有給管理"&&isLead) return <LeaveManager emps={emps.filter(e=>leadRolesList.includes(e.role))} leaves={leaves} lvReqs={lvReqs.filter(r=>emps.find(e=>String(e.id)===String(r.empId)&&leadRolesList.includes(e.role)))} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} canGrant={false}/>;
         if(t==="タイムカード"&&isLead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} leadRoles={leadRolesList} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト作成")} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>;
         return null;
       })()}
