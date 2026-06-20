@@ -1406,10 +1406,14 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     const emp=emps.find(e=>String(e.id)===String(empId));
     const empDefs=getEmpShiftDefs(emp||{role:"理学療法士"});
     return weekDays.reduce((sum,ds)=>{
+      let daySum=0;
       const st=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
       const def=empDefs[st];
-      if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; return sum+Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
-      return sum;
+      if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; daySum+=Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
+      // 承認済み有休：全日8時間、半日（午前/午後）4時間を加算（シフトの残り勤務時間とは別に加算）
+      const lvApproved=(lvReqs||[]).find(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
+      if(lvApproved){ daySum+=lvApproved.half?240:480; }
+      return sum+daySum;
     },0);
   };
   // 時間帯別在席人数（選択職種の全従業員）
@@ -1518,8 +1522,8 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                 const wMins=getWeekHoursGroup(emp.id,wi);
                 const wH=(wMins/60).toFixed(1);
                 const ratio=weekLimit?(wMins/60)/weekLimit:0;
-                const over=weekLimit&&ratio>1; // 101%以上
-                const exact=weekLimit&&ratio===1; // 100%
+                const exact=weekLimit&&ratio===1; // 100%ちょうどのみ青
+                const over=weekLimit&&ratio!==1; // 100%以外は赤
                 return [
                   ...wk.map(ds=>{
                     const dObj=new Date(ds);
@@ -1562,8 +1566,8 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       </div>
                     </td>;
                   }),
-                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:over?"#FCEBEB":exact?"#F3F4F6":"#f0f4ff"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:over?"#A32D2D":exact?"#111827":"#1251a3"}}>{wH}{"h"}</div>
+                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:over?"#FCEBEB":"#f0f4ff"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:over?"#A32D2D":"#1251a3"}}>{wH}{"h"}</div>
                     {weekLimit&&<div style={{fontSize:10,color:over?"#A32D2D":"#9ca3af"}}>{"/"+(weekLimit)+"h"}</div>}
                   </td>
                 ];
