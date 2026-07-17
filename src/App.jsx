@@ -1547,7 +1547,19 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                         :(empShiftDefs?.[st]||empShiftDefs?.off||SHIFT_DEFS.off);
                     const clickable=!!roleFilter;
                     const lvReq=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending"));
-                    const isLocked=lvReqs.some(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+                    const approvedLv=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+                    // 全日有休はロック、半日有休は新シフトが有休時間帯と重なる場合のみロック
+                    const isLocked=approvedLv&&(
+                      !approvedLv.half // 全日有休は常にロック
+                      // 半日有休：選択中のシフトが有休時間帯と重なる場合のみロック
+                      ||(approvedLv.leaveStart&&approvedLv.leaveEnd&&(()=>{
+                        const selDef=empShiftDefs?.[selectedShift]||SHIFT_DEFS[selectedShift]||SHIFT_DEFS.off;
+                        if(!selDef.start) return false; // offシフトは重ならない
+                        const selS=toMin(selDef.start),selE=toMin(selDef.end);
+                        const lvS=toMin(approvedLv.leaveStart),lvE=toMin(approvedLv.leaveEnd);
+                        return lvS<selE&&lvE>selS;
+                      })())
+                    );
                     const halfLabel=lvReq?.half==="am"?"午前":lvReq?.half==="pm"?"午後":"1日";
                     const lvBadge=lvReq?(lvReq.status==="approved"
                       ?{label:halfLabel,bg:"#0F6E56",tc:"#fff"}
@@ -3481,14 +3493,14 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
           <input type="date" value={form.date} min={`${new Date().getFullYear()-3}-01-01`} max={`${new Date().getFullYear()+3}-12-31`} onChange={e=>setForm(p=>({...p,date:e.target.value,leaveStart:"",leaveEnd:""}))} style={iS}/></div>
         {needsTimeInput&&<div style={{marginBottom:8,padding:"8px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #F59E0B"}}>
-          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"この日はシフトがないため有休時間帯を入力してください":"有休を取る時間帯の開始・終了時刻を入力してください"}</div>
+          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"有休を取る時間帯を入力してください":"有休を取る時間帯を入力してください"}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div>
-              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前出勤時刻":"午後出勤時刻"}</div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>"有休開始"</div>
               <input type="time" value={form.leaveStart} onChange={e=>setForm(p=>({...p,leaveStart:e.target.value}))} style={iS}/>
             </div>
             <div>
-              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前退勤時刻":"午後退勤時刻"}</div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>"有休終了"</div>
               <input type="time" value={form.leaveEnd} onChange={e=>setForm(p=>({...p,leaveEnd:e.target.value}))} style={iS}/>
             </div>
           </div>
