@@ -62,7 +62,7 @@ const EMP_MAP    = { id:"id", "氏名":"name", "職種":"role", "雇用形態":"
 const SHIFT_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト種別":"shiftType" };
 const PUNCH_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "出勤":"in", "退勤":"out", "休憩":"break", "補正済":"adjusted" };
 const OT_MAP     = { id:"id", "従業員id":"empId", "日付":"date", "シフト終了":"shiftEnd", "申請退勤":"requestedEnd", "理由":"reason", "状態":"status", "種別":"type" };
-const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "状態":"status", "半日":"half", "出勤時刻":"workIn", "退勤時刻":"workOut" };
+const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "理由":"reason", "状態":"status", "半日":"half", "有休開始":"leaveStart", "有休終了":"leaveEnd" };
 const LEAVE_MAP  = { id:"id", "従業員id":"empId", "付与日数":"granted", "取得日数":"used", "履歴":"records" };
 const PW_MAP     = { id:"id", "従業員id":"empId", "パスワード":"password" };
 const SHIFTDEF_MAP = { id:"id", "部署":"dept", "キー":"key", "名前":"label", "開始":"start", "終了":"end", "色":"color", "文字色":"tc", "順番":"order", "休憩":"breakMin" };
@@ -463,9 +463,9 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const isLeave=!!_lvMatch;
     const leaveHalf=_lvMatch?.half||null;
     // シフトなし半日有休で出勤時刻が入力されている場合
-    const halfLeaveWorkIn=_lvMatch?.workIn||"";
-    const halfLeaveWorkOut=_lvMatch?.workOut||"";
-    const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+    const halfLeaveStart=_lvMatch?.leaveStart||"";
+    const halfLeaveEnd=_lvMatch?.leaveEnd||"";
+    const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveStart&&halfLeaveEnd;
     const isFullLeave=isLeave&&!leaveHalf;
 
     // 早出申請（全職種共通）：承認済みの早出申請
@@ -481,12 +481,12 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
 
     if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
     // シフトなし半日有休の場合は入力時刻をシフトとして使用
-    if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
+    if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
 
     if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
     else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
       // シフトなし半日有休：入力時刻を基準に遅刻・早退・残業を計算
-      const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+      const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
       const im=toMin(punch.in),om=toMin(punch.out);
       awMin=Math.max(0,om-im);
       if(im>shiftStartMin+1) late=true;
@@ -1410,9 +1410,15 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
       const st=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
       const def=empDefs[st];
       if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; daySum+=Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
-      // 承認済み有休：全日8時間、半日（午前/午後）4時間を加算（シフトの残り勤務時間とは別に加算）
+      // 承認済み有休：有休時間帯（leaveStart〜leaveEnd）の長さを加算
+      // 全日有休（時間帯なし）：8時間固定、半日（時間帯あり）：実際の時間帯の長さ
       const lvApproved=(lvReqs||[]).find(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
-      if(lvApproved){ daySum+=lvApproved.half?240:480; }
+      if(lvApproved){
+        const lvMin=lvApproved.leaveStart&&lvApproved.leaveEnd
+          ?Math.max(0,toMin(lvApproved.leaveEnd)-toMin(lvApproved.leaveStart))
+          :(lvApproved.half?240:480);
+        daySum+=lvMin;
+      }
       return sum+daySum;
     },0);
   };
@@ -1701,16 +1707,19 @@ function LeaveManager({emps,leaves,lvReqs,shifts=[],shiftDefsData={},reload,canG
         const hasShift=!!def.start;
         if(hasShift){
           if(!req.half){
+            // 全日有休：シフトが入っていたら承認不可
             alert(`${req.date} は既にシフトが入っているため承認できません。先にシフトを休日に変更してください。`);
             return;
           } else {
-            const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
-            const midPoint=(shiftStart+shiftEnd)/2;
-            const overlapsAm=req.half==="am"&&shiftStart<midPoint;
-            const overlapsPm=req.half==="pm"&&shiftEnd>midPoint;
-            if(overlapsAm||overlapsPm){
-              alert(`${req.date} は${req.half==="am"?"午前":"午後"}にシフトが入っているため承認できません。先にシフトを調整してください。`);
-              return;
+            // 半日有休：申請した有休時間帯とシフト時間帯が重なったら承認不可
+            if(req.leaveStart&&req.leaveEnd){
+              const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+              const lvStart=toMin(req.leaveStart),lvEnd=toMin(req.leaveEnd);
+              const overlaps=lvStart<shiftEnd&&lvEnd>shiftStart;
+              if(overlaps){
+                alert(`${req.date} の有休時間帯（${req.leaveStart}〜${req.leaveEnd}）がシフト（${def.start}〜${def.end}）と重なっています。先にシフトを調整してください。`);
+                return;
+              }
             }
           }
         }
@@ -2128,9 +2137,9 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const isLeave=!!_lvMatch;
       const leaveHalf=_lvMatch?.half||null;
-      const halfLeaveWorkIn=_lvMatch?.workIn||"";
-      const halfLeaveWorkOut=_lvMatch?.workOut||"";
-      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const halfLeaveStart=_lvMatch?.leaveStart||"";
+      const halfLeaveEnd=_lvMatch?.leaveEnd||"";
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveStart&&halfLeaveEnd;
       const isFullLeave=isLeave&&!leaveHalf; // 全日有休：所定・実働とも0
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
@@ -2139,10 +2148,10 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
       const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
+      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
       if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
       else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
-        const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+        const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
         if(im>shiftStartMin+1) late=true;
@@ -2658,19 +2667,19 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
-      const halfLeaveWorkIn=_lvMatch?.workIn||"";
-      const halfLeaveWorkOut=_lvMatch?.workOut||"";
-      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveWorkIn&&halfLeaveWorkOut;
+      const halfLeaveStart=_lvMatch?.leaveStart||"";
+      const halfLeaveEnd=_lvMatch?.leaveEnd||"";
+      const isHalfLeaveWithTime=isLeave&&leaveHalf&&halfLeaveStart&&halfLeaveEnd;
       const isFullLeave=isLeave&&!leaveHalf;
       const approvedEarlyReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="early");
       const approvedOTReq=(otReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved"&&r.type==="overtime");
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveWorkOut)-toMin(halfLeaveWorkIn);
+      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
       if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
       else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
-        const shiftStartMin=toMin(halfLeaveWorkIn),shiftEndMin=toMin(halfLeaveWorkOut);
+        const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
         const im=toMin(punch.in),om=toMin(punch.out);
         awMin=Math.max(0,om-im);
         if(im>shiftStartMin+1) late=true;
@@ -3426,7 +3435,7 @@ function OTRequest({emp,shifts,otReqs,shiftDefsData,reload}){
 // ── LeaveRequest (Employee) ───────────────────────────────────────────────────
 function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initDate=null,onClearInitDate=()=>{}}){
   const isPartt=emp.type==="パート";
-  const [form,setForm]=useState({date:initDate||"",half:"full",reason:"",workIn:"",workOut:""}),[sub,setSub]=useState(false);
+  const [form,setForm]=useState({date:initDate||"",half:"full",reason:"",leaveStart:"",leaveEnd:""}),[sub,setSub]=useState(false);
   // initDateが変わったら日付を自動セット
   useEffect(()=>{
     if(initDate){setForm(p=>({...p,date:initDate}));onClearInitDate();}
@@ -3442,14 +3451,14 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
   const shiftDef=shiftRow?empDefs[shiftRow.shiftType]||empDefs.off||SHIFT_DEFS.off:empDefs.off||SHIFT_DEFS.off;
   const isOffDay=!shiftDef.start; // シフトなし（休日）
   const needsTimeInput=isHalfLeave; // 半日有休は常に時刻入力必須
-  const canSubmit=!!(form.date&&form.reason&&rem>=days&&(!needsTimeInput||(form.workIn&&form.workOut)));
+  const canSubmit=!!(form.date&&form.reason&&rem>=days&&(!needsTimeInput||(form.leaveStart&&form.leaveEnd)));
   const submit=async()=>{
     if(!canSubmit)return;
     try{
       const half=isPartt?null:(form.half==="full"?null:form.half);
-      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half,workIn:needsTimeInput?form.workIn:"",workOut:needsTimeInput?form.workOut:""},LV_REQ_INV);
+      const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half,leaveStart:needsTimeInput?form.leaveStart:"",leaveEnd:needsTimeInput?form.leaveEnd:""},LV_REQ_INV);
       await gasSave("有給申請",data);
-      setForm({date:"",half:"full",reason:"",workIn:"",workOut:""});setSub(true);setTimeout(()=>setSub(false),3000);
+      setForm({date:"",half:"full",reason:"",leaveStart:"",leaveEnd:""});setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
     }catch(e){alert("申請失敗："+e.message);}
   };
@@ -3470,17 +3479,17 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
           </div>
         </div>}
         <div style={{marginBottom:8}}><div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>取得日</div>
-          <input type="date" value={form.date} min={`${new Date().getFullYear()-3}-01-01`} max={`${new Date().getFullYear()+3}-12-31`} onChange={e=>setForm(p=>({...p,date:e.target.value,workIn:"",workOut:""}))} style={iS}/></div>
+          <input type="date" value={form.date} min={`${new Date().getFullYear()-3}-01-01`} max={`${new Date().getFullYear()+3}-12-31`} onChange={e=>setForm(p=>({...p,date:e.target.value,leaveStart:"",leaveEnd:""}))} style={iS}/></div>
         {needsTimeInput&&<div style={{marginBottom:8,padding:"8px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #F59E0B"}}>
-          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"この日はシフトがないため出勤時刻を入力してください":"出勤する時間帯の時刻を入力してください"}</div>
+          <div style={{fontSize:11,color:"#854F0B",marginBottom:6}}>{isOffDay?"この日はシフトがないため有休時間帯を入力してください":"有休を取る時間帯の開始・終了時刻を入力してください"}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div>
               <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前出勤時刻":"午後出勤時刻"}</div>
-              <input type="time" value={form.workIn} onChange={e=>setForm(p=>({...p,workIn:e.target.value}))} style={iS}/>
+              <input type="time" value={form.leaveStart} onChange={e=>setForm(p=>({...p,leaveStart:e.target.value}))} style={iS}/>
             </div>
             <div>
               <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>{form.half==="pm"?"午前退勤時刻":"午後退勤時刻"}</div>
-              <input type="time" value={form.workOut} onChange={e=>setForm(p=>({...p,workOut:e.target.value}))} style={iS}/>
+              <input type="time" value={form.leaveEnd} onChange={e=>setForm(p=>({...p,leaveEnd:e.target.value}))} style={iS}/>
             </div>
           </div>
         </div>}
@@ -3618,14 +3627,15 @@ function ApprovalCenter({emps,otReqs,lvReqs,transferReqs,punchFixReqs,punches=[]
             alert(`${req.date} は既にシフトが入っているため承認できません。先にシフトを休日に変更してください。`);
             return;
           } else {
-            // 半日有休：シフトの中間点で午前/午後を判定し、申請区分と重なるか確認
-            const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
-            const midPoint=(shiftStart+shiftEnd)/2;
-            const overlapsAm=req.half==="am"&&shiftStart<midPoint;
-            const overlapsPm=req.half==="pm"&&shiftEnd>midPoint;
-            if(overlapsAm||overlapsPm){
-              alert(`${req.date} は${req.half==="am"?"午前":"午後"}にシフトが入っているため承認できません。先にシフトを調整してください。`);
-              return;
+            // 半日有休：申請した有休時間帯とシフト時間帯が重なったら承認不可
+            if(req.leaveStart&&req.leaveEnd){
+              const shiftStart=toMin(def.start),shiftEnd=toMin(def.end);
+              const lvStart=toMin(req.leaveStart),lvEnd=toMin(req.leaveEnd);
+              const overlaps=lvStart<shiftEnd&&lvEnd>shiftStart;
+              if(overlaps){
+                alert(`${req.date} の有休時間帯（${req.leaveStart}〜${req.leaveEnd}）がシフト（${def.start}〜${def.end}）と重なっています。先にシフトを調整してください。`);
+                return;
+              }
             }
           }
         }
@@ -4711,8 +4721,8 @@ function MyShiftCalendar({emp,shifts,lvReqs,shiftDefsData,punches=[],otReqs=[],y
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
       const _lvPending=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="pending");
       const isLeave=!!_lvMatch,leaveHalf=_lvMatch?.half||null;
-      const halfWorkIn=_lvMatch?.workIn||"";
-      const halfWorkOut=_lvMatch?.workOut||"";
+      const halfWorkIn=_lvMatch?.leaveStart||"";
+      const halfWorkOut=_lvMatch?.leaveEnd||"";
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const _myDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
       // 半日有休の場合はleave_am/leave_pmのシフト定義から出勤時間を取得
