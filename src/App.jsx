@@ -5799,13 +5799,16 @@ export default function App(){
   const isPTlead=isLead&&cur&&cur.role==="理学療法士";
   const lTabs=isPTlead
     // 理学療法士責任者：自分の勤怠＋月次集計 | 部署管理
-    ?["打刻","申請","マイシフト","打刻履歴","月次集計","---","シフト作成","申請許可","有給管理","タイムカード"]
+    ?["打刻","申請","マイシフト","月次集計","---","シフト作成","申請許可","有給管理","タイムカード"]
     // その他責任者：自分の勤怠＋月次レポート | 部署管理（タイムカードなし）
     :["打刻","申請","マイシフト","月次レポート","---","シフト作成","申請許可"];
+  const isPTSeishain=cur&&cur.role==="理学療法士"&&cur.type==="正社員";
   const isNursepart=cur&&cur.role==="看護師"&&cur.type==="パート";
   const isRehapart=cur&&cur.role==="リハマネ"&&cur.type==="パート";
   const eTabs=isPTpart
     ?["打刻","申請","マイシフト"]
+    :isPTSeishain
+    ?["打刻","申請","マイシフト","月次集計"]
     :isNursepart||isRehapart
     ?["打刻","申請","マイシフト","月次集計"]
     :["打刻","申請","マイシフト","月次レポート"];
