@@ -302,6 +302,24 @@ const toMin = t => { if(!t) return 0; const [h,m]=t.split(":"); return +h*60+ +m
 const fmtTime = m => { if(m===null||m===undefined) return "―"; return pad(Math.floor(m/60))+":"+pad(m%60); };
 const toHStr = m => { if(!m||m===0) return "0h"; const h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return h+"h"+(mn>0?pad(mn)+"m":""); };
 const getOtRule = emp => OT_RULES[emp.role+"_"+emp.type] || { type:"none" };
+// カスタムシフトのパース: "custom:09:00-15:30:60" → {start,end,breakMin}
+function parseCustomShift(st){
+  if(!st||!st.startsWith("custom:")) return null;
+  const parts=st.slice(7).split(":");
+  if(parts.length<2) return null;
+  const [timeRange,bk]=parts;
+  const [start,end]=timeRange.split("-");
+  return {start:start||"",end:end||"",breakMin:bk!=null?Number(bk):60};
+}
+function isCustomShift(st){ return st&&st.startsWith("custom:"); }
+// カスタムシフトも含めてシフト定義を返すヘルパー
+function getDefWithCustom(st, empDefs){
+  if(isCustomShift(st)){
+    const c=parseCustomShift(st);
+    if(c) return {start:c.start,end:c.end,breakMin:c.breakMin,color:"#EDE9FE",tc:"#5B21B6",label:`${c.start}〜${c.end}`};
+  }
+  return empDefs?.[st]||empDefs?.off||SHIFT_DEFS.off;
+}
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
 const nowStr = () => { const d=new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); };
 const daysInMonth = (y,m) => new Date(y,m,0).getDate();
@@ -456,7 +474,7 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const d=i+1, ds=`${year}-${pad(month)}-${pad(d)}`, dow=new Date(year,month-1,d).getDay();
     const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
     const _empDefs=getShiftDefsByRole(emp.role,shiftDefsData);
-    const st=shiftRow?.shiftType||"off", def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off, isOff=!def.start;
+    const st=shiftRow?.shiftType||"off", def=getDefWithCustom(st,_empDefs), isOff=!def.start;
     const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
     const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
     const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
@@ -1287,6 +1305,12 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   const getEmpShiftDefs=emp=>getShiftDefsByRole(emp.role,shiftDefsData);
   const currentShiftDefs=currentDept?getShiftDefsByDept(currentDept,shiftDefsData):getShiftDefsByDept("理学療法士",shiftDefsData);
   const [selectedShift,setSelectedShift]=useState(Object.keys(currentShiftDefs)[0]||"day");
+  const [customStart,setCustomStart]=useState("09:00");
+  const [customEnd,setCustomEnd]=useState("17:30");
+  const [customBreak,setCustomBreak]=useState(60); // 60=あり、0=なし
+  // カスタムシフトのシフト種別文字列を生成
+  const customShiftType=`custom:${customStart}-${customEnd}:${customBreak}`;
+  const customWorkMin=customStart&&customEnd?Math.max(0,toMin(customEnd)-toMin(customStart)-customBreak):0;
   // periodDaysを使用するのでlast/daysは参照用のみ残す
   const last=daysInMonth(year,month),days=Array.from({length:last},(_,i)=>i+1);
 
@@ -1296,12 +1320,23 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   };
   // セルクリック：ローカルに記録するだけ（GAS呼び出しなし）
   const setCell=(empId,ds)=>{
-    // 承認済み有休がある日はロック
-    const lockedByLeave=lvReqs.some(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
-    if(lockedByLeave){alert("この日は有休が承認済みのためシフト変更できません。\n有給管理から承認済み有休を取り消してください。");return;}
+    const approvedLv=lvReqs.find(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
+    if(approvedLv){
+      if(!approvedLv.half){alert("この日は有休が承認済みのためシフト変更できません。\n有給管理から承認済み有休を取り消してください。");return;}
+      if(approvedLv.half&&approvedLv.leaveStart&&approvedLv.leaveEnd){
+        const actual=selectedShift==="custom"?customShiftType:selectedShift;
+        const selDef=selectedShift==="custom"?{start:customStart,end:customEnd}:(empShiftDefsForLock?.[actual]||SHIFT_DEFS[actual]||SHIFT_DEFS.off);
+        if(selDef.start){
+          const selS=toMin(selDef.start),selE=toMin(selDef.end);
+          const lvS=toMin(approvedLv.leaveStart),lvE=toMin(approvedLv.leaveEnd);
+          if(lvS<selE&&lvE>selS){alert("この日は有休が承認済みのためシフト変更できません。\n有給管理から承認済み有休を取り消してください。");return;}
+        }
+      }
+    }
     const key=String(empId)+"_"+ds;
     const current=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
-    const next=current===selectedShift?"off":selectedShift;
+    const actual=selectedShift==="custom"?customShiftType:selectedShift;
+    const next=current===actual?"off":actual;
     setLocalEdits(prev=>({...prev,[key]:next}));
   };
   // 保存ボタン：まとめてGASに送信
@@ -1408,8 +1443,13 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
     return weekDays.reduce((sum,ds)=>{
       let daySum=0;
       const st=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
-      const def=empDefs[st];
-      if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; daySum+=Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
+      if(isCustomShift(st)){
+        const c=parseCustomShift(st);
+        if(c&&c.start&&c.end) daySum+=Math.max(0,toMin(c.end)-toMin(c.start)-c.breakMin);
+      } else {
+        const def=empDefs[st];
+        if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; daySum+=Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
+      }
       // 承認済み有休：有休時間帯（leaveStart〜leaveEnd）の長さを加算
       // 全日有休（時間帯なし）：8時間固定、半日（時間帯あり）：実際の時間帯の長さ
       const lvApproved=(lvReqs||[]).find(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
@@ -1489,6 +1529,23 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
             </div>;
           })
         :<span style={{fontSize:12,color:"var(--color-text-tertiary)"}}>職種を選択するとシフト一覧が表示されます</span>}
+        {/* カスタムシフトボタン */}
+        {roleFilter&&<div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div onClick={()=>setSelectedShift("custom")} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,background:"#F3F4F6",border:selectedShift==="custom"?"2.5px solid #1251a3":"2.5px solid transparent",cursor:"pointer"}}>
+            <span style={{fontSize:14,fontWeight:700,color:"#374151"}}>カスタム</span>
+            {selectedShift==="custom"&&customStart&&customEnd&&<span style={{fontSize:12,color:"#374151",opacity:0.85}}>{customStart}〜{customEnd}</span>}
+            {selectedShift==="custom"&&customWorkMin>0&&<span style={{fontSize:12,fontWeight:600,color:"#374151"}}>{toHStr(customWorkMin)}</span>}
+            {selectedShift==="custom"&&<span style={{fontSize:10,fontWeight:700,color:"#1251a3",background:"rgba(255,255,255,0.8)",borderRadius:4,padding:"1px 4px"}}>✓</span>}
+          </div>
+          {selectedShift==="custom"&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:"#F3F4F6",border:"1px solid #d1d5db"}}>
+            <input type="time" value={customStart} onChange={e=>setCustomStart(e.target.value)} style={{...iS,width:90,padding:"2px 4px",fontSize:12}}/>
+            <span style={{fontSize:12,color:"#6b7280"}}>〜</span>
+            <input type="time" value={customEnd} onChange={e=>setCustomEnd(e.target.value)} style={{...iS,width:90,padding:"2px 4px",fontSize:12}}/>
+            <button onClick={()=>setCustomBreak(customBreak===60?0:60)} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #d1d5db",background:customBreak===60?"#EAF3DE":"#F3F4F6",color:customBreak===60?"#3B6D11":"#6b7280",fontSize:11,cursor:"pointer",fontWeight:500}}>
+              休憩{customBreak===60?"あり":"なし"}
+            </button>
+          </div>}
+        </div>}
       </div>
     </div>
     <div ref={topScrollRef} style={{overflowX:"auto"}} onScroll={syncTop}><div style={{height:12}} ref={el=>{if(el&&tableRef.current)el.style.minWidth=tableRef.current.offsetWidth+"px"}}/></div>
@@ -1538,21 +1595,25 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const dow=dObj.getDay();
                     const isNextMonth=ds<period.start||ds>period.end; // 期間外
                     const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
+                    const isCustom=isCustomShift(st);
+                    const customParsed=isCustom?parseCustomShift(st):null;
                     const isHalfLeave=isLeavePmShift(st)||isLeaveAmShift(st);
                     const halfLeaveLabel=isLeavePmShift(st)?"午後休":isLeaveAmShift(st)?"午前休":"";
-                    const def=isLeavePmShift(st)
-                      ?(empShiftDefs?.["leave_pm"]||empShiftDefs?.off||SHIFT_DEFS.off)
-                      :isLeaveAmShift(st)
-                        ?(empShiftDefs?.["leave_am"]||empShiftDefs?.off||SHIFT_DEFS.off)
-                        :(empShiftDefs?.[st]||empShiftDefs?.off||SHIFT_DEFS.off);
+                    const def=isCustom
+                      ?{start:customParsed.start,end:customParsed.end,color:"#EDE9FE",tc:"#5B21B6",label:`${customParsed.start}〜${customParsed.end}`,breakMin:customParsed.breakMin}
+                      :isLeavePmShift(st)
+                        ?(empShiftDefs?.["leave_pm"]||empShiftDefs?.off||SHIFT_DEFS.off)
+                        :isLeaveAmShift(st)
+                          ?(empShiftDefs?.["leave_am"]||empShiftDefs?.off||SHIFT_DEFS.off)
+                          :(empShiftDefs?.[st]||empShiftDefs?.off||SHIFT_DEFS.off);
                     const clickable=!!roleFilter;
                     const lvReq=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&(r.status==="approved"||r.status==="pending"));
                     const approvedLv=lvReqs.find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
                     // 全日有休はロック、半日有休は新シフトが有休時間帯と重なる場合のみロック
                     const isLocked=approvedLv&&(
                       !approvedLv.half // 全日有休は常にロック
-                      // 半日有休：選択中のシフトが有休時間帯と重なる場合のみロック
-                      ||(approvedLv.leaveStart&&approvedLv.leaveEnd&&(()=>{
+                      // 半日有休：leaveStart/leaveEndがある場合のみ重なりチェック
+                      ||(approvedLv.half&&approvedLv.leaveStart&&approvedLv.leaveEnd&&(()=>{
                         const selDef=empShiftDefs?.[selectedShift]||SHIFT_DEFS[selectedShift]||SHIFT_DEFS.off;
                         if(!selDef.start) return false; // offシフトは重ならない
                         const selS=toMin(selDef.start),selE=toMin(selDef.end);
@@ -2142,7 +2203,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const d=parseInt(ds.slice(8));
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const st=shiftRow?.shiftType||"off";
-      const def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off;
+      const def=getDefWithCustom(st,_empDefs);
       const isOff=!def.start;
       const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
@@ -2674,7 +2735,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     return periodDays.map(ds=>{
       const dow=new Date(ds).getDay(),d=parseInt(ds.slice(8));
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-      const st=shiftRow?.shiftType||"off",def=_empDefs[st]||_empDefs.off||SHIFT_DEFS.off,isOff=!def.start;
+      const st=shiftRow?.shiftType||"off",def=getDefWithCustom(st,_empDefs),isOff=!def.start;
       const shiftBreakMin=def.breakMin!=null?def.breakMin:0;
       const punch=punches.find(p=>String(p.empId)===String(emp.id)&&p.date===ds);
       const _lvMatch=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
