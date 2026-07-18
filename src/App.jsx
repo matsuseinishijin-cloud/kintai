@@ -2543,15 +2543,16 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         </div>
         {emp&&<div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-          {/* 上段：合計就労時間・出勤日数・要確認 */}
+          {/* 上段：勤務日数・有休・要確認 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-            {[["合計就労時間",toHStr(totalWorkWithOT)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
-              <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
-                <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
-                <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
-                {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
-              </div>
-            ))}
+            <div style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:2}}>勤務日数</div>
+              <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{attendDays}日</div>
+            </div>
+            <div style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:2}}>有休</div>
+              <div style={{fontSize:20,fontWeight:700,color:lvC>0?"#0F6E56":"#111"}}>{lvC>0?lvC+"日":"―"}</div>
+            </div>
             <div style={{textAlign:"center",padding:"10px 4px",background:confirmDays>0?"#FFF0F0":"#fff",border:confirmDays>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
               <div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div>
               <div style={{fontSize:20,fontWeight:700,color:confirmDays>0?"#A32D2D":"#111"}}>{confirmDays>0?confirmDays+"日":"―"}</div>
@@ -2565,11 +2566,6 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 <div style={{fontSize:16,fontWeight:700,color:"#111"}}>{v}</div>
               </div>
             ))}
-          </div>
-          <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
-            <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
-            <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
-            
           </div>
         </div>}
         {/* タイムカード */}
