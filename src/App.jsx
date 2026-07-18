@@ -5909,7 +5909,7 @@ export default function App(){
           ?<MyShiftWithReport emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} reload={loadAll}/>
           :<MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
-        if(t==="タイムカード"&&isPTSeishain) return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
+        if(t==="タイムカード"&&isPTSeishain) return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="月次集計") return isNursepart
           ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :isRehapart
