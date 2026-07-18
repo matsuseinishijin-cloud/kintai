@@ -2591,7 +2591,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               else {
                 const hasApprovedOT=!!r.approvedOTReq;
                 const otRounded=Math.floor(r.otMin/10)*10;
-                if(r.isOT&&hasApprovedOT&&otRounded>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span>}</span>); }
+                if(r.isOT&&hasApprovedOT&&otRounded>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||(isAdmin&&!leadRoles))&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span>}</span>); }
                 if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
                 if(r.isEarly){const earlyDiff=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{earlyDiff>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(earlyDiff)}</span>}</span>);}
                 
@@ -3012,7 +3012,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           else if(r.isLeave){
             badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
             // 有休日でも残業がある場合は残業バッジを追加
-            if(!ttBOver&&r.otMin>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>); }
+            if(!ttBOver&&r.otMin>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||(isAdmin&&!leadRoles))&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>); }
           }
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
@@ -3043,7 +3043,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               badges.push(<Badge key="ttbo" label={`勤怠調整（${shortM}から振替${toHStr(Number(ttBOver.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
             } else if(r.otMin>0&&!ttBOver){
               const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員";
-              badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>);
+              badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||(isAdmin&&!leadRoles))&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>);
             }
             if(!ttBShort&&r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
             if(badges.length===0&&r.awMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
@@ -5920,7 +5920,7 @@ export default function App(){
           :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
-        if(t==="タイムカード（部署）"&&isPTlead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
+        if(t==="タイムカード（部署）"&&isPTlead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} leadRoles={leadRolesList} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}} />;
         if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="申請許可"&&isLead){
