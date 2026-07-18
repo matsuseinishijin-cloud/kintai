@@ -3041,8 +3041,9 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
               const shortDs=ttBOver.shortDate;
               const shortM=shortDs?shortDs.slice(5).replace("-","/"):"";
               badges.push(<Badge key="ttbo" label={`勤怠調整（${shortM}から振替${toHStr(Number(ttBOver.offsetMin||0))}）`} bg="#EEEDFE" color="#3C3489"/>);
-            } else if(r.otMin>0&&!ttBOver&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)){
-              badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+            } else if(r.otMin>0&&!ttBOver){
+              const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員";
+              badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>);
             }
             if(!ttBShort&&r.late){const lateMin=r.punch?toMin(r.punch.in)-toMin(r.def.start):0;badges.push(<span key="late" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>{lateMin>0?"-"+lateMin+"分":""}</span></span>);}
             if(badges.length===0&&r.awMin>0) badges.push(<Badge key="ok" label="正常" bg="#EAF3DE" color="#3B6D11"/>);
