@@ -5798,8 +5798,8 @@ export default function App(){
   // 責任者タブ："---"はセパレーター
   const isPTlead=isLead&&cur&&cur.role==="理学療法士";
   const lTabs=isPTlead
-    // 理学療法士責任者：自分の勤怠＋月次集計 | 部署管理
-    ?["打刻","申請","マイシフト","月次集計","---","シフト作成","申請許可","有給管理","タイムカード"]
+    // 理学療法士責任者：自分の勤怠＋タイムカード | 部署管理
+    ?["打刻","申請","マイシフト","タイムカード","---","シフト作成","申請許可","有給管理","タイムカード（部署）"]
     // その他責任者：自分の勤怠＋月次レポート | 部署管理（タイムカードなし）
     :["打刻","申請","マイシフト","月次レポート","---","シフト作成","申請許可"];
   const isPTSeishain=cur&&cur.role==="理学療法士"&&cur.type==="正社員";
@@ -5808,7 +5808,7 @@ export default function App(){
   const eTabs=isPTpart
     ?["打刻","申請","マイシフト"]
     :isPTSeishain
-    ?["打刻","申請","マイシフト","月次集計"]
+    ?["打刻","申請","マイシフト","タイムカード"]
     :isNursepart||isRehapart
     ?["打刻","申請","マイシフト","月次集計"]
     :["打刻","申請","マイシフト","月次レポート"];
@@ -5895,6 +5895,7 @@ export default function App(){
           ?<MyShiftWithReport emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs} reload={loadAll}/>
           :<MyShift emp={cur} shifts={shifts} lvReqs={lvReqs} shiftDefsData={shiftDefsData} punches={punches} otReqs={otReqs}/>;
         if(t==="打刻履歴") return <PunchHistory emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false}/>;
+        if(t==="タイムカード"&&isPTSeishain) return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="月次集計") return isNursepart
           ?<NurseMonthlyReport emp={cur} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>
           :isRehapart
@@ -5904,6 +5905,7 @@ export default function App(){
           :<MonthlyReport emp={cur} punches={punches} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData}/>;
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
+        if(t==="タイムカード（部署）"&&isPTlead) return <TimecardView emps={emps.filter(e=>leadRolesList.includes(e.role))} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}} />;
         if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="申請許可"&&isLead){
