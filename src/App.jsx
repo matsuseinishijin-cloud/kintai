@@ -1635,7 +1635,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const isHol=!!getHolidayName(ds);
                     return <td key={ds} style={{padding:"2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",cursor:isLocked?"not-allowed":clickable?"pointer":"default",userSelect:"none",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isLocked?"#F0FAF5":isNextMonth?"#f5f5f5":isHol?"#FFF0F0":"inherit"}} onClick={()=>clickable&&!isLocked&&setCell(emp.id,ds)}>
                       <div style={{position:"relative",display:"inline-block",width:"100%"}}>
-                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"3px 4px",fontSize:isNextMonth?11:15,minWidth:isNextMonth?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isNextMonth?0.5:1}}>{isHalfLeave?halfLeaveLabel:def.label}</div>
+                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"3px 4px",fontSize:isCustom?9:isNextMonth?11:15,minWidth:isNextMonth?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:isCustom?"normal":"nowrap",lineHeight:isCustom?1.2:undefined,opacity:isNextMonth?0.5:1}}>{isHalfLeave?halfLeaveLabel:def.label}</div>
                         {lvBadge&&<div
                           style={{position:"absolute",top:-4,right:-2,background:lvBadge.bg,color:lvBadge.tc,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:99,whiteSpace:"nowrap",lineHeight:1.4,boxShadow:"0 1px 3px rgba(0,0,0,0.25)",cursor:"default",zIndex:1}}
                           onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();setTooltip({x:r.left,y:r.bottom+6,lines:tooltipLines});}}
@@ -4130,6 +4130,8 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
       // 有休シフトは固定時間でカウント
       if(st==="leave") { total+=480; continue; }
       if(st==="leave_am"||st==="leave_pm") { total+=240; continue; }
+      // カスタムシフト
+      if(isCustomShift(st)){ const c=parseCustomShift(st); if(c&&c.start&&c.end) total+=Math.max(0,toMin(c.end)-toMin(c.start)-c.breakMin); continue; }
       const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
       if(def.start&&def.end){const bk=def.breakMin!=null?Number(def.breakMin):0;total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);}
     }
@@ -4265,7 +4267,9 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
       d.setDate(d.getDate()+i);
       const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
-      const def=empDefs[shiftRow?.shiftType||"off"]||empDefs.off||SHIFT_DEFS.off;
+      const st=shiftRow?.shiftType||"off";
+      if(isCustomShift(st)){ const c=parseCustomShift(st); if(c&&c.start&&c.end) total+=Math.max(0,toMin(c.end)-toMin(c.start)-c.breakMin); continue; }
+      const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
       if(def.start&&def.end){
         const bk=def.breakMin!=null?Number(def.breakMin):0;
         total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);
