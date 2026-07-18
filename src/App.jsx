@@ -2650,7 +2650,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
           <div style={{fontSize:13,fontWeight:600}}>月次レポート</div>
           {!selfView&&<button onClick={()=>printTimecard(true)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>}
         </div>
-        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>
+        <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={!selfView} leadRoles={leadRoles} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>
       </div>;
     })()}
 
@@ -2690,7 +2690,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
 }
 
 // ── ReportView ────────────────────────────────────────────────────────────────
-function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,reload=()=>{},outerYear=null,outerMonth=null,timeTransferReqs=[],shiftConfirmReqs=[]}){
+function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,isAdmin=false,leadRoles=null,reload=()=>{},outerYear=null,outerMonth=null,timeTransferReqs=[],shiftConfirmReqs=[]}){
   const cur0=getCurrentPeriod();
   const [year,setYear]=useState(outerYear||cur0.year),[month,setMonth]=useState(outerMonth||cur0.month),[rf,setRf]=useState(""),[empId,setEmpId]=useState(initEmpId||emps[0]?.id||""),[filter,setFilter]=useState("all");
   const [editKey,setEditKey]=useState(null),[editForm,setEditForm]=useState({in:"",out:""}),[editSaving,setEditSaving]=useState(false);
