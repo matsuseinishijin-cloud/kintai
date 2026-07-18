@@ -2591,7 +2591,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
               else {
                 const hasApprovedOT=!!r.approvedOTReq;
                 const otRounded=Math.floor(r.otMin/10)*10;
-                if(r.isOT&&hasApprovedOT&&otRounded>0&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span></span>);
+                if(r.isOT&&hasApprovedOT&&otRounded>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:2}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(otRounded)}</span>}</span>); }
                 if(r.isLate) badges.push(<span key="lt" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="遅刻" bg="#FAEEDA" color="#854F0B"/>{r.lateMin>=4&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(Math.ceil(r.lateMin/10)*10)}</span>}</span>);
                 if(r.isEarly){const earlyDiff=diffRounded!==null&&diffRounded<0?Math.abs(diffRounded):0;badges.push(<span key="el" style={{display:"inline-flex",alignItems:"center",gap:2,marginLeft:2}}><Badge label="早退" bg="#FAEEDA" color="#854F0B"/>{earlyDiff>0&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>-{toHStr(earlyDiff)}</span>}</span>);}
                 
@@ -3012,7 +3012,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
           else if(r.isLeave){
             badges.push(<Badge key="leave" label={r.leaveHalf==="am"?"有休(午前)":r.leaveHalf==="pm"?"有休(午後)":"有休"} bg="#E1F5EE" color="#0F6E56"/>);
             // 有休日でも残業がある場合は残業バッジを追加
-            if(!ttBOver&&r.otMin>0&&(emp?.role!=="理学療法士"||emp?.type!=="正社員"||isAdmin)) badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/><span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span></span>);
+            if(!ttBOver&&r.otMin>0){ const isPTSei=emp?.role==="理学療法士"&&emp?.type==="正社員"; badges.push(<span key="ot" style={{display:"inline-flex",alignItems:"center",gap:3,marginRight:4}}><Badge label="残業" bg="#FAEEDA" color="#854F0B"/>{(!isPTSei||isAdmin)&&<span style={{fontSize:11,color:"#854F0B",fontWeight:500}}>+{toHStr(r.otMin)}</span>}</span>); }
           }
           else if(r.isOff&&!r.punch&&!approvedHolidayWork) badges.push(<Badge key="off" label="休日" bg="var(--color-background-secondary)" color="var(--color-text-tertiary)"/>);
           else {
