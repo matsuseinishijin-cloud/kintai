@@ -305,11 +305,11 @@ const getOtRule = emp => OT_RULES[emp.role+"_"+emp.type] || { type:"none" };
 // カスタムシフトのパース: "custom:09:00-15:30:60" → {start,end,breakMin}
 function parseCustomShift(st){
   if(!st||!st.startsWith("custom:")) return null;
-  const parts=st.slice(7).split(":");
-  if(parts.length<2) return null;
-  const [timeRange,bk]=parts;
-  const [start,end]=timeRange.split("-");
-  return {start:start||"",end:end||"",breakMin:bk!=null?Number(bk):60};
+  // フォーマット: custom:HH:MM-HH:MM:breakMin
+  const body=st.slice(7); // "HH:MM-HH:MM:breakMin"
+  const match=body.match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
+  if(!match) return null;
+  return {start:match[1],end:match[2],breakMin:match[3]?Number(match[3]):60};
 }
 function isCustomShift(st){ return st&&st.startsWith("custom:"); }
 // カスタムシフトも含めてシフト定義を返すヘルパー
@@ -1635,7 +1635,9 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     const isHol=!!getHolidayName(ds);
                     return <td key={ds} style={{padding:"2px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",cursor:isLocked?"not-allowed":clickable?"pointer":"default",userSelect:"none",borderLeft:dow===1?"2px solid #d1d5db":"none",background:isLocked?"#F0FAF5":isNextMonth?"#f5f5f5":isHol?"#FFF0F0":"inherit"}} onClick={()=>clickable&&!isLocked&&setCell(emp.id,ds)}>
                       <div style={{position:"relative",display:"inline-block",width:"100%"}}>
-                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"2px 3px",fontSize:isCustom?8:isNextMonth?11:15,minWidth:isCustom?52:isNextMonth?36:48,maxWidth:isCustom?64:undefined,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:isCustom?"pre-line":"nowrap",lineHeight:isCustom?1.3:undefined,opacity:isNextMonth?0.5:1}}>{isHalfLeave?halfLeaveLabel:isCustom&&customParsed?`${customParsed.start}\n〜${customParsed.end}`:def.label}</div>
+                        <div style={{background:isHalfLeave?"#E1F5EE":def.color,color:isHalfLeave?"#0F6E56":def.tc,borderRadius:4,padding:"2px 3px",fontSize:isCustom?7:isNextMonth?11:15,minWidth:isCustom?56:isNextMonth?36:48,border:"1px solid transparent",fontWeight:400,textAlign:"center",whiteSpace:"nowrap",opacity:isNextMonth?0.5:1}}>
+                          {isHalfLeave?halfLeaveLabel:isCustom&&customParsed?<><div style={{fontSize:7,lineHeight:1.3,whiteSpace:"nowrap"}}>{customParsed.start}</div><div style={{fontSize:7,lineHeight:1.3,whiteSpace:"nowrap"}}>{customParsed.end}</div></>:def.label}
+                        </div>
                         {lvBadge&&<div
                           style={{position:"absolute",top:-4,right:-2,background:lvBadge.bg,color:lvBadge.tc,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:99,whiteSpace:"nowrap",lineHeight:1.4,boxShadow:"0 1px 3px rgba(0,0,0,0.25)",cursor:"default",zIndex:1}}
                           onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();setTooltip({x:r.left,y:r.bottom+6,lines:tooltipLines});}}
