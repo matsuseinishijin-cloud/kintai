@@ -1232,7 +1232,7 @@ function ShiftDefManager({shiftDefsData,reload,limitDepts=null,onSavingChange=nu
 }
 
 // ── ShiftCalendar ─────────────────────────────────────────────────────────────
-function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRoles:initLeadRoles=null,lvReqs=[],onGotoShiftSetting=null,onGotoPattern=null}){
+function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRoles:initLeadRoles=null,lvReqs=[],timeTransferReqs=[],onGotoShiftSetting=null,onGotoPattern=null}){
   const cur0=getCurrentPeriod();
   const [periodYear,setPeriodYear]=useState(cur0.year);
   const [periodMonth,setPeriodMonth]=useState(cur0.month);
@@ -1572,9 +1572,15 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               {mergedWeekGroups.map((wk,wi)=>{
                 const wMins=getWeekHoursGroup(emp.id,wi);
                 const wH=(wMins/60).toFixed(1);
+                // この週の月曜日を特定
+                const firstDs=wk.find(ds=>!isCustomShift(shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||""))||wk[0];
+                const weekMon=(()=>{const d=new Date(firstDs);const dow=d.getDay();const diff=dow===0?-6:1-dow;d.setDate(d.getDate()+diff);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;})();
+                // タイプC承認済みがある週：超過していても「解決済み」として青扱い
+                const typeCApprovedForWeek=weekLimit&&(wMins/60)>weekLimit&&
+                  (timeTransferReqs||[]).some(r=>String(r.empId)===String(emp.id)&&r.transferType==="C"&&r.status==="approved"&&r.overWeekStart===weekMon);
                 const ratio=weekLimit?(wMins/60)/weekLimit:0;
-                const exact=weekLimit&&ratio===1; // 100%ちょうどのみ青
-                const over=weekLimit&&ratio!==1; // 100%以外は赤
+                const exact=weekLimit&&(ratio===1||typeCApprovedForWeek); // 100%ちょうど or タイプC承認済み → 青
+                const over=weekLimit&&ratio!==1&&!typeCApprovedForWeek; // それ以外は赤
                 return [
                   ...wk.map(ds=>{
                     const dObj=new Date(ds);
@@ -5921,7 +5927,7 @@ export default function App(){
         const t=tabName||aTabs[0];
         if(t==="従業員管理") return <EmpManager emps={emps} passwords={passwords} reload={loadAll}/>;
         if(t==="シフト設定") return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
-        if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
+        if(t==="シフト") return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}}/>;
         if(t==="申請許可") return <ApprovalCenter emps={emps} otReqs={otReqs} lvReqs={lvReqs} transferReqs={transferReqs} punchFixReqs={punchFixReqs} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} leaves={leaves} reload={loadAll} showOT={true} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs} otherReqs={otherReqs}/>;
         if(t==="有給管理") return <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll}/>;
         if(t==="タイムカード") return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} reload={loadAll} onGotoShiftCalendar={()=>setTabName("シフト")} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>;
@@ -5946,7 +5952,7 @@ export default function App(){
         // 月次レポート：自分のTimecardView（従業員・その他責任者共通）
         if(t==="月次レポート") return <TimecardView emps={[cur]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={false} selfView={true} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
         if(t==="タイムカード（部署）"&&isPTlead) return <TimecardView emps={emps} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} shiftDefsData={shiftDefsData} isAdmin={true} leadRoles={leadRolesList} reload={loadAll} shiftConfirmReqs={shiftConfirmReqs} timeTransferReqs={timeTransferReqs}/>;
-        if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}} />;
+        if(t==="シフト作成"&&isLead) return <ShiftCalendar emps={emps} shifts={shifts} shiftDefsData={shiftDefsData} reload={loadAll} leadRoles={leadRolesList} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} onGotoShiftSetting={()=>{setPatternMode(false);setTabName("シフト設定");}} onGotoPattern={()=>{setPatternMode(true);setTabName("シフト設定");}} />;
         if(t==="シフト設定"&&isLead) return <ShiftSettingTab shiftDefsData={shiftDefsData} weekPatterns={weekPatterns} emps={emps} shifts={shifts} lvReqs={lvReqs} reload={loadAll} limitDepts={leadDepts} leadRoles={leadRolesList} onSavingChange={setShiftDefSaving} initialSub={patternMode?"pattern":"def"}/>;
         if(t==="申請許可"&&isLead){
           const isOTLead=leadRolesList.includes("理学療法士");
