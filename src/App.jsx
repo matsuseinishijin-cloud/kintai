@@ -498,21 +498,9 @@ function buildRows(emp, shifts, punches, otReqs, lvReqs, year, month, shiftDefsD
     const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave; // 退勤のみ・出勤忘れ（異常データ）
 
     if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-    // シフトなし半日有休の場合は入力時刻をシフトとして使用
-    if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
 
     if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
-    else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
-      // シフトなし半日有休：入力時刻を基準に遅刻・早退・残業を計算
-      const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
-      const im=toMin(punch.in),om=toMin(punch.out);
-      awMin=Math.max(0,om-im);
-      if(im>shiftStartMin+1) late=true;
-      if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
-      const rawOt=Math.max(0,om-shiftEndMin);
-      otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
-      diffMin=om-shiftEndMin;
-    } else if(punch&&punch.out&&punch.in){
+    else if(punch&&punch.out&&punch.in){
       const shiftStartMin=toMin(def.start||"00:00"), shiftEndMin=toMin(def.end||"00:00");
       const im=toMin(punch.in), om=toMin(punch.out);
       let imForWork=im;
@@ -2223,18 +2211,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave;
       const missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
       if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
-      else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
-        const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
-        const im=toMin(punch.in),om=toMin(punch.out);
-        awMin=Math.max(0,om-im);
-        if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
-        const rawOt=Math.max(0,om-shiftEndMin);
-        otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
-        diffMin=om-shiftEndMin;
-      } else if(punch&&punch.out&&punch.in){
+      else if(punch&&punch.out&&punch.in){
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00");
         const im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
@@ -2751,18 +2729,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
       let swMin=0,awMin=0,otMin=0,diffMin=0,late=false,earlyLeave=false,earlyLeaveMin=0,absent=false,adj=punch?.adjusted||false,earlyAdj=false;
       const missingOut=!!punch&&!punch.out&&!isOff&&!isLeave,missingIn=!!punch&&!punch.in&&!!punch.out&&!isOff&&!isLeave;
       if(!isOff&&def.start&&!isFullLeave) swMin=toMin(def.end)-toMin(def.start)-shiftBreakMin;
-      if(isHalfLeaveWithTime) swMin=toMin(halfLeaveEnd)-toMin(halfLeaveStart);
       if(isFullLeave){ swMin=0; awMin=0; otMin=0; }
-      else if(isHalfLeaveWithTime&&punch?.in&&punch?.out){
-        const shiftStartMin=toMin(halfLeaveStart),shiftEndMin=toMin(halfLeaveEnd);
-        const im=toMin(punch.in),om=toMin(punch.out);
-        awMin=Math.max(0,om-im);
-        if(im>shiftStartMin+1) late=true;
-        if(om<shiftEndMin-1){earlyLeave=true;const rawEarlyLeave=shiftEndMin-om;earlyLeaveMin=roundMin>0?roundDownMin(rawEarlyLeave,roundMin):rawEarlyLeave;}
-        const rawOt=Math.max(0,om-shiftEndMin);
-        otMin=roundMin>0?roundDownMin(rawOt,roundMin):rawOt;
-        diffMin=om-shiftEndMin;
-      } else if(punch&&punch.out&&punch.in){
+      else if(punch&&punch.out&&punch.in){
         const shiftStartMin=toMin(def.start||"00:00"),shiftEndMin=toMin(def.end||"00:00"),im=toMin(punch.in),om=toMin(punch.out);
         let imForWork=im;
         let earlyApprovedMin=0;
