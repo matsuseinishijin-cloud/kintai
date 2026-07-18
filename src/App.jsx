@@ -2543,16 +2543,15 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
         </div>
         {emp&&<div style={{...crd,padding:"14px 16px",marginBottom:"1rem",background:"#fff"}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#111"}}>月次レポート</div>
-          {/* 上段：勤務日数・有休・要確認 */}
+          {/* 上段：合計就労時間・出勤日数・要確認 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-            <div style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
-              <div style={{fontSize:11,color:"#555",marginBottom:2}}>勤務日数</div>
-              <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{attendDays}日</div>
-            </div>
-            <div style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
-              <div style={{fontSize:11,color:"#555",marginBottom:2}}>有休</div>
-              <div style={{fontSize:20,fontWeight:700,color:lvC>0?"#0F6E56":"#111"}}>{lvC>0?lvC+"日":"―"}</div>
-            </div>
+            {[["合計就労時間",toHStr(totalWorkWithOT)],["出勤日数",attendDays+"日"]].map(([l,v])=>(
+              <div key={l} style={{textAlign:"center",padding:"10px 4px",background:"#fff",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+                <div style={{fontSize:11,color:"#555",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:20,fontWeight:700,color:"#111"}}>{v}</div>
+                {l==="合計就労時間"&&totalOT>0&&<div style={{fontSize:10,color:"#854F0B",marginTop:2}}>（残業{toHStr(totalOT)}含む）</div>}
+              </div>
+            ))}
             <div style={{textAlign:"center",padding:"10px 4px",background:confirmDays>0?"#FFF0F0":"#fff",border:confirmDays>0?"0.5px solid #F09595":"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
               <div style={{fontSize:11,color:"#555",marginBottom:2}}>要確認</div>
               <div style={{fontSize:20,fontWeight:700,color:confirmDays>0?"#A32D2D":"#111"}}>{confirmDays>0?confirmDays+"日":"―"}</div>
@@ -2566,6 +2565,10 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
                 <div style={{fontSize:16,fontWeight:700,color:"#111"}}>{v}</div>
               </div>
             ))}
+          </div>
+          <div style={{display:"flex",gap:12,fontSize:12,color:"#555",alignItems:"center",flexWrap:"wrap"}}>
+            <span>所定：<strong style={{color:"#111"}}>{toHStr(tS)}</strong></span>
+            <span>実働：<strong style={{color:"#111"}}>{toHStr(totalWork)}</strong></span>
           </div>
         </div>}
         {/* タイムカード */}
@@ -2909,31 +2912,46 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         const otDays=rows.filter(r=>r.otMin>0&&!r.isOff).length;
         // 医療事務・その他roundタイプ：上段3・下段4の2段構成
         if(rule.type==="round"||rule.type==="none"){
+          const isPTSeishainSummary=emp?.role==="理学療法士"&&emp?.type==="正社員";
           return <>
-            {/* 上段：勤務日数・残業時間・要確認 */}
+            {/* 上段：勤務日数・有休（PT正社員）or残業時間（その他）・要確認 */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
               <div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>勤務日数</div>
                 <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{attendDays}日</div>
               </div>
-              {(isAdmin&&!(emp?.role==="理学療法士"&&emp?.type==="正社員"))&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
-                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
-                <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin-ttBOTAdjMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin-ttBOTAdjMin)>0?toHStr(tO+scOTMin-ttBOTAdjMin):"―"}</div>
-                {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
-              </div>}
+              {isPTSeishainSummary
+                ?<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>有休</div>
+                  <div style={{fontSize:20,fontWeight:700,color:lvC>0?"#0F6E56":"var(--color-text-primary)"}}>{lvC>0?lvC+"日":"―"}</div>
+                </div>
+                :(isAdmin&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
+                  <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin-ttBOTAdjMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin-ttBOTAdjMin)>0?toHStr(tO+scOTMin-ttBOTAdjMin):"―"}</div>
+                  {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
+                </div>)
+              }
               <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div>
                 <div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div>
               </div>
             </div>
-            {/* 下段：欠勤・遅刻・早退・有休 */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
-              {[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""],["有休",lvC+"日","#0F6E56"]].map(([l,v,c])=>(
-                <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
-                  <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
-                  <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
-                </div>
-              ))}
+            {/* 下段：欠勤・遅刻・早退（PT正社員）or欠勤・遅刻・早退・有休（その他） */}
+            <div style={{display:"grid",gridTemplateColumns:isPTSeishainSummary?"1fr 1fr 1fr":"1fr 1fr 1fr 1fr",gap:8}}>
+              {isPTSeishainSummary
+                ?[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""]].map(([l,v,c])=>(
+                  <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                    <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
+                  </div>
+                ))
+                :[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""],["有休",lvC+"日","#0F6E56"]].map(([l,v,c])=>(
+                  <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                    <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
+                  </div>
+                ))
+              }
             </div>
           </>;
         }
@@ -2955,8 +2973,8 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {rule.type!=="round"&&rule.type!=="none"&&<span>所定：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tS)}</strong></span>}
         {emp?.type!=="正社員"&&<span>実働：<strong style={{color:"var(--color-text-primary)"}}>{toHStr(tA)}</strong></span>}
         {rule.type!=="round"&&rule.type!=="none"&&(emp?.role!=="理学療法士"||isAdmin)&&<span>残業：<strong style={{color:tO>0?"#854F0B":"var(--color-text-primary)"}}>{toHStr(tO)}</strong></span>}
-        {showOvertimeCell&&<span>時間外（週超過）：<strong style={{color:totalOvertimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{totalOvertimeMin>0?toHStr(totalOvertimeMin):"―"}</strong></span>}
-        {weeklyOT>0&&<span>週超過（未申請）：<strong style={{color:"#A32D2D"}}>{toHStr(weeklyOT)}</strong></span>}
+        {showOvertimeCell&&!(emp?.role==="理学療法士"&&emp?.type==="正社員")&&<span>時間外（週超過）：<strong style={{color:totalOvertimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{totalOvertimeMin>0?toHStr(totalOvertimeMin):"―"}</strong></span>}
+        {weeklyOT>0&&!(emp?.role==="理学療法士"&&emp?.type==="正社員")&&<span>週超過（未申請）：<strong style={{color:"#A32D2D"}}>{toHStr(weeklyOT)}</strong></span>}
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
       </div>
     </div>}
