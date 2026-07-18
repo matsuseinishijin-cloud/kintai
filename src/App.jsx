@@ -2861,8 +2861,14 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   })();
   const isFixedOT=rule.type==="fixed";
   // タイプC承認済み時間外をovertimeMinに加算
-  const approvedTypeC=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="C"&&r.status==="approved"&&periodDays.includes(r.overWeekStart||"")).reduce((s,r)=>s+Number(r.offsetMin||0),0);
-  const totalOvertimeMin=overtimeMin+approvedTypeC;
+  // 週の月曜日がperiodDaysと重なる週のタイプCを集計
+  const periodWeekStarts=new Set(periodDays.map(ds=>{
+    const d=new Date(ds);const dow=d.getDay();const diff=dow===0?-6:1-dow;
+    const mon=new Date(d);mon.setDate(d.getDate()+diff);
+    return mon.toISOString().slice(0,10);
+  }));
+  const approvedTypeC=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp?.id)&&r.transferType==="C"&&r.status==="approved"&&periodWeekStarts.has(r.overWeekStart||"")).reduce((s,r)=>s+Number(r.offsetMin||0),0);
+  const totalOvertimeMin=approvedTypeC; // サマリーの「時間外」は承認済みタイプCのみ
   const otAlert=isFixedOT&&tO>(rule.limitH||20)*60;
 
   // 理学療法士正社員：残業（打刻超過）・時間外（週シフト超過）は別管理
@@ -4092,9 +4098,9 @@ function OtherRequest({emp,otherReqs=[],reload}){
   </div>;
 }
 
-// ── OvertimeRequest (理学療法士正社員向け時間外申請・週単位) ─────────────────
+// ── OvertimeRequest (理学療法士正社員向け時間外申請・週単位・複数選択) ─────────────────
 function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
-  const [selectedWeek,setSelectedWeek]=useState(""),[sub,setSub]=useState(false),[err,setErr]=useState("");
+  const [selectedWeeks,setSelectedWeeks]=useState(new Set()),[sub,setSub]=useState(false),[err,setErr]=useState("");
   const weeklyLimit=emp.weeklyLimit?Number(emp.weeklyLimit)*60:null;
 
   // 週の月曜日を返す
@@ -4107,7 +4113,6 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
   };
 
   // 週のシフト合計時間（分）タイムゾーン安全
-  // 有休1日=480分、半休=240分としてカウント
   const getWeekShiftMin=(weekStart)=>{
     if(!weekStart) return 0;
     const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
@@ -4118,10 +4123,8 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
       const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
       const shiftRow=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds);
       const st=shiftRow?.shiftType||"off";
-      // 有休シフトは固定時間でカウント
       if(st==="leave") { total+=480; continue; }
       if(st==="leave_am"||st==="leave_pm") { total+=240; continue; }
-      // カスタムシフト
       if(isCustomShift(st)){ const c=parseCustomShift(st); if(c&&c.start&&c.end) total+=Math.max(0,toMin(c.end)-toMin(c.start)-c.breakMin); continue; }
       const def=empDefs[st]||empDefs.off||SHIFT_DEFS.off;
       if(def.start&&def.end){const bk=def.breakMin!=null?Number(def.breakMin):0;total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);}
@@ -4129,13 +4132,13 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
     return total;
   };
 
-  // 対象週の選択肢（先々月・先月・当月の3ヶ月分で所定超過している週、タイプA/C申請済みは除外）
+  // 対象週の選択肢
   const weekOptions=(()=>{
     if(!weeklyLimit) return [];
     const opts=[];
     const now=new Date();
     const seen=new Set();
-    for(let mo=-2;mo<=1;mo++){  // 先々月〜翌月（当月末に翌週が含まれる場合対応）
+    for(let mo=-2;mo<=1;mo++){
       const raw=now.getMonth()+1+mo;
       const y=raw<=0?now.getFullYear()-1:raw>12?now.getFullYear()+1:now.getFullYear();
       const m=raw<=0?raw+12:raw>12?raw-12:raw;
@@ -4148,10 +4151,8 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
         const wMin=getWeekShiftMin(mon);
         const excess=Math.max(0,wMin-weeklyLimit);
         if(excess<=0) continue;
-        // タイプA（振替）またはタイプC（時間外）で申請済みの週は除外
         const alreadyUsed=(timeTransferReqs||[]).filter(r=>
-          String(r.empId)===String(emp.id)&&
-          r.overWeekStart===mon&&
+          String(r.empId)===String(emp.id)&&r.overWeekStart===mon&&
           (r.transferType==="A"||r.transferType==="C")&&
           (r.status==="pending"||r.status==="approved")
         ).reduce((s,r)=>s+Number(r.offsetMin||0),0);
@@ -4162,22 +4163,34 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
     return opts;
   })();
 
-  const selected=weekOptions.find(o=>o.mon===selectedWeek);
+  const toggleWeek=(mon)=>{
+    setSelectedWeeks(prev=>{
+      const next=new Set(prev);
+      next.has(mon)?next.delete(mon):next.add(mon);
+      return next;
+    });
+  };
+
+  const selectedOptions=weekOptions.filter(o=>selectedWeeks.has(o.mon));
+  const totalSelected=selectedOptions.reduce((s,o)=>s+o.remaining,0);
 
   const submit=async()=>{
     setErr("");
-    if(!selectedWeek||!selected) return;
+    if(selectedWeeks.size===0) return;
     try{
-      const data=convertTo({
-        id:newId(),empId:emp.id,
-        transferType:"C",
-        shortWeekStart:"",overWeekStart:selectedWeek,
-        shortDate:"",overDate:"",
-        offsetMin:selected.remaining,
-        reason:"時間外申請",status:"pending"
-      },TIME_TRANSFER_INV);
-      await gasSave("時間振替申請",data);
-      setSelectedWeek("");setSub(true);setTimeout(()=>setSub(false),3000);
+      // 選択された週ごとに個別レコードを保存
+      for(const o of selectedOptions){
+        const data=convertTo({
+          id:newId(),empId:emp.id,
+          transferType:"C",
+          shortWeekStart:"",overWeekStart:o.mon,
+          shortDate:"",overDate:"",
+          offsetMin:o.remaining,
+          reason:"時間外申請",status:"pending"
+        },TIME_TRANSFER_INV);
+        await gasSave("時間振替申請",data);
+      }
+      setSelectedWeeks(new Set());setSub(true);setTimeout(()=>setSub(false),3000);
       await reload();
     }catch(e){setErr("申請失敗："+e.message);}
   };
@@ -4185,7 +4198,7 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
   const myReqs=(timeTransferReqs||[]).filter(r=>String(r.empId)===String(emp.id)&&r.transferType==="C").sort((a,b)=>b.overWeekStart<a.overWeekStart?-1:1);
 
   return <div>
-    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:460}}>
+    <div style={{...crd,padding:"1.25rem",marginBottom:"1rem",maxWidth:500}}>
       <div style={{fontSize:15,fontWeight:700,marginBottom:"1rem"}}>時間外申請</div>
       {!weeklyLimit
         ?<div style={{padding:"1rem",background:"var(--color-background-secondary)",borderRadius:8,fontSize:12,color:"var(--color-text-secondary)"}}>週所定労働時間が設定されていません</div>
@@ -4194,24 +4207,28 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
             週所定労働時間：<strong>{emp.weeklyLimit}時間</strong>
           </div>
           <div style={{marginBottom:12}}>
-            <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:3}}>所定超過している週</div>
+            <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:6}}>所定超過している週（複数選択可）</div>
             {weekOptions.length===0
               ?<div style={{padding:"8px 12px",background:"var(--color-background-secondary)",borderRadius:8,fontSize:12,color:"var(--color-text-tertiary)"}}>該当する週がありません</div>
-              :<select value={selectedWeek} onChange={e=>setSelectedWeek(e.target.value)} style={iS}>
-                <option value="">選択してください</option>
+              :<div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {weekOptions.map(o=>(
-                  <option key={o.mon} value={o.mon}>
-                    {o.mon}週（シフト{toHStr(o.wMin)}・超過{toHStr(o.remaining)}）
-                  </option>
+                  <label key={o.mon} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:selectedWeeks.has(o.mon)?"#EDE9FE":"var(--color-background-secondary)",border:selectedWeeks.has(o.mon)?"1px solid #7C3AED":"1px solid transparent",cursor:"pointer"}}>
+                    <input type="checkbox" checked={selectedWeeks.has(o.mon)} onChange={()=>toggleWeek(o.mon)} style={{width:16,height:16,cursor:"pointer"}}/>
+                    <div style={{flex:1}}>
+                      <span style={{fontSize:12,fontWeight:600,color:"#1251a3"}}>{o.mon}週</span>
+                      <span style={{fontSize:11,color:"var(--color-text-secondary)",marginLeft:8}}>シフト{toHStr(o.wMin)}</span>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:700,color:"#854F0B"}}>超過{toHStr(o.remaining)}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             }
           </div>
-          {selected&&<div style={{marginBottom:12,padding:"10px 12px",background:"#FFF8E1",borderRadius:8,fontSize:12,color:"#854F0B",fontWeight:600}}>
-            時間外申請：<strong>{toHStr(selected.remaining)}</strong>
+          {selectedWeeks.size>0&&<div style={{marginBottom:12,padding:"10px 12px",background:"#FFF8E1",borderRadius:8,fontSize:12,color:"#854F0B",fontWeight:600}}>
+            申請合計：<strong>{toHStr(totalSelected)}</strong>（{selectedWeeks.size}週分）
           </div>}
           {err&&<div style={{marginBottom:8,padding:"6px 10px",background:"#FCEBEB",borderRadius:8,fontSize:12,color:"#A32D2D"}}>{err}</div>}
-          <button onClick={submit} disabled={!selected} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:selected?1:0.4}}>申請する</button>
+          <button onClick={submit} disabled={selectedWeeks.size===0} style={{...bP,width:"100%",padding:"10px 0",fontSize:14,opacity:selectedWeeks.size>0?1:0.4}}>申請する（{selectedWeeks.size}週）</button>
           {sub&&<div style={{marginTop:8,fontSize:12,color:"#3B6D11",padding:"6px 10px",background:"#EAF3DE",borderRadius:6}}>申請しました。承認をお待ちください。</div>}
         </>
       }
@@ -4668,6 +4685,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
   // 理学療法士・正社員は「有給申請」＋「その他申請」の2つのみ
   const sections=isOvertimeRequestTarget?[
     ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
+    {key:"overtime_request",label:"時間外申請"},
     {key:"other",label:"その他申請"},
   ]:[
     ...(hasLeave?[{key:"leave",label:"有給申請"}]:[]),
@@ -4690,6 +4708,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
+    {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
     {validSection==="other"&&isOvertimeRequestTarget&&<OtherRequest emp={emp} otherReqs={otherReqs} reload={reload}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&isEarlyTarget&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
