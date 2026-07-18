@@ -2931,16 +2931,22 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
                   {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
                 </div>)
               }
-              <div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
-                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div>
-                <div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div>
-              </div>
-            </div>
-            {/* 下段：欠勤・遅刻・早退（PT正社員）or欠勤・遅刻・早退・有休（その他） */}
-            <div style={{display:"grid",gridTemplateColumns:isPTSeishainSummary?"1fr 1fr 1fr":"1fr 1fr 1fr 1fr",gap:8}}>
               {isPTSeishainSummary
-                ?[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""]].map(([l,v,c])=>(
-                  <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                ?<div style={{textAlign:"center",padding:"10px 4px",background:totalOvertimeMin>0?"#FFF8E1":"var(--color-background-secondary)",border:totalOvertimeMin>0?"0.5px solid #F59E0B":"none",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>時間外</div>
+                  <div style={{fontSize:20,fontWeight:700,color:totalOvertimeMin>0?"#854F0B":"var(--color-text-primary)"}}>{totalOvertimeMin>0?toHStr(totalOvertimeMin):"―"}</div>
+                </div>
+                :<div style={{textAlign:"center",padding:"10px 4px",background:cd>0?"#FFF0F0":"var(--color-background-secondary)",border:cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>要確認</div>
+                  <div style={{fontSize:20,fontWeight:700,color:cd>0?"#A32D2D":"var(--color-text-primary)"}}>{cd>0?cd+"日":"―"}</div>
+                </div>
+              }
+            </div>
+            {/* 下段：欠勤・遅刻・早退・要確認（PT正社員）or欠勤・遅刻・早退・有休（その他） */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+              {isPTSeishainSummary
+                ?[["欠勤",abC+"日",abC>0?"#A32D2D":""],["遅刻",lC+"回",lC>0?"#854F0B":""],["早退",eC+"回",eC>0?"#854F0B":""],["要確認",cd>0?cd+"日":"―",cd>0?"#A32D2D":""]].map(([l,v,c])=>(
+                  <div key={l} style={{textAlign:"center",padding:"8px 4px",background:l==="要確認"&&cd>0?"#FFF0F0":"var(--color-background-secondary)",border:l==="要確認"&&cd>0?"0.5px solid #F09595":"none",borderRadius:8}}>
                     <div style={{fontSize:10,color:"var(--color-text-secondary)",marginBottom:2}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:500,color:c||"var(--color-text-primary)"}}>{v}</div>
                   </div>
