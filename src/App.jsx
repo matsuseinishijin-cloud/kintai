@@ -2159,12 +2159,14 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   const isPTpart=emp&&emp.role==="理学療法士"&&emp.type==="パート";
   const isSeishain=emp&&emp.type==="正社員";
 
-  // 15日締め期間を生成（前月16日〜当月15日）
+  // 15日締め期間を生成（前月16日〜当月15日）タイムゾーン安全
   const period=getPeriodRange(year,month);
   const periodDays=(()=>{
     const days=[];
-    let cur=new Date(period.start);
-    const end=new Date(period.end);
+    const [sy,sm,sd]=period.start.split("-").map(Number);
+    const [ey,em,ed]=period.end.split("-").map(Number);
+    let cur=new Date(sy,sm-1,sd);
+    const end=new Date(ey,em-1,ed);
     while(cur<=end){
       days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
       cur.setDate(cur.getDate()+1);
