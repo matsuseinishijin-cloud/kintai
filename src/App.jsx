@@ -1653,7 +1653,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       </div>
                     </td>;
                   }),
-                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:exact?"#f0f4ff":"#FCEBEB",cursor:"default"}}
+                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:weekLimit?(exact?"#f0f4ff":"#FCEBEB"):"#f5f5f5",cursor:"default"}}
                     onMouseEnter={e=>{
                       const transferComments=(timeTransferReqs||[])
                         .filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&(r.overWeekStart===weekMon||r.shortWeekStart===weekMon));
@@ -1671,8 +1671,17 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                     }}
                     onMouseLeave={()=>setTooltip(null)}
                   >
-                    <div style={{fontSize:13,fontWeight:700,color:exact?"#1251a3":"#A32D2D"}}>{wH}h</div>
-                    {weekLimit&&<div style={{fontSize:10,color:exact?"#1251a3":"#A32D2D"}}>/{weekLimit}h</div>}
+                    {weekLimit
+                      ?<>
+                        <div style={{fontSize:11,fontWeight:700,color:exact?"#1251a3":"#A32D2D",lineHeight:1.3}}>
+                          {exact?"完了✓"
+                            :(wMins/60)>weekLimit?`+${((wMins/60)-weekLimit).toFixed(1)}h超過`
+                            :`残${(weekLimit-(wMins/60)).toFixed(1)}h`}
+                        </div>
+                        <div style={{fontSize:9,color:"#9ca3af",lineHeight:1.3}}>{wH}/{weekLimit}h</div>
+                      </>
+                      :<div style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>{wH}h</div>
+                    }
                   </td>
                 ];
               })}
