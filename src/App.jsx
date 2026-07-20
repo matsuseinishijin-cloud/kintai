@@ -4317,13 +4317,14 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
 
   const weeklyLimit=emp.weeklyLimit?Number(emp.weeklyLimit)*60:null;
 
-  // 対象週の選択肢（当月・翌月）
+  // 対象週の選択肢（先月・当月）
   const weekOptions=(()=>{
     const opts=[];
     const now=new Date();
-    for(let mo=0;mo<=1;mo++){
-      const y=now.getMonth()+1+mo>12?now.getFullYear()+1:now.getFullYear();
-      const m=((now.getMonth()+mo)%12)+1;
+    for(let mo=-1;mo<=0;mo++){
+      const raw=now.getMonth()+1+mo;
+      const y=raw<=0?now.getFullYear()-1:now.getFullYear();
+      const m=raw<=0?raw+12:raw;
       const last=daysInMonth(y,m);
       const seen=new Set();
       for(let d=1;d<=last;d++){
@@ -4335,14 +4336,15 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
     return [...new Set(opts)].sort();
   })();
 
-  // 日単位：対象日の選択肢（当月・翌月で打刻がある日 + 休日出勤承認済み日）
+  // 日単位：対象日の選択肢（先月・当月で打刻がある日 + 休日出勤承認済み日）
   const dayOptions=(()=>{
     const opts=[];
     const now=new Date();
     const td=today();
-    for(let mo=0;mo<=1;mo++){
-      const y=now.getMonth()+1+mo>12?now.getFullYear()+1:now.getFullYear();
-      const m=((now.getMonth()+mo)%12)+1;
+    for(let mo=-1;mo<=0;mo++){
+      const raw=now.getMonth()+1+mo;
+      const y=raw<=0?now.getFullYear()-1:now.getFullYear();
+      const m=raw<=0?raw+12:raw;
       const last=daysInMonth(y,m);
       for(let d=1;d<=last;d++){
         const ds=`${y}-${pad(m)}-${pad(d)}`;
