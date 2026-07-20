@@ -3530,6 +3530,21 @@ function LeaveRequest({emp,leaves,lvReqs,shifts=[],shiftDefsData={},reload,initD
   const canSubmit=!!(form.date&&form.reason&&rem>=days&&(!needsTimeInput||(form.leaveStart&&form.leaveEnd)));
   const submit=async()=>{
     if(!canSubmit)return;
+    // シフトとの重なりチェック
+    if(!isOffDay){
+      if(form.half==="full"){
+        alert(`${form.date} は既にシフトが入っているため申請できません。先にシフトを休日に変更してください。`);
+        return;
+      }
+      if((form.half==="am"||form.half==="pm")&&form.leaveStart&&form.leaveEnd&&shiftDef.start){
+        const shiftS=toMin(shiftDef.start),shiftE=toMin(shiftDef.end);
+        const lvS=toMin(form.leaveStart),lvE=toMin(form.leaveEnd);
+        if(lvS<shiftE&&lvE>shiftS){
+          alert(`${form.date} の有休時間帯（${form.leaveStart}〜${form.leaveEnd}）がシフト（${shiftDef.start}〜${shiftDef.end}）と重なっています。先にシフトを調整してください。`);
+          return;
+        }
+      }
+    }
     try{
       const half=isPartt?null:(form.half==="full"?null:form.half);
       const data=convertTo({id:newId(),empId:emp.id,date:form.date,reason:form.reason,status:"pending",half,leaveStart:needsTimeInput?form.leaveStart:"",leaveEnd:needsTimeInput?form.leaveEnd:""},LV_REQ_INV);
@@ -4256,7 +4271,7 @@ function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
 }
 
 // ── TimeTransferRequest (従業員：時間振替申請) ───────────────────────────────
-function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferReqs,shiftConfirmReqs=[],reload}){
+function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferReqs,shiftConfirmReqs=[],lvReqs=[],reload}){
   const [transferType,setTransferType]=useState("A"); // A:週単位 B:日単位
   const [form,setForm]=useState({shortWeekStart:"",overWeekStart:"",offsetMin:"",reason:""});
   const [formB,setFormB]=useState({shortDate:"",overDate:"",offsetMin:"",reason:""});
@@ -4271,7 +4286,7 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   };
 
-  // 週のシフト合計時間（分）を計算
+  // 週のシフト合計時間（分）を計算（有休含む）
   const getWeekShiftMin=(weekStart)=>{
     if(!weekStart) return 0;
     const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
@@ -4287,6 +4302,14 @@ function TimeTransferRequest({emp,shifts,punches=[],shiftDefsData,timeTransferRe
       if(def.start&&def.end){
         const bk=def.breakMin!=null?Number(def.breakMin):0;
         total+=Math.max(0,toMin(def.end)-toMin(def.start)-bk);
+      }
+      // 承認済み有休を加算（全日8h・有休時間帯あり→その長さ）
+      const lvApproved=(lvReqs||[]).find(r=>String(r.empId)===String(emp.id)&&r.date===ds&&r.status==="approved");
+      if(lvApproved){
+        const lvMin=lvApproved.leaveStart&&lvApproved.leaveEnd
+          ?Math.max(0,toMin(lvApproved.leaveEnd)-toMin(lvApproved.leaveStart))
+          :(lvApproved.half?240:480);
+        total+=lvMin;
       }
     }
     return total;
@@ -4721,7 +4744,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&isEarlyTarget&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="transfer"&&isSeishain&&<TransferRequest emp={emp} shifts={shifts} transferReqs={transferReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
-    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs} reload={reload}/>}
+    {validSection==="timetransfer"&&isSeishain&&<TimeTransferRequest emp={emp} shifts={shifts} punches={punches} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs} lvReqs={lvReqs} reload={reload}/>}
     {validSection==="punchfix"&&<PunchFixRequest emp={emp} punches={punches} punchFixReqs={punchFixReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="shiftconfirm"&&<ShiftConfirmRequest emp={emp} punches={punches} shifts={shifts} shiftConfirmReqs={shiftConfirmReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
   </div>;
