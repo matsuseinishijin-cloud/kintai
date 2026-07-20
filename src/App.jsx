@@ -2157,6 +2157,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   const emp=filteredEmps.find(e=>String(e.id)===String(empId))||filteredEmps[0];
   const isPTpart=emp&&emp.role==="理学療法士"&&emp.type==="パート";
   const isSeishain=emp&&emp.type==="正社員";
+  // empやselfViewが変わったときsubTabを0にリセット
+  useEffect(()=>{setSubTab(0);},[emp?.id,selfView]);
 
   // 15日締め期間を生成（前月16日〜当月15日）タイムゾーン安全
   const period=getPeriodRange(year,month);
