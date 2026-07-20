@@ -2749,7 +2749,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
   // 15日締め期間
   const period=getPeriodRange(year,month);
   const periodDays=(()=>{
-    const days=[];let cur=new Date(period.start);const end=new Date(period.end);
+    const days=[];const [_sy,_sm,_sd]=period.start.split("-").map(Number),[_ey,_em,_ed]=period.end.split("-").map(Number);let cur=new Date(_sy,_sm-1,_sd);const end=new Date(_ey,_em-1,_ed);
     while(cur<=end){days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);cur.setDate(cur.getDate()+1);}
     return days;
   })();
@@ -4985,7 +4985,7 @@ function PTMonthlyReportSelf({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsDa
   const period=getPeriodRange(_year,_month);
 
   const days=[];
-  let cur=new Date(period.start);const end=new Date(period.end);
+  const [_sy,_sm,_sd]=period.start.split("-").map(Number),[_ey,_em,_ed]=period.end.split("-").map(Number);let cur=new Date(_sy,_sm-1,_sd);const end=new Date(_ey,_em-1,_ed);
   while(cur<=end){days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);cur.setDate(cur.getDate()+1);}
 
   const empDefs=getShiftDefsByRole(emp.role,shiftDefsData||{});
@@ -5100,8 +5100,8 @@ function MonthlyReport({emp,punches,shifts,otReqs,shiftDefsData}){
 
   // 期間内の日付を生成
   const days=[];
-  let cur=new Date(period.start);
-  const end=new Date(period.end);
+  const [_sy2,_sm2,_sd2]=period.start.split("-").map(Number),[_ey2,_em2,_ed2]=period.end.split("-").map(Number);let cur=new Date(_sy2,_sm2-1,_sd2);
+  const end=new Date(_ey2,_em2-1,_ed2);
   while(cur<=end){
     days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
     cur.setDate(cur.getDate()+1);
@@ -5276,8 +5276,8 @@ function NurseMonthlyReport({emp,punches,shifts,shiftDefsData,outerYear=null,out
   const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
 
   const days=[];
-  let cur=new Date(period.start);
-  const end=new Date(period.end);
+  const [_sy2,_sm2,_sd2]=period.start.split("-").map(Number),[_ey2,_em2,_ed2]=period.end.split("-").map(Number);let cur=new Date(_sy2,_sm2-1,_sd2);
+  const end=new Date(_ey2,_em2-1,_ed2);
   while(cur<=end){
     days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
     cur.setDate(cur.getDate()+1);
@@ -5479,8 +5479,8 @@ function RehaMonthlyReport({emp,punches,shifts,otReqs=[],lvReqs=[],shiftDefsData
   const nextPeriod=()=>{const nm=periodMonth===12?1:periodMonth+1;const ny=periodMonth===12?periodYear+1:periodYear;setPeriodYear(ny);setPeriodMonth(nm);};
 
   const days=[];
-  let cur=new Date(period.start);
-  const end=new Date(period.end);
+  const [_sy2,_sm2,_sd2]=period.start.split("-").map(Number),[_ey2,_em2,_ed2]=period.end.split("-").map(Number);let cur=new Date(_sy2,_sm2-1,_sd2);
+  const end=new Date(_ey2,_em2-1,_ed2);
   while(cur<=end){
     days.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
     cur.setDate(cur.getDate()+1);
