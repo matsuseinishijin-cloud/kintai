@@ -1428,7 +1428,10 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
   const calcWeekHours=(empId,weekDays)=>{
     const emp=emps.find(e=>String(e.id)===String(empId));
     const empDefs=getEmpShiftDefs(emp||{role:"理学療法士"});
-    return weekDays.reduce((sum,ds)=>{
+    // この週の月曜日を特定
+    const firstDs=weekDays[0];
+    const weekMon=(()=>{const d=new Date(firstDs);const dow=d.getDay();const diff=dow===0?-6:1-dow;d.setDate(d.getDate()+diff);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;})();
+    let total=weekDays.reduce((sum,ds)=>{
       let daySum=0;
       const st=shifts.find(s=>String(s.empId)===String(empId)&&s.date===ds)?.shiftType||"off";
       if(isCustomShift(st)){
@@ -1439,7 +1442,6 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
         if(def&&def.start&&def.end){ const bk=def.breakMin!=null?def.breakMin:BREAK_MIN; daySum+=Math.max(0,toMin(def.end)-toMin(def.start)-bk); }
       }
       // 承認済み有休：有休時間帯（leaveStart〜leaveEnd）の長さを加算
-      // 全日有休（時間帯なし）：8時間固定、半日（時間帯あり）：実際の時間帯の長さ
       const lvApproved=(lvReqs||[]).find(r=>String(r.empId)===String(empId)&&r.date===ds&&r.status==="approved");
       if(lvApproved){
         const lvMin=lvApproved.leaveStart&&lvApproved.leaveEnd
@@ -1449,6 +1451,16 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
       }
       return sum+daySum;
     },0);
+    // タイプA承認済み振替の相殺
+    (timeTransferReqs||[]).filter(r=>String(r.empId)===String(empId)&&r.transferType==="A"&&r.status==="approved").forEach(r=>{
+      if(r.overWeekStart===weekMon) total-=Number(r.offsetMin||0); // 超過週：減算
+      if(r.shortWeekStart===weekMon) total+=Number(r.offsetMin||0); // 不足週：加算
+    });
+    // タイプC承認済み（時間外申請）：超過週から差し引き
+    (timeTransferReqs||[]).filter(r=>String(r.empId)===String(empId)&&r.transferType==="C"&&r.status==="approved").forEach(r=>{
+      if(r.overWeekStart===weekMon) total-=Number(r.offsetMin||0);
+    });
+    return Math.max(0,total);
   };
   // 時間帯別在席人数（選択職種の全従業員）
   const calcSlotCount=(ds,slot)=>{
@@ -1641,9 +1653,36 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                       </div>
                     </td>;
                   }),
-                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:over?"#FCEBEB":"#f0f4ff"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:over?"#A32D2D":"#1251a3"}}>{wH}{"h"}</div>
-                    {weekLimit&&<div style={{fontSize:10,color:over?"#A32D2D":"#9ca3af"}}>{"/"+(weekLimit)+"h"}</div>}
+                  <td key={"w"+wi+"_"+emp.id} style={{padding:"4px 6px",borderBottom:"0.5px solid var(--color-border-tertiary)",textAlign:"center",borderLeft:"2px solid #1251a3",background:weekLimit?(exact?"#f0f4ff":"#FCEBEB"):"#f5f5f5",cursor:"default"}}
+                    onMouseEnter={e=>{
+                      // ツールチップ：振替コメント
+                      const transferComments=(timeTransferReqs||[])
+                        .filter(r=>String(r.empId)===String(emp.id)&&r.status==="approved"&&(r.overWeekStart===weekMon||r.shortWeekStart===weekMon));
+                      if(transferComments.length>0){
+                        const lines=transferComments.map(r=>{
+                          if(r.transferType==="C") return `時間外申請済：${toHStr(Number(r.offsetMin||0))}`;
+                          if(r.transferType==="A") return r.overWeekStart===weekMon
+                            ?`超過週→${r.shortWeekStart}週へ${toHStr(Number(r.offsetMin||0))}振替`
+                            :`${r.overWeekStart}週から${toHStr(Number(r.offsetMin||0))}振替`;
+                          return `振替：${toHStr(Number(r.offsetMin||0))}`;
+                        });
+                        const rect=e.currentTarget.getBoundingClientRect();
+                        setTooltip({x:rect.left,y:rect.bottom+6,lines});
+                      }
+                    }}
+                    onMouseLeave={()=>setTooltip(null)}
+                  >
+                    {weekLimit
+                      ?<>
+                        <div style={{fontSize:12,fontWeight:700,color:exact?"#1251a3":"#A32D2D"}}>
+                          {exact?"完了✓"
+                            :(wMins/60)>weekLimit?`+${((wMins/60)-weekLimit).toFixed(1)}超過`
+                            :`残${(weekLimit-(wMins/60)).toFixed(1)}h`}
+                        </div>
+                        <div style={{fontSize:9,color:"#9ca3af"}}>{wH}h/{weekLimit}h</div>
+                      </>
+                      :<div style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>{wH}h</div>
+                    }
                   </td>
                 ];
               })}
@@ -2937,11 +2976,11 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
                   <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>有休</div>
                   <div style={{fontSize:20,fontWeight:700,color:lvC>0?"#0F6E56":"var(--color-text-primary)"}}>{lvC>0?lvC+"日":"―"}</div>
                 </div>
-                :(isAdmin&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
+                :(isAdmin||selfView)&&<div style={{textAlign:"center",padding:"10px 4px",background:"var(--color-background-secondary)",borderRadius:8}}>
                   <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:2}}>残業時間</div>
                   <div style={{fontSize:20,fontWeight:700,color:(tO+scOTMin-ttBOTAdjMin)>0?"#854F0B":"var(--color-text-primary)"}}>{(tO+scOTMin-ttBOTAdjMin)>0?toHStr(tO+scOTMin-ttBOTAdjMin):"―"}</div>
                   {scOTMin>0&&<div style={{fontSize:9,color:"#854F0B",marginTop:1}}>（休日出勤{toHStr(scOTMin)}含む）</div>}
-                </div>)
+                </div>
               }
               {isPTSeishainSummary
                 ?<div style={{textAlign:"center",padding:"10px 4px",background:totalOvertimeMin>0?"#FFF8E1":"var(--color-background-secondary)",border:totalOvertimeMin>0?"0.5px solid #F59E0B":"none",borderRadius:8}}>
