@@ -2176,7 +2176,9 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   // サブタブ定義：理学療法士パートは月次レポート→タイムカード→要確認、その他は要確認のみ
   const subTabs=isPTpart
     ?(selfView?["月次レポート","タイムカード"]:["月次レポート","タイムカード","要確認"])
-    :(selfView?["タイムカード"]:["タイムカード","要確認"]);
+    :selfView
+    ?["月次レポート","タイムカード"]
+    :["タイムカード","要確認"];
 
   // ── 要確認データ（当月・先月のシフトなし打刻） ───────────────────────────
   const offPunchItems=(()=>{
@@ -2686,7 +2688,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
     </div>}
 
     {/* 月次レポート（正社員・その他パート）：サブタブ0 */}
-    {!isPTpart&&subTab===0&&emp&&(()=>{
+    {!isPTpart&&subTabs[subTab]==="月次レポート"&&emp&&(()=>{
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
       const isRehaPart=emp.role==="リハマネ"&&emp.type==="パート";
       if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
@@ -2952,7 +2954,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     {initEmpId&&<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
       <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...iS,width:"auto"}}><option value="all">全日</option><option value="issues">問題のある日のみ</option></select>
     </div>}
-    {emp&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
+    {emp&&subTabs[subTab]==="タイムカード"&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
         <div style={{width:36,height:36,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:500}}>{emp.name[0]}</div>
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
