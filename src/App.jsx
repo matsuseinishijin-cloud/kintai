@@ -1584,6 +1584,15 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
               {mergedWeekGroups.map((wk,wi)=>{
                 const wMins=getWeekHoursGroup(emp.id,wi);
                 const wH=(wMins/60).toFixed(1);
+                // 下段用：振替を含まない純粋なシフト合計
+                const rawShiftMins=wk.reduce((sum,ds)=>{
+                  const st=shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||"off";
+                  if(isCustomShift(st)){const c=parseCustomShift(st);if(c&&c.start&&c.end) return sum+Math.max(0,toMin(c.end)-toMin(c.start)-c.breakMin);}
+                  const def=getEmpShiftDefs(emp)[st];
+                  if(def&&def.start&&def.end){const bk=def.breakMin!=null?def.breakMin:BREAK_MIN;return sum+Math.max(0,toMin(def.end)-toMin(def.start)-bk);}
+                  return sum;
+                },0);
+                const rawH=(rawShiftMins/60).toFixed(1);
                 // この週の月曜日を特定
                 const firstDs=wk.find(ds=>!isCustomShift(shifts.find(s=>String(s.empId)===String(emp.id)&&s.date===ds)?.shiftType||""))||wk[0];
                 const weekMon=(()=>{const d=new Date(firstDs);const dow=d.getDay();const diff=dow===0?-6:1-dow;d.setDate(d.getDate()+diff);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;})();
@@ -1678,7 +1687,7 @@ function ShiftCalendar({emps,shifts:shiftsFromProps,shiftDefsData,reload,leadRol
                             :(wMins/60)>weekLimit?`+${((wMins/60)-weekLimit).toFixed(1)}h超過`
                             :`残${(weekLimit-(wMins/60)).toFixed(1)}h`}
                         </div>
-                        <div style={{fontSize:9,color:"#9ca3af",lineHeight:1.3}}>{wH}/{weekLimit}h</div>
+                        <div style={{fontSize:9,color:"#9ca3af",lineHeight:1.3}}>{rawH}/{weekLimit}h</div>
                       </>
                       :<div style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>{wH}h</div>
                     }
