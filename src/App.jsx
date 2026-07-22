@@ -2187,9 +2187,7 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
   // サブタブ定義：理学療法士パートは月次レポート→タイムカード→要確認、その他は要確認のみ
   const subTabs=isPTpart
     ?(selfView?["月次レポート","タイムカード"]:["月次レポート","タイムカード","要確認"])
-    :selfView
-    ?["月次レポート","タイムカード"]
-    :["タイムカード","要確認"];
+    :(selfView?["タイムカード"]:["タイムカード","要確認"]);
 
   // ── 要確認データ（当月・先月のシフトなし打刻） ───────────────────────────
   const offPunchItems=(()=>{
@@ -2698,8 +2696,8 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>
     </div>}
 
-    {/* 月次レポート（正社員・その他パート）：サブタブ0 */}
-    {!isPTpart&&subTabs[subTab]==="月次レポート"&&emp&&(()=>{
+    {/* 月次レポート（正社員・その他パート）：selfView時のみ */}
+    {!isPTpart&&selfView&&subTab===0&&emp&&(()=>{
       const isNursePart=emp.role==="看護師"&&emp.type==="パート";
       const isRehaPart=emp.role==="リハマネ"&&emp.type==="パート";
       if(isNursePart) return <NurseMonthlyReport emp={emp} punches={punches} shifts={shifts} shiftDefsData={shiftDefsData} outerYear={year} outerMonth={month} reload={reload}/>;
