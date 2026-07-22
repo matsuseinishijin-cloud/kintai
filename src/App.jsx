@@ -2967,7 +2967,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
     {initEmpId&&<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:"1rem"}}>
       <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...iS,width:"auto"}}><option value="all">全日</option><option value="issues">問題のある日のみ</option></select>
     </div>}
-    {emp&&!isPTpart&&subTabs[subTab]==="タイムカード"&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
+    {emp&&!isPTpart&&subTabs[subTab]!=="月次レポート"&&subTab<subTabs.length-1&&<div style={{...crd,padding:"12px 14px",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
         <div style={{width:36,height:36,borderRadius:"50%",background:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][0],color:AVATAR_COLORS[emps.findIndex(e=>e.id===emp.id)%AVATAR_COLORS.length][1],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:500}}>{emp.name[0]}</div>
         <div><div style={{fontSize:14,fontWeight:500}}>{emp.name}</div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{emp.role} ・ {emp.type}{!initEmpId&&<span style={{marginLeft:8,padding:"2px 8px",borderRadius:99,fontSize:10,fontWeight:500,background:rule.type==="none"?"#EAF3DE":rule.type==="fixed"?"#E6F1FB":"#FCEBEB",color:rule.type==="none"?"#3B6D11":rule.type==="fixed"?"#185FA5":"#A32D2D"}}>{OT_RULE_LABEL[rule.type]}</span>}</div></div>
@@ -3051,7 +3051,7 @@ function ReportView({emps,shifts,punches,otReqs,lvReqs,initEmpId,shiftDefsData,i
         {otAlert&&<span style={{color:"#A32D2D",fontWeight:500}}>⚠ 固定残業（{rule.limitH}h）超過</span>}
       </div>
     </div>}
-    {!isPTpart&&subTabs[subTab]==="タイムカード"&&<div style={{...crd,overflow:"hidden"}}>
+    {!isPTpart&&subTabs[subTab]!=="月次レポート"&&subTab<subTabs.length-1&&<div style={{...crd,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
         <thead><tr>{["日","曜","シフト","出勤","退勤",...(emp?.type!=="正社員"?["実働"]:[""]),"勤務状況",isAdmin?"操作":""].map(h=>h?<th key={h} style={thS}>{h}</th>:null)}</tr></thead>
         <tbody>{disp.map(r=>{
@@ -4270,7 +4270,7 @@ function OtherRequest({emp,otherReqs=[],reload}){
 }
 
 // ── OvertimeRequest (理学療法士正社員向け時間外申請・週単位・複数選択) ─────────────────
-function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],reload}){
+function OvertimeRequest({emp,shifts,shiftDefsData,timeTransferReqs=[],lvReqs=[],reload}){
   const [selectedWeeks,setSelectedWeeks]=useState(new Set()),[sub,setSub]=useState(false),[err,setErr]=useState("");
   const weeklyLimit=emp.weeklyLimit?Number(emp.weeklyLimit)*60:null;
 
@@ -4890,7 +4890,7 @@ function RequestTab({emp,leaves,lvReqs,shifts,otReqs,punches,punchFixReqs,shiftD
       {sections.map(s=><button key={s.key} onClick={()=>setSection(s.key)} style={{padding:"8px 20px",border:"none",borderBottom:validSection===s.key?"2.5px solid #1251a3":"2.5px solid transparent",background:"transparent",color:validSection===s.key?"#1251a3":"var(--color-text-secondary)",fontWeight:validSection===s.key?700:400,fontSize:14,cursor:"pointer",marginBottom:"-2px"}}>{s.label}</button>)}
     </div>}
     {validSection==="leave"&&hasLeave&&<LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefsData={shiftDefsData} reload={reload} initDate={initLeaveDate} onClearInitDate={onClearInitLeaveDate}/>}
-    {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} reload={reload}/>}
+    {validSection==="overtime_request"&&isOvertimeRequestTarget&&<OvertimeRequest emp={emp} shifts={shifts} shiftDefsData={shiftDefsData} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reload}/>}
     {validSection==="other"&&isOvertimeRequestTarget&&<OtherRequest emp={emp} otherReqs={otherReqs} reload={reload}/>}
     {validSection==="overtime"&&isOTTarget&&<OTRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
     {validSection==="early"&&isEarlyTarget&&<EarlyRequest emp={emp} shifts={shifts} otReqs={otReqs} shiftDefsData={shiftDefsData} reload={reload}/>}
