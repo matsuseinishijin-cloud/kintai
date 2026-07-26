@@ -2711,6 +2711,14 @@ function TimecardView({emps,shifts,punches,otReqs,lvReqs,shiftDefsData,isAdmin=f
       </div>;
     })()}
 
+    {/* タイムカード本体（管理者・非PTpart・非selfView） */}
+    {!isPTpart&&!selfView&&subTab===0&&emp&&<div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.5rem"}}>
+        <button onClick={()=>printTimecard(false)} style={{...bP,padding:"6px 16px",fontSize:12}}>🖨 印刷</button>
+      </div>
+      <ReportView emps={[emp]} shifts={shifts} punches={punches} otReqs={otReqs} lvReqs={lvReqs} initEmpId={emp.id} shiftDefsData={shiftDefsData} isAdmin={true} selfView={false} leadRoles={leadRoles} reload={reload} outerYear={year} outerMonth={month} timeTransferReqs={timeTransferReqs} shiftConfirmReqs={shiftConfirmReqs}/>
+    </div>}
+
     {/* 要確認タブ（管理者・責任者共通・最終サブタブ） */}
     {subTab===subTabs.length-1&&!selfView&&<div>
       <div style={{fontSize:13,fontWeight:700,marginBottom:"1rem",color:"#111"}}>
