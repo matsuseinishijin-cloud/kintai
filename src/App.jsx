@@ -3,6 +3,7 @@ import { gasGet } from "./api/gas";
 import { newId, today } from "./utils/time";
 import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
+import MyShift from "./components/MyShift";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -116,7 +117,7 @@ export default function App() {
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
         {tab === 1 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>申請画面（準備中）</div>}
-        {tab === 2 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>マイシフト（準備中）</div>}
+        {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
       </div>)}
       {isAdmin && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>管理者画面（準備中）</div>}
