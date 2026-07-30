@@ -12,6 +12,7 @@ import TimecardPTpart from "./components/TimecardPTpart";
 import TimecardNursepart from "./components/TimecardNursepart";
 import EmpManager from "./components/EmpManager";
 import ShiftCalendar from "./components/ShiftCalendar";
+import ApprovalCenter from "./components/ApprovalCenter";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -79,6 +80,7 @@ export default function App() {
   const [timeTransferReqs, setTimeTransferReqs] = useState([]);
   const [punchFixReqs, setPunchFixReqs] = useState([]);
   const [otReqs, setOtReqs] = useState([]);
+  const [otherReqs, setOtherReqs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loginId, setLoginId] = useState(null);
@@ -87,11 +89,11 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr] = await Promise.all([
+      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2] = await Promise.all([
         gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
         gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
         gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
-        gasGet("残業申請"),
+        gasGet("残業申請"), gasGet("その他申請"),
       ]);
       setEmps(e.map(r => convertFrom(r, EMP_MAP)));
       setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
@@ -102,6 +104,7 @@ export default function App() {
       setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP)));
       setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP)));
       setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
+      setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
       const defsMap = {};
       sd.forEach(d => { if (d["キー"]) { defsMap[d["キー"]] = { label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 }; } });
       setShiftDefs(defsMap);
@@ -150,7 +153,7 @@ export default function App() {
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
           {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
-          {aTab === 2 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>申請許可（準備中）</div>}
+          {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} reload={loadAll} />}
           {aTab === 3 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>有給管理（準備中）</div>}
           {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
           {aTab === 5 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>打刻履歴（準備中）</div>}
