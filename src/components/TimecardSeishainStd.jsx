@@ -47,25 +47,35 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   let absent = false, missingOut = false, missingIn = false;
 
   if (isLeave) {
-    // 有休
+    // 有休：実働なし
   } else if (isOff && punch?.in && punch?.out) {
-    // 休日出勤
+    // 休日出勤：打刻時間から休憩を引いて丸め
     const im = toMin(punch.in), om = toMin(punch.out);
-    const bk = punch.break != null ? punch.break : BREAK_MIN;
-    awMin = Math.max(0, om - im - bk);
+    const bk = punch.break != null ? Number(punch.break) : BREAK_MIN;
+    const raw = Math.max(0, om - im - bk);
+    awMin = Math.floor(raw / roundMin) * roundMin;
+    otMin = awMin;
   } else if (!isOff && punch?.in && punch?.out) {
     const im = toMin(punch.in), om = toMin(punch.out);
-    const bk = punch.break != null ? punch.break : BREAK_MIN;
-    awMin = Math.max(0, om - im - bk);
+    const bk = punch.break != null ? Number(punch.break) : BREAK_MIN;
     const shiftS = toMin(def.start), shiftE = toMin(def.end);
+
+    // 遅刻チェック
     if (im > shiftS + 1) late = true;
+
+    // 早退チェック・早退分（丸め）
     if (om < shiftE - 1) {
       earlyLeave = true;
       const rawEl = shiftE - om;
       earlyLeaveMin = Math.floor(rawEl / roundMin) * roundMin;
     }
+
+    // 残業（丸め）
     const rawOt = Math.max(0, om - shiftE);
     otMin = Math.floor(rawOt / roundMin) * roundMin;
+
+    // 実働時間 = 所定時間 - 早退分 + 残業分
+    awMin = Math.max(0, swMin - earlyLeaveMin + otMin);
   } else if (!isOff && !punch?.in) {
     absent = true;
   } else if (punch?.in && !punch?.out) {
