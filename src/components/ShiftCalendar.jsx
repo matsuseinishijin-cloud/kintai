@@ -339,24 +339,25 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                               style={{ padding: "2px", textAlign: "center", background: isToday ? "#EFF6FF" : isHol ? "#FFF8F8" : "inherit", cursor: "pointer", userSelect: "none" }}
                               onClick={() => setCell(emp.id, ds)}
                             >
-                              <div style={{ position: "relative" }}>
-                                {/* 有休バッジ */}
-                                {lv && (
-                                  <div style={{ fontSize: 8, fontWeight: 600, color: lvApproved ? "#0F6E56" : "#A32D2D", background: lvApproved ? "#C6F6D5" : "#FECACA", borderRadius: 3, padding: "1px 3px", marginBottom: 1, display: "inline-block" }}>
-                                    {lv.half ? (lv.half === "am" ? "午前" : "午後") : "有休"}
-                                  </div>
-                                )}
+                              <div style={{ position: "relative", display: "inline-block", width: "100%" }}>
                                 {/* シフト表示 */}
-                                <div style={{ background: isEdited ? "#FFF8E1" : def.color, color: def.tc, borderRadius: 4, padding: "2px 3px", fontSize: isCustom ? 8 : 13, fontWeight: 400, border: isEdited ? "1px solid #F59E0B" : "1px solid transparent", lineHeight: isCustom ? 1.3 : undefined }}>
+                                <div style={{ background: isEdited ? "#FFF8E1" : def.color, color: def.tc, borderRadius: 4, padding: "2px 3px", fontSize: isCustom ? 7 : 15, fontWeight: 400, border: isEdited ? "1px solid #F59E0B" : "1px solid transparent", lineHeight: isCustom ? 1.4 : undefined, textAlign: "center", minWidth: isCustom ? 56 : 48, height: isCustom ? 36 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap" }}>
                                   {isCustom ? (
                                     <>
-                                      <div>{def.start}</div>
-                                      <div>{def.end}</div>
+                                      <div style={{ fontSize: 9, lineHeight: 1.4, whiteSpace: "nowrap", fontWeight: 500 }}>{def.start}</div>
+                                      <div style={{ fontSize: 9, lineHeight: 1.4, whiteSpace: "nowrap", fontWeight: 500 }}>{def.end}</div>
                                     </>
                                   ) : isOff ? (
-                                    <span style={{ color: "#9ca3af", fontSize: 11 }}>休</span>
+                                    <span style={{ color: "#9ca3af" }}>休</span>
                                   ) : shiftType}
                                 </div>
+                                {/* 有休バッジ（右上絶対配置） */}
+                                {lv && (
+                                  <div style={{ position: "absolute", top: -4, right: -2, background: lvApproved ? "#0F6E56" : "#A32D2D", color: "#fff", fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 99, whiteSpace: "nowrap", lineHeight: 1.4, boxShadow: "0 1px 3px rgba(0,0,0,0.25)", zIndex: 1 }}
+                                    onClick={ev => ev.stopPropagation()}>
+                                    {lv.half === "am" ? "午前" : lv.half === "pm" ? "午後" : "全日"}
+                                  </div>
+                                )}
                               </div>
                             </td>
                           );
