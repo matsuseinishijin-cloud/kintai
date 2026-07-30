@@ -9,6 +9,7 @@ import TimecardSeishainStd from "./components/TimecardSeishainStd";
 import TimecardSeishainFixed from "./components/TimecardSeishainFixed";
 import TimecardPartStd from "./components/TimecardPartStd";
 import TimecardPTpart from "./components/TimecardPTpart";
+import TimecardNursepart from "./components/TimecardNursepart";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -129,9 +130,11 @@ export default function App() {
         {tab === 3 && (()=>{
           const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";
           const isPTpart=cur.role==="理学療法士"&&cur.type==="パート";
-          const isPartStd=cur.type==="パート"&&!isPTpart;
+          const isNursepart=cur.role==="看護師"&&cur.type==="パート";
+          const isPartStd=cur.type==="パート"&&!isPTpart&&!isNursepart;
           if(isFixed) return <TimecardSeishainFixed emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} />;
           if(isPTpart) return <TimecardPTpart emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} otReqs={otReqs} />;
+          if(isNursepart) return <TimecardNursepart emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
           if(isPartStd) return <TimecardPartStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
           return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
         })()}
