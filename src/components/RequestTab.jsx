@@ -1,5 +1,8 @@
 import { useState } from "react";
 import LeaveRequest from "./LeaveRequest";
+import EarlyRequest from "./EarlyRequest";
+import TimeTransferRequest from "./TimeTransferRequest";
+import OvertimeRequest from "./OvertimeRequest";
 import { EARLY_TARGET_ROLES, isOvertimeTarget } from "../constants";
 import { today } from "../utils/time";
 
@@ -45,17 +48,17 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
 
       {/* 早出申請 */}
       {active === "early" && (
-        <div style={{ ...crd, padding: "1.25rem", color: "#6b7280" }}>早出申請（準備中）</div>
+        <EarlyRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reload} />
       )}
 
       {/* 時間振替申請 */}
       {active === "timetransfer" && (
-        <div style={{ ...crd, padding: "1.25rem", color: "#6b7280" }}>時間振替申請（準備中）</div>
+        <TimeTransferRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reload} />
       )}
 
       {/* 時間外申請 */}
       {active === "overtime" && (
-        <div style={{ ...crd, padding: "1.25rem", color: "#6b7280" }}>時間外申請（準備中）</div>
+        <OvertimeRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reload} />
       )}
 
       {/* その他申請 */}
