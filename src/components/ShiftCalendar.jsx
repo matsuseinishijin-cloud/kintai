@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { gasSave } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
 import { BREAK_MIN, ROLES } from "../constants";
@@ -259,8 +259,8 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
             <tr>
               <th style={{ padding: "6px 10px", textAlign: "left", background: "#fef9f3", borderBottom: "1px solid #e9ddd0", position: "sticky", left: 0, zIndex: 1, minWidth: 100 }}>従業員</th>
               {weekGroups.map((wk, wi) => (
-                <>
-                  <th key={`w${wi}`} style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderLeft: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60 }}>
+                <React.Fragment key={`wh${wi}`}>
+                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderLeft: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60 }}>
                     W{wi + 1}<br />合計
                   </th>
                   {wk.filter(ds => periodDays.includes(ds)).map(ds => {
@@ -273,7 +273,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                       </th>
                     );
                   })}
-                </>
+                </React.Fragment>
               ))}
             </tr>
           </thead>
@@ -299,7 +299,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                     const textColor = !hasLimit ? "#6b7280" : isExact || typeCApproved ? "#1251a3" : "#A32D2D";
 
                     return (
-                      <>
+                      <React.Fragment key={`wg${wi}_${emp.id}`}>
                         {/* 週合計セル */}
                         <td key={`w${wi}_${emp.id}`}
                           style={{ padding: "4px 6px", textAlign: "center", background: bgColor, borderLeft: "2px solid #1251a3", cursor: comments.length > 0 ? "help" : "default" }}
@@ -360,7 +360,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                             </td>
                           );
                         })}
-                      </>
+                      </React.Fragment>
                     );
                   })}
                 </tr>
