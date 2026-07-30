@@ -7,6 +7,7 @@ import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
 import TimecardSeishainStd from "./components/TimecardSeishainStd";
 import TimecardSeishainFixed from "./components/TimecardSeishainFixed";
+import TimecardPartStd from "./components/TimecardPartStd";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -123,7 +124,9 @@ export default function App() {
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && (()=>{
           const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";
+          const isPart=cur.type==="パート";
           if(isFixed) return <TimecardSeishainFixed emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} />;
+          if(isPart) return <TimecardPartStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
           return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
         })()}
       </div>)}
