@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
 import { newId, today } from "./utils/time";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, OT_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
 import TimecardSeishainStd from "./components/TimecardSeishainStd";
 import TimecardSeishainFixed from "./components/TimecardSeishainFixed";
 import TimecardPartStd from "./components/TimecardPartStd";
+import TimecardPTpart from "./components/TimecardPTpart";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -74,6 +75,7 @@ export default function App() {
   const [shiftDefs, setShiftDefs] = useState({});
   const [timeTransferReqs, setTimeTransferReqs] = useState([]);
   const [punchFixReqs, setPunchFixReqs] = useState([]);
+  const [otReqs, setOtReqs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loginId, setLoginId] = useState(null);
@@ -81,10 +83,11 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [e, s, p, lr, lv, pw, sd, ttr, pfr] = await Promise.all([
+      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr] = await Promise.all([
         gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
         gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
         gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
+        gasGet("残業申請"),
       ]);
       setEmps(e.map(r => convertFrom(r, EMP_MAP)));
       setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
@@ -94,6 +97,7 @@ export default function App() {
       setPasswords(pw.map(r => convertFrom(r, PW_MAP)));
       setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP)));
       setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP)));
+      setOtReqs(otr.map(r => convertFrom(r, OT_MAP)));
       const defsMap = {};
       sd.forEach(d => { if (d["キー"]) { defsMap[d["キー"]] = { label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 }; } });
       setShiftDefs(defsMap);
@@ -124,9 +128,11 @@ export default function App() {
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && (()=>{
           const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";
-          const isPart=cur.type==="パート";
+          const isPTpart=cur.role==="理学療法士"&&cur.type==="パート";
+          const isPartStd=cur.type==="パート"&&!isPTpart;
           if(isFixed) return <TimecardSeishainFixed emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} />;
-          if(isPart) return <TimecardPartStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
+          if(isPTpart) return <TimecardPTpart emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} otReqs={otReqs} />;
+          if(isPartStd) return <TimecardPartStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
           return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
         })()}
       </div>)}
