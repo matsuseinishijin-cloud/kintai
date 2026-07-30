@@ -11,6 +11,7 @@ import TimecardPartStd from "./components/TimecardPartStd";
 import TimecardPTpart from "./components/TimecardPTpart";
 import TimecardNursepart from "./components/TimecardNursepart";
 import EmpManager from "./components/EmpManager";
+import ShiftCalendar from "./components/ShiftCalendar";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -148,7 +149,7 @@ export default function App() {
             {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>シフト（準備中）</div>}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
           {aTab === 2 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>申請許可（準備中）</div>}
           {aTab === 3 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>有給管理（準備中）</div>}
           {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
