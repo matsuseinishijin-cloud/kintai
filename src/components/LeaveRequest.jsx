@@ -21,11 +21,20 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const [sub, setSub] = useState(false);
   const [warn, setWarn] = useState("");
 
-  // 有休残日数
-  const leave = leaves.find(l => String(l.empId) === String(emp.id));
+  // 有休残日数（バケツ方式・LIFO・有効期限考慮）
+  const td2 = today();
+  const myLeaves = leaves.filter(l => String(l.empId) === String(emp.id));
+  const validLeaves = myLeaves
+    .map(l => {
+      const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
+      return records.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td2));
+    })
+    .flat()
+    .sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // 新しい順
+  const totalGranted = validLeaves.reduce((s, r) => s + (Number(r.days) || 0), 0);
   const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
   const usedDays = approved.reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
-  const rem = (Number(leave?.granted) || 0) - usedDays;
+  const rem = Math.max(0, totalGranted - usedDays);
 
   // 選択日のシフト
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;
@@ -43,7 +52,6 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const submit = async () => {
     if (!form.date || !form.leaveStart || !form.leaveEnd || !form.reason) return;
     if (rem <= 0) { alert("有休残日数がありません"); return; }
-
     // シフト重なり警告（申請は可能）
     if (checkOverlap()) {
       setWarn("申請時間帯にシフトが入っています。シフト責任者に連絡してください。");
@@ -74,7 +82,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     <div>
       {/* 残日数 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: "1rem" }}>
-        {[["付与日数", (leave?.granted || 0) + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", rem + "日", rem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
+        {[["付与日数", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", rem + "日", rem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
           <div key={l} style={{ background: "#fff", border: "1px solid #e9ddd0", borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
             <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>{l}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: c || "#111827" }}>{v}</div>

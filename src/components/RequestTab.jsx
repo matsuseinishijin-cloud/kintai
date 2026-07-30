@@ -1,6 +1,7 @@
 import { useState } from "react";
 import LeaveRequest from "./LeaveRequest";
 import { EARLY_TARGET_ROLES, isOvertimeTarget } from "../constants";
+import { today } from "../utils/time";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = active => ({ padding: "7px 14px", borderRadius: 8, border: "none", borderBottom: active ? "2px solid #1251a3" : "2px solid transparent", background: "transparent", color: active ? "#1251a3" : "#6b7280", fontWeight: active ? 600 : 400, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" });
@@ -8,7 +9,13 @@ const bS = active => ({ padding: "7px 14px", borderRadius: 8, border: "none", bo
 export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otReqs, timeTransferReqs, punchFixReqs, reload }) {
   // 申請種別の決定
   const sections = [];
-  if (leaves.some(l => String(l.empId) === String(emp.id))) sections.push({ key: "leave", label: "有給申請" });
+  const td2 = today();
+  const hasLeave = leaves.some(l => {
+    if (String(l.empId) !== String(emp.id)) return false;
+    const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
+    return records.some(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td2));
+  });
+  if (hasLeave) sections.push({ key: "leave", label: "有給申請" });
   sections.push({ key: "punchfix", label: "打刻修正" });
   if (emp.type === "正社員" && EARLY_TARGET_ROLES.includes(emp.role)) sections.push({ key: "early", label: "早出申請" });
   if (emp.type === "正社員") sections.push({ key: "timetransfer", label: "時間振替" });
@@ -61,7 +68,7 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
 
 // ── 打刻修正申請（過去分） ────────────────────────────────────────────────────
 import { gasSave } from "../api/gas";
-import { today, newId } from "../utils/time";
+import { newId } from "../utils/time";
 import { convertTo, PUNCH_FIX_MAP } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
