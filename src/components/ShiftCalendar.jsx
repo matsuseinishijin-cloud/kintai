@@ -12,11 +12,12 @@ const DOW_JP_SHORT = ["日", "月", "火", "水", "木", "金", "土"];
 
 function getShiftDef(shiftType, shiftDefs) {
   if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af", breakMin: 0 };
-  if (shiftType.startsWith("custom:")) {
-    const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
+  const st = String(shiftType);
+  if (st.startsWith("custom:")) {
+    const match = st.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2], color: "#EDE9FE", tc: "#5B21B6", breakMin: match[3] ? Number(match[3]) : 60 };
   }
-  return shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: BREAK_MIN };
+  return shiftDefs[st] || { label: st, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: BREAK_MIN };
 }
 
 // 週合計計算（振替・有休を含む）
