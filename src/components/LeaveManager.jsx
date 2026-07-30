@@ -225,6 +225,32 @@ export default function LeaveManager({ emps, leaves, lvReqs, reload }) {
           )}
         </div>
       </div>
+
+      {/* 取得履歴 */}
+      <div style={{ ...crd, overflow: "hidden", marginTop: "1rem" }}>
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>取得履歴</div>
+        {(lvReqs || []).filter(r => String(r.empId) === String(sel)).length === 0 ? (
+          <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>取得履歴なし</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr>{["日付", "区分", "時間帯", "状態"].map(h => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>
+              {(lvReqs || []).filter(r => String(r.empId) === String(sel)).sort((a, b) => b.date > a.date ? 1 : -1).map(r => (
+                <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
+                  <td style={tdS}>{r.date}</td>
+                  <td style={tdS}>{r.half ? "半日（0.5日）" : "全日（1日）"}</td>
+                  <td style={{ ...tdS, color: "#6b7280", fontSize: 12 }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
+                  <td style={tdS}>
+                    {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
+                      : r.status === "approved" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                        : <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
