@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
 import { newId, today } from "./utils/time";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, OT_MAP } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -97,7 +97,7 @@ export default function App() {
       setPasswords(pw.map(r => convertFrom(r, PW_MAP)));
       setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP)));
       setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP)));
-      setOtReqs(otr.map(r => convertFrom(r, OT_MAP)));
+      setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
       const defsMap = {};
       sd.forEach(d => { if (d["キー"]) { defsMap[d["キー"]] = { label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 }; } });
       setShiftDefs(defsMap);
