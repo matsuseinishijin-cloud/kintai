@@ -6,6 +6,7 @@ import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
 import TimecardSeishainStd from "./components/TimecardSeishainStd";
+import TimecardSeishainFixed from "./components/TimecardSeishainFixed";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -120,7 +121,11 @@ export default function App() {
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
         {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll} />}
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
-        {tab === 3 && <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
+        {tab === 3 && (()=>{
+          const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";
+          if(isFixed) return <TimecardSeishainFixed emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} />;
+          return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
+        })()}
       </div>)}
       {isAdmin && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>管理者画面（準備中）</div>}
     </div>
