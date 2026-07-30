@@ -10,6 +10,7 @@ import TimecardSeishainFixed from "./components/TimecardSeishainFixed";
 import TimecardPartStd from "./components/TimecardPartStd";
 import TimecardPTpart from "./components/TimecardPTpart";
 import TimecardNursepart from "./components/TimecardNursepart";
+import EmpManager from "./components/EmpManager";
 
 const _style = document.createElement("style");
 _style.textContent = `
@@ -81,6 +82,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [loginId, setLoginId] = useState(null);
   const [tab, setTab] = useState(0);
+  const [aTab, setATab] = useState(0);
 
   const loadAll = useCallback(async () => {
     try {
@@ -139,7 +141,20 @@ export default function App() {
           return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
         })()}
       </div>)}
-      {isAdmin && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>管理者画面（準備中）</div>}
+      {isAdmin && (() => {
+        const aTabs = ["従業員管理", "シフト", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
+        return <div>
+          <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>
+            {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
+          </div>
+          {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
+          {aTab === 1 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>シフト（準備中）</div>}
+          {aTab === 2 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>申請許可（準備中）</div>}
+          {aTab === 3 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>有給管理（準備中）</div>}
+          {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
+          {aTab === 5 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>打刻履歴（準備中）</div>}
+        </div>;
+      })()}
     </div>
   );
 }
