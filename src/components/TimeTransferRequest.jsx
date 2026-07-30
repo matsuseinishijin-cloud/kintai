@@ -54,7 +54,7 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
   const [form, setForm] = useState({ overWeekStart: "", shortWeekStart: "", reason: "" });
   const [sub, setSub] = useState(false);
 
-  const weeklyLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) * 60 : null;
+  const weeklyLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) * 60 : 40 * 60;
 
   // 先月・当月の週オプション
   const weekOptions = (() => {
@@ -112,12 +112,8 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
     <div>
       <div style={{ ...crd, padding: "1.25rem", marginBottom: "1rem" }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: "1rem" }}>時間振替申請</div>
-        {!weeklyLimit ? (
-          <div style={{ padding: "1rem", background: "#fef9f3", borderRadius: 8, fontSize: 13, color: "#6b7280" }}>週所定労働時間が設定されていません</div>
-        ) : (
-          <>
-            <div style={{ marginBottom: 10, padding: "8px 12px", background: "#F5F9FE", borderRadius: 8, fontSize: 12, color: "#1251a3" }}>
-              週所定労働時間：<strong>{emp.weeklyLimit}時間</strong>
+        <div style={{ marginBottom: 10, padding: "8px 12px", background: "#F5F9FE", borderRadius: 8, fontSize: 12, color: "#1251a3" }}>
+              週所定労働時間：<strong>{emp.weeklyLimit || 40}時間</strong>
             </div>
             {/* 超過週 */}
             <div style={{ marginBottom: 10 }}>
@@ -158,8 +154,6 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
             </div>
             <button onClick={submit} disabled={!canSubmit} style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>申請する</button>
             {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
-          </>
-        )}
       </div>
       {myReqs.length > 0 && (
         <div style={{ ...crd, overflow: "hidden" }}>
