@@ -97,16 +97,6 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
 
   return (
     <div>
-      {/* 残日数 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: "1rem" }}>
-        {[["付与日数", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", rem + "日", rem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
-          <div key={l} style={{ background: "#fff", border: "1px solid #e9ddd0", borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>{l}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c || "#111827" }}>{v}</div>
-          </div>
-        ))}
-      </div>
-
       {/* 申請フォームと履歴を横並び */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "start" }}>
         {/* 申請フォーム */}
