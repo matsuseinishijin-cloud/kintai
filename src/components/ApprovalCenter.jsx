@@ -56,7 +56,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     if (status === "approved") {
       // 残日数チェック
       const rem = calcRem(req.empId);
-      const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
+      const days = isHalfLeave(req.half) ? 0.5 : 1;
       if (rem < days) { alert(`有給残日数が不足しています（残${rem}日、必要${days}日）`); return; }
       // シフト重なりチェック
       const shiftRow = shifts.find(s => String(s.empId) === String(req.empId) && s.date === req.date);

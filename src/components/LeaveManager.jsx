@@ -32,7 +32,7 @@ function calcBucketsWithRemaining(records, lvReqs, empId) {
   // バケツごとの残日数を計算
   const buckets = grants.map(g => ({ ...g, remaining: Number(g.days) }));
   approved.forEach(req => {
-    const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
+    const days = isHalfLeave(req.half) ? 0.5 : 1;
     for (const b of buckets) {
       if (b.remaining <= 0) continue;
       if (b.expiresAt && b.expiresAt < req.date) continue;

@@ -82,7 +82,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days) }));
   const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
   approvedSorted.forEach(req => {
-    const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
+    const days = isHalfLeave(req.half) ? 0.5 : 1;
     for (const b of bucketsWithRem) {
       if (b.remaining <= 0) continue;
       if (b.expiresAt && b.expiresAt < req.date) continue;
