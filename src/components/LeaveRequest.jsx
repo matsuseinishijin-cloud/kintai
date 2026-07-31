@@ -75,8 +75,24 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     } catch (e) { alert("申請失敗：" + e.message); }
   };
 
+  // バケツ一覧（付与履歴・残日数付き）
+  const allRecords = myLeaves.flatMap(l => {
+    try { return JSON.parse(l.records || "[]").filter(r => r.type === "grant"); } catch { return []; }
+  }).sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
+  const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days) }));
+  const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
+  approvedSorted.forEach(req => {
+    const days = req.half ? 0.5 : 1;
+    for (const b of bucketsWithRem) {
+      if (b.remaining <= 0) continue;
+      if (b.expiresAt && b.expiresAt < req.date) continue;
+      const deduct = Math.min(b.remaining, days);
+      b.remaining -= deduct;
+      break;
+    }
+  });
+  const buckets = bucketsWithRem;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.date && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
 
   return (
     <div>
@@ -165,27 +181,54 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
           {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
         </div>
 
-        {/* 申請履歴 */}
+        {/* 申請履歴（バケツごとにグループ表示） */}
         <div style={{ ...crd, overflow: "hidden" }}>
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>申請履歴</div>
-          {myReqs.length === 0 ? (
-            <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>申請履歴なし</div>
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>付与・取得履歴</div>
+          {myReqs.length === 0 && buckets.length === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>履歴なし</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr>{["日付", "区分", "時間帯", "状態"].map(h => <th key={h} style={{ padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #e9ddd0", textAlign: "left", fontWeight: 400 }}>{h}</th>)}</tr></thead>
-              <tbody>{myReqs.map(r => (
-                <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
-                  <td style={{ padding: "8px 10px" }}>{r.date}</td>
-                  <td style={{ padding: "8px 10px" }}>{r.half ? "半日" : "全日"}</td>
-                  <td style={{ padding: "8px 10px", fontSize: 12, color: "#6b7280" }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
-                  <td style={{ padding: "8px 10px" }}>
-                    {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
-                      : r.status === "approved" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
-                        : <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
+            <div style={{ padding: "8px 12px" }}>
+              {buckets.length === 0 ? (
+                <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>付与履歴なし</div>
+              ) : buckets.map((b, bi) => {
+                const bucketId = b.id || b.grantedAt;
+                const td2 = today();
+                const isExpired = b.expiresAt && b.expiresAt < td2;
+                // このバケツに紐づく申請（LIFO順で消化されたもの）
+                // 簡易的に申請日順で表示
+                const bucketReqs = myReqs.filter(r => {
+                  if (r.date < b.grantedAt) return false;
+                  if (b.expiresAt && r.date > b.expiresAt) return false;
+                  return true;
+                });
+                return (
+                  <div key={bucketId} style={{ marginBottom: 12, borderRadius: 8, border: `1px solid ${isExpired ? "#e9ddd0" : "#c7d2fe"}`, overflow: "hidden" }}>
+                    {/* バケツヘッダー */}
+                    <div style={{ padding: "8px 12px", background: isExpired ? "#fafafa" : "#EEF2FF", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: isExpired ? "#9ca3af" : "#1251a3" }}>付与日：{b.grantedAt}</span>
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>付与{b.days}日</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: b.remaining > 0 ? "#0F6E56" : "#9ca3af" }}>残{b.remaining}日</span>
+                      {b.expiresAt && <span style={{ fontSize: 11, color: isExpired ? "#A32D2D" : "#6b7280" }}>有効期限：{b.expiresAt}{isExpired ? "（期限切れ）" : ""}</span>}
+                      {b.note && <span style={{ fontSize: 11, color: "#6b7280" }}>{b.note}</span>}
+                    </div>
+                    {/* このバケツの申請履歴 */}
+                    {bucketReqs.length === 0 ? (
+                      <div style={{ padding: "6px 12px", fontSize: 12, color: "#9ca3af" }}>　申請なし</div>
+                    ) : bucketReqs.map(r => (
+                      <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #e9ddd0", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                        <span style={{ color: "#6b7280" }}>└</span>
+                        <span style={{ fontWeight: 500 }}>{r.date}</span>
+                        <span style={{ color: "#374151" }}>{r.half ? "半日" : "全日"}</span>
+                        {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
+                        {r.status === "pending" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
+                          : r.status === "approved" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                            : <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
