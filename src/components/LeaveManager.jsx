@@ -65,6 +65,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   const totalRem = calcTotalRemaining(leave?.records, lvReqs, sel);
   const totalGranted = buckets.reduce((s, b) => s + Number(b.days || 0), 0);
   const usedDays = (lvReqs || []).filter(r => String(r.empId) === String(sel) && r.status === "approved").reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
+  const displayRem = Math.max(0, totalGranted - usedDays);
 
   // 付与
   const grant = async () => {
@@ -142,7 +143,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
           {/* 残日数サマリー */}
           <div style={{ ...crd, padding: "1rem", marginBottom: "1rem" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {[["付与合計", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", totalRem + "日", totalRem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
+              {[["付与合計", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", displayRem + "日", displayRem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
                 <div key={l} style={{ textAlign: "center", padding: "10px 4px", background: "#fef9f3", borderRadius: 8 }}>
                   <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>{l}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: c || "#111827" }}>{v}</div>
