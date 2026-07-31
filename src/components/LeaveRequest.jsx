@@ -90,100 +90,105 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         ))}
       </div>
 
-      {/* 申請フォーム */}
-      <div style={{ ...crd, padding: "1.25rem", marginBottom: "1rem" }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: "1rem" }}>有給申請</div>
+      {/* 申請フォームと履歴を横並び */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "start" }}>
+        {/* 申請フォーム */}
+        <div style={{ ...crd, padding: "1.25rem" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: "1rem" }}>有給申請</div>
 
-        {rem <= 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>有休残日数がありません</div>}
+          {rem <= 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>有休残日数がありません</div>}
 
-        {/* 区分 */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>区分</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {[["full", "全日（1日）"], ["half", "半日（0.5日）"]].map(([v, l]) => (
-              <button key={v} onClick={() => setForm(p => ({ ...p, half: v }))}
-                style={{ padding: "8px 0", borderRadius: 8, border: form.half === v ? "2px solid #1251a3" : "1px solid #d1d5db", background: form.half === v ? "#E6F1FB" : "#fff", color: form.half === v ? "#1251a3" : "#111827", fontWeight: form.half === v ? 600 : 400, cursor: "pointer", fontSize: 13 }}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 日付 */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>取得日</div>
-          <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
-        </div>
-
-        {/* シフト表示 */}
-        {form.date && (
-          <div style={{ marginBottom: 10, padding: "6px 10px", background: "#F5F9FE", borderRadius: 8, fontSize: 12, color: "#374151" }}>
-            {hasShift ? `シフト：${def.start}〜${def.end}` : "シフトなし（休日）"}
-          </div>
-        )}
-
-        {/* 有休時間帯 */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>有休時間帯</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>開始</div>
-              <input type="time" value={form.leaveStart} onChange={e => setForm(p => ({ ...p, leaveStart: e.target.value }))} style={iS} />
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>終了</div>
-              <input type="time" value={form.leaveEnd} onChange={e => setForm(p => ({ ...p, leaveEnd: e.target.value }))} style={iS} />
-            </div>
-          </div>
-        </div>
-
-        {/* 休憩（半日のみ） */}
-        {form.half === "half" && (
+          {/* 区分 */}
           <div style={{ marginBottom: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />
-              休憩あり（60分差し引き）
-            </label>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>区分</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[["full", "全日（1日）"], ["half", "半日（0.5日）"]].map(([v, l]) => (
+                <button key={v} onClick={() => setForm(p => ({ ...p, half: v }))}
+                  style={{ padding: "8px 0", borderRadius: 8, border: form.half === v ? "2px solid #1251a3" : "1px solid #d1d5db", background: form.half === v ? "#E6F1FB" : "#fff", color: form.half === v ? "#1251a3" : "#111827", fontWeight: form.half === v ? 600 : 400, cursor: "pointer", fontSize: 13 }}>
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {/* 理由 */}
-        <div style={{ marginBottom: "1rem" }}>
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>理由</div>
-          <input type="text" value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="例：私用のため" style={iS} />
+          {/* 日付 */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>取得日</div>
+            <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
+          </div>
+
+          {/* シフト表示 */}
+          {form.date && (
+            <div style={{ marginBottom: 10, padding: "6px 10px", background: "#F5F9FE", borderRadius: 8, fontSize: 12, color: "#374151" }}>
+              {hasShift ? `シフト：${def.start}〜${def.end}` : "シフトなし（休日）"}
+            </div>
+          )}
+
+          {/* 有休時間帯 */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>有休時間帯</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>開始</div>
+                <input type="time" value={form.leaveStart} onChange={e => setForm(p => ({ ...p, leaveStart: e.target.value }))} style={iS} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>終了</div>
+                <input type="time" value={form.leaveEnd} onChange={e => setForm(p => ({ ...p, leaveEnd: e.target.value }))} style={iS} />
+              </div>
+            </div>
+          </div>
+
+          {/* 休憩（半日のみ） */}
+          {form.half === "half" && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />
+                休憩あり（60分差し引き）
+              </label>
+            </div>
+          )}
+
+          {/* 理由 */}
+          <div style={{ marginBottom: "1rem" }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>理由</div>
+            <input type="text" value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="例：私用のため" style={iS} />
+          </div>
+
+          {/* 重なり警告 */}
+          {warn && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF8E1", borderRadius: 8, fontSize: 12, color: "#854F0B", border: "1px solid #F59E0B" }}>⚠️ {warn}</div>}
+
+          <button onClick={submit} disabled={!canSubmit}
+            style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>
+            申請する
+          </button>
+          {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
         </div>
 
-        {/* 重なり警告 */}
-        {warn && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF8E1", borderRadius: 8, fontSize: 12, color: "#854F0B", border: "1px solid #F59E0B" }}>⚠️ {warn}</div>}
-
-        <button onClick={submit} disabled={!canSubmit}
-          style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>
-          申請する
-        </button>
-        {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
-      </div>
-
-      {/* 申請履歴 */}
-      {myReqs.length > 0 && (
+        {/* 申請履歴 */}
         <div style={{ ...crd, overflow: "hidden" }}>
           <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>申請履歴</div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr>{["日付", "区分", "時間帯", "状態"].map(h => <th key={h} style={{ padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #e9ddd0", textAlign: "left", fontWeight: 400 }}>{h}</th>)}</tr></thead>
-            <tbody>{myReqs.map(r => (
-              <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
-                <td style={{ padding: "8px 10px" }}>{r.date}</td>
-                <td style={{ padding: "8px 10px" }}>{r.half ? "半日" : "全日"}</td>
-                <td style={{ padding: "8px 10px", fontSize: 12, color: "#6b7280" }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
-                <td style={{ padding: "8px 10px" }}>
-                  {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
-                    : r.status === "approved" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
-                      : <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
+          {myReqs.length === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>申請履歴なし</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr>{["日付", "区分", "時間帯", "状態"].map(h => <th key={h} style={{ padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #e9ddd0", textAlign: "left", fontWeight: 400 }}>{h}</th>)}</tr></thead>
+              <tbody>{myReqs.map(r => (
+                <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
+                  <td style={{ padding: "8px 10px" }}>{r.date}</td>
+                  <td style={{ padding: "8px 10px" }}>{r.half ? "半日" : "全日"}</td>
+                  <td style={{ padding: "8px 10px", fontSize: 12, color: "#6b7280" }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
+                  <td style={{ padding: "8px 10px" }}>
+                    {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
+                      : r.status === "approved" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                        : <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
