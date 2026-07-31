@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { gasSave } from "../api/gas";
+import { gasSave, gasDelete } from "../api/gas";
 import { today, newId } from "../utils/time";
 import { convertTo, LEAVE_MAP } from "../constants";
 
@@ -51,7 +51,7 @@ function calcTotalRemaining(records, lvReqs, empId) {
   return buckets.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0);
 }
 
-export default function LeaveManager({ emps, leaves, lvReqs, reload }) {
+export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays, reload }) {
   const [sel, setSel] = useState(emps[0]?.id || "");
   const [form, setForm] = useState({ days: "", note: "", grantedAt: today() });
   const [editBucket, setEditBucket] = useState(null);
@@ -238,7 +238,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, reload }) {
               {(lvReqs || []).filter(r => String(r.empId) === String(sel)).sort((a, b) => b.date > a.date ? 1 : -1).map(r => (
                 <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
                   <td style={tdS}>{r.date}</td>
-                  <td style={tdS}>{r.half ? "半日（0.5日）" : "全日（1日）"}</td>
+                  <td style={tdS}>{r.reason === "指定休" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EDE9FE", color: "#7C3AED" }}>指定休</span> : r.half ? "半日（0.5日）" : "全日（1日）"}</td>
                   <td style={{ ...tdS, color: "#6b7280", fontSize: 12 }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
                   <td style={tdS}>
                     {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
@@ -251,6 +251,133 @@ export default function LeaveManager({ emps, leaves, lvReqs, reload }) {
           </table>
         )}
       </div>
+
+      {/* 指定休設定（正社員のみ対象） */}
+      <DesignatedHolidayManager designatedHolidays={designatedHolidays} emps={emps} lvReqs={lvReqs} reload={reload} />
+    </div>
+  );
+}
+
+// ── 指定休設定 ─────────────────────────────────────────────────────────────────
+function DesignatedHolidayManager({ designatedHolidays, emps, lvReqs, reload }) {
+  const [form, setForm] = useState({ date: "", memo: "" });
+  const [sub, setSub] = useState(false);
+  const [selDh, setSelDh] = useState(null); // 選択中の指定休
+  const [excluded, setExcluded] = useState(new Set()); // 除外スタッフ
+  const [granting, setGranting] = useState(false);
+  const DH_MAP = { id: "id", "日付": "date", "メモ": "memo" };
+  const LV_MAP = { id:"id","従業員id":"empId","日付":"date","区分":"half","有休開始":"leaveStart","有休終了":"leaveEnd","休憩":"leaveBreak","理由":"reason","状態":"status","申請日時":"createdAt" };
+
+  const seishainEmps = emps.filter(e => e.type === "正社員");
+
+  const add = async () => {
+    if (!form.date) return;
+    try {
+      await gasSave("指定休", convertTo({ id: newId(), date: form.date, memo: form.memo || "" }, DH_MAP));
+      setForm({ date: "", memo: "" });
+      setSub(true); setTimeout(() => setSub(false), 2000);
+      await reload();
+    } catch (e) { alert("追加失敗：" + e.message); }
+  };
+
+  const del = async id => {
+    if (!confirm("この指定休を削除しますか？")) return;
+    try { await gasDelete("指定休", id); await reload(); }
+    catch (e) { alert("削除失敗：" + e.message); }
+  };
+
+  // 一括付与
+  const grantAll = async () => {
+    if (!selDh) return;
+    const targets = seishainEmps.filter(e => !excluded.has(e.id));
+    if (targets.length === 0) { alert("付与対象のスタッフがいません"); return; }
+    if (!confirm(`${selDh.date} の指定休を${targets.length}名に付与しますか？`)) return;
+    setGranting(true);
+    try {
+      for (const emp of targets) {
+        // 既に申請があれば重複しない
+        const exists = (lvReqs || []).some(r => String(r.empId) === String(emp.id) && r.date === selDh.date && r.reason === "指定休");
+        if (exists) continue;
+        const data = convertTo({ id: newId(), empId: emp.id, date: selDh.date, half: "", leaveStart: "", leaveEnd: "", leaveBreak: "0", reason: "指定休", status: "approved", createdAt: new Date().toISOString() }, LV_MAP);
+        await gasSave("有給申請", data);
+      }
+      alert(`${targets.length}名に指定休を付与しました`);
+      setExcluded(new Set());
+      await reload();
+    } catch (e) { alert("付与失敗：" + e.message); }
+    setGranting(false);
+  };
+
+  const sorted = [...(designatedHolidays || [])].sort((a, b) => a.date > b.date ? 1 : -1);
+
+  // 選択中の指定休の付与済みスタッフ
+  const grantedEmps = selDh ? (lvReqs || []).filter(r => r.date === selDh.date && r.reason === "指定休" && r.status === "approved").map(r => r.empId) : [];
+
+  return (
+    <div style={{ ...crd, padding: "1.25rem", marginTop: "1rem" }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: "1rem", color: "#7C3AED" }}>指定休設定（正社員のみ対象）</div>
+
+      {/* 追加フォーム */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: "1rem", alignItems: "end" }}>
+        <div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>対象日</div>
+          <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} style={iS} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>メモ（任意）</div>
+          <input type="text" value={form.memo} onChange={e => setForm(p => ({ ...p, memo: e.target.value }))} placeholder="例：夏季休暇" style={iS} />
+        </div>
+        <button onClick={add} disabled={!form.date} style={{ ...bP, padding: "8px 16px", opacity: form.date ? 1 : 0.4 }}>追加</button>
+      </div>
+      {sub && <div style={{ marginBottom: 10, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>追加しました。</div>}
+
+      {sorted.length === 0 ? (
+        <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>指定休が設定されていません</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+          {/* 左：指定休一覧 */}
+          <div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>設定済み指定休（クリックで選択）</div>
+            {sorted.map(d => (
+              <div key={d.id} onClick={() => { setSelDh(d); setExcluded(new Set()); }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, marginBottom: 4, background: selDh?.id === d.id ? "#EDE9FE" : "#fef9f3", border: selDh?.id === d.id ? "1px solid #7C3AED" : "1px solid transparent", cursor: "pointer" }}>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#7C3AED" }}>{d.date}</span>
+                  {d.memo && <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{d.memo}</span>}
+                  {grantedEmps.length > 0 && d.id === selDh?.id && <span style={{ fontSize: 11, color: "#3B6D11", marginLeft: 8 }}>付与済{grantedEmps.length}名</span>}
+                </div>
+                <button onClick={e => { e.stopPropagation(); del(d.id); }} style={{ padding: "2px 8px", borderRadius: 6, border: "none", background: "#FFF0F0", color: "#A32D2D", fontSize: 11, cursor: "pointer" }}>削除</button>
+              </div>
+            ))}
+          </div>
+
+          {/* 右：除外設定・一括付与 */}
+          {selDh && (
+            <div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>{selDh.date} の対象スタッフ</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: "1rem", maxHeight: 200, overflowY: "auto" }}>
+                {seishainEmps.map(emp => {
+                  const isGranted = grantedEmps.includes(String(emp.id));
+                  const isExcluded = excluded.has(emp.id);
+                  return (
+                    <label key={emp.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 6, background: isExcluded ? "#FFF0F0" : isGranted ? "#EAF3DE" : "#fef9f3", cursor: "pointer", fontSize: 13 }}>
+                      <input type="checkbox" checked={!isExcluded} onChange={e => setExcluded(prev => { const n = new Set(prev); e.target.checked ? n.delete(emp.id) : n.add(emp.id); return n; })} style={{ width: 14, height: 14 }} />
+                      <span style={{ flex: 1 }}>{emp.name}</span>
+                      <span style={{ fontSize: 11, color: "#6b7280" }}>{emp.role}</span>
+                      {isGranted && <span style={{ fontSize: 10, color: "#3B6D11" }}>付与済</span>}
+                      {isExcluded && <span style={{ fontSize: 10, color: "#A32D2D" }}>除外</span>}
+                    </label>
+                  );
+                })}
+              </div>
+              <button onClick={grantAll} disabled={granting}
+                style={{ ...bP, width: "100%", padding: "10px 0", background: "#7C3AED", opacity: granting ? 0.5 : 1 }}>
+                {granting ? "付与中..." : `一括付与（${seishainEmps.length - excluded.size}名）`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

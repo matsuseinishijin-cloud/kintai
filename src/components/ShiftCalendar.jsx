@@ -99,7 +99,7 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, lvReqs, timeTransferReqs, reload }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -328,6 +328,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                           const lv = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds);
                           const lvApproved = lv?.status === "approved";
                           const lvPending = lv?.status === "pending";
+                          const isDesignated = emp.type === "正社員" && (designatedHolidays || []).some(d => d.date === ds);
                           const isOff = shiftType === "off";
                           const isCustom = shiftType.startsWith("custom:");
                           const d = new Date(ds); const dow = d.getDay();
@@ -356,6 +357,12 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                                   <div style={{ position: "absolute", top: -4, right: -2, background: lvApproved ? "#0F6E56" : "#A32D2D", color: "#fff", fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 99, whiteSpace: "nowrap", lineHeight: 1.4, boxShadow: "0 1px 3px rgba(0,0,0,0.25)", zIndex: 1 }}
                                     onClick={ev => ev.stopPropagation()}>
                                     {lv.half === "am" ? "午前" : lv.half === "pm" ? "午後" : "全日"}
+                                  </div>
+                                )}
+                                {/* 指定休バッジ */}
+                                {!lv && isDesignated && (
+                                  <div style={{ position: "absolute", top: -4, right: -2, background: "#7C3AED", color: "#fff", fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 99, whiteSpace: "nowrap", lineHeight: 1.4, boxShadow: "0 1px 3px rgba(0,0,0,0.25)", zIndex: 1 }}>
+                                    指定休
                                   </div>
                                 )}
                               </div>
