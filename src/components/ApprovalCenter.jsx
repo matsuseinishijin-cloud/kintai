@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave, gasDelete } from "../api/gas";
 import { today, toMin, newId } from "../utils/time";
-import { convertTo, LV_REQ_MAP, TIME_TRANSFER_MAP } from "../constants";
+import { convertTo, isHalfLeave, LV_REQ_MAP, TIME_TRANSFER_MAP } from "../constants";
 
 const iS = { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, width: "100%" };
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
@@ -46,7 +46,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
       const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
       records.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td)).forEach(r => total += Number(r.days || 0));
     });
-    const used = (lvReqs || []).filter(r => String(r.empId) === String(empId) && r.status === "approved").reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
+    const used = (lvReqs || []).filter(r => String(r.empId) === String(empId) && r.status === "approved").reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
     return total - used;
   };
 
@@ -56,13 +56,13 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     if (status === "approved") {
       // 残日数チェック
       const rem = calcRem(req.empId);
-      const days = req.half ? 0.5 : 1;
+      const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
       if (rem < days) { alert(`有給残日数が不足しています（残${rem}日、必要${days}日）`); return; }
       // シフト重なりチェック
       const shiftRow = shifts.find(s => String(s.empId) === String(req.empId) && s.date === req.date);
       const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
       if (def.start) {
-        if (!req.half) {
+        if (!isHalfLeave(req.half)) {
           alert(`${req.date} はシフトが入っているため承認できません。先にシフトを休日に変更してください。`);
           return;
         }
@@ -154,7 +154,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
 
   // 行の表示内容
   const renderDetail = r => {
-    if (r._type === "leave") return `${r.date}（${r.half ? "半日" : "全日"}）${r.leaveStart ? r.leaveStart + "〜" + r.leaveEnd : ""} 理由：${r.reason || "―"}`;
+    if (r._type === "leave") return `${r.date}（${isHalfLeave(r.half) ? "半日" : "全日"}）${r.leaveStart ? r.leaveStart + "〜" + r.leaveEnd : ""} 理由：${r.reason || "―"}`;
     if (r._type === "early") return `${r.date} 申請開始：${r.requestedEnd || "―"} 理由：${r.reason || "―"}`;
     if (r._type === "timetransfer") return `超過週：${r.overWeekStart} → 不足週：${r.shortWeekStart}`;
     if (r._type === "overtime") return `対象週：${r.overWeekStart}`;

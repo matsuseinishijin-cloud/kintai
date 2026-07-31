@@ -138,11 +138,11 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   // セルクリック
   const setCell = (empId, ds) => {
     // 全日有休チェック
-    const lvApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && !r.half);
+    const lvApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && !isHalfLeave(r.half));
     if (lvApproved) { alert("この日は全日有休が承認済みのためシフト変更できません。"); return; }
 
     // 半日有休チェック（臨時・通常シフトが有休時間帯と重なる場合）
-    const lvHalfApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && r.half);
+    const lvHalfApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && isHalfLeave(r.half));
     if (lvHalfApproved && lvHalfApproved.leaveStart && lvHalfApproved.leaveEnd) {
       const actual = selectedShift === "custom" ? `custom:${customStart}-${customEnd}:${customBreak}` : selectedShift;
       const def = getShiftDef(actual, shiftDefs);

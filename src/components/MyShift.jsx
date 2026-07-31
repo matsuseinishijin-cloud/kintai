@@ -108,7 +108,7 @@ export default function MyShift({ emp, shifts, shiftDefs, lvReqs }) {
               {/* 有休バッジ */}
               {hasLeave && (
                 <div style={{ fontSize: 9, fontWeight: 600, color: lvApproved ? "#0F6E56" : "#A32D2D", background: lvApproved ? "#C6F6D5" : "#FECACA", borderRadius: 4, padding: "1px 3px", marginBottom: 2, display: "inline-block" }}>
-                  {lvApproved ? (lvApproved.half ? "半休✓" : "有休✓") : (lvPending.half ? "半休…" : "有休…")}
+                  {lvApproved ? (isHalfLeave(lvApproved.half) ? "半休✓" : "有休✓") : (isHalfLeave(lvPending.half) ? "半休…" : "有休…")}
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave, gasDelete } from "../api/gas";
 import { today, newId } from "../utils/time";
-import { convertTo, LEAVE_MAP } from "../constants";
+import { convertTo, isHalfLeave, LEAVE_MAP } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -32,7 +32,7 @@ function calcBucketsWithRemaining(records, lvReqs, empId) {
   // バケツごとの残日数を計算
   const buckets = grants.map(g => ({ ...g, remaining: Number(g.days) }));
   approved.forEach(req => {
-    const days = req.half ? 0.5 : 1;
+    const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
     for (const b of buckets) {
       if (b.remaining <= 0) continue;
       if (b.expiresAt && b.expiresAt < req.date) continue;
@@ -64,7 +64,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   const buckets = calcBucketsWithRemaining(leave?.records, lvReqs, sel).sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
   const totalRem = calcTotalRemaining(leave?.records, lvReqs, sel);
   const totalGranted = buckets.reduce((s, b) => s + Number(b.days || 0), 0);
-  const usedDays = (lvReqs || []).filter(r => String(r.empId) === String(sel) && r.status === "approved").reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
+  const usedDays = (lvReqs || []).filter(r => String(r.empId) === String(sel) && r.status === "approved").reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   const displayRem = Math.max(0, totalGranted - usedDays);
 
   // 付与
@@ -239,7 +239,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
               {(lvReqs || []).filter(r => String(r.empId) === String(sel)).sort((a, b) => b.date > a.date ? 1 : -1).map(r => (
                 <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
                   <td style={tdS}>{r.date}</td>
-                  <td style={tdS}>{r.reason === "指定休" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EDE9FE", color: "#7C3AED" }}>指定休</span> : r.half ? "半日（0.5日）" : "全日（1日）"}</td>
+                  <td style={tdS}>{r.reason === "指定休" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EDE9FE", color: "#7C3AED" }}>指定休</span> : isHalfLeave(r.half) ? "半日（0.5日）" : "全日（1日）"}</td>
                   <td style={{ ...tdS, color: "#6b7280", fontSize: 12 }}>{r.leaveStart && r.leaveEnd ? `${r.leaveStart}〜${r.leaveEnd}` : "―"}</td>
                   <td style={tdS}>
                     {r.status === "pending" ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>

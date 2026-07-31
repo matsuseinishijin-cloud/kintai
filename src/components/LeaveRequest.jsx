@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
 import { today, newId, toMin, isWeekend, pad } from "../utils/time";
-import { convertTo, LV_REQ_MAP } from "../constants";
+import { convertTo, isHalfLeave, LV_REQ_MAP } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -33,7 +33,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     .sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // 新しい順
   const totalGranted = validLeaves.reduce((s, r) => s + (Number(r.days) || 0), 0);
   const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
-  const usedDays = approved.reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
+  const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   const rem = Math.max(0, totalGranted - usedDays);
 
   // 選択日のシフト
@@ -82,7 +82,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days) }));
   const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
   approvedSorted.forEach(req => {
-    const days = req.half ? 0.5 : 1;
+    const days = isHalfLeave(isHalfLeave(req.half)) ? 0.5 : 1;
     for (const b of bucketsWithRem) {
       if (b.remaining <= 0) continue;
       if (b.expiresAt && b.expiresAt < req.date) continue;
@@ -209,7 +209,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                       <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #e9ddd0", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
                         <span style={{ color: "#6b7280" }}>└</span>
                         <span style={{ fontWeight: 500 }}>{r.date}</span>
-                        <span style={{ color: "#374151" }}>{r.half ? "半日 0.5日" : "全日 1.0日"}</span>
+                        <span style={{ color: "#374151" }}>{isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
                         {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
                         {r.status === "pending" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
                           : r.status === "approved" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
