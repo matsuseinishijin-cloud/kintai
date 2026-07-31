@@ -60,8 +60,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     }
 
     try {
-      const halfVal = form.half === "full" ? "1日" : form.half;
-      const data = convertTo({
+      const halfVal = form.half === "full" ? "1日" : form.half;      const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
         half: halfVal,
         reason: form.reason, status: "pending",
@@ -107,10 +106,10 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
           {/* 区分 */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>区分</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {[["full", "全日（1日）"], ["half", "半日（0.5日）"]].map(([v, l]) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+              {[["full", "全日（1日）"], ["am", "午前（0.5日）"], ["pm", "午後（0.5日）"]].map(([v, l]) => (
                 <button key={v} onClick={() => setForm(p => ({ ...p, half: v }))}
-                  style={{ padding: "8px 0", borderRadius: 8, border: form.half === v ? "2px solid #1251a3" : "1px solid #d1d5db", background: form.half === v ? "#E6F1FB" : "#fff", color: form.half === v ? "#1251a3" : "#111827", fontWeight: form.half === v ? 600 : 400, cursor: "pointer", fontSize: 13 }}>
+                  style={{ padding: "8px 0", borderRadius: 8, border: form.half === v ? "2px solid #1251a3" : "1px solid #d1d5db", background: form.half === v ? "#E6F1FB" : "#fff", color: form.half === v ? "#1251a3" : "#111827", fontWeight: form.half === v ? 600 : 400, cursor: "pointer", fontSize: 12 }}>
                   {l}
                 </button>
               ))}
