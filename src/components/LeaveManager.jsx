@@ -267,7 +267,7 @@ function DesignatedHolidayManager({ designatedHolidays, emps, lvReqs, reload }) 
   const [excluded, setExcluded] = useState(new Set()); // 除外スタッフ
   const [granting, setGranting] = useState(false);
   const DH_MAP = { id: "id", "日付": "date", "メモ": "memo" };
-  const LV_MAP = { id:"id","従業員id":"empId","日付":"date","区分":"half","有休開始":"leaveStart","有休終了":"leaveEnd","休憩":"leaveBreak","理由":"reason","状態":"status","申請日時":"createdAt" };
+  const LV_MAP = { id:"id","従業員id":"empId","日付":"date","区分":"half","理由":"reason","状態":"status","有休開始":"leaveStart","有休終了":"leaveEnd" };
 
   const seishainEmps = emps.filter(e => e.type === "正社員");
 
@@ -299,7 +299,7 @@ function DesignatedHolidayManager({ designatedHolidays, emps, lvReqs, reload }) 
         // 既に申請があれば重複しない
         const exists = (lvReqs || []).some(r => String(r.empId) === String(emp.id) && r.date === selDh.date && r.reason === "指定休");
         if (exists) continue;
-        const data = convertTo({ id: newId(), empId: emp.id, date: selDh.date, half: "", leaveStart: "", leaveEnd: "", leaveBreak: "0", reason: "指定休", status: "approved", createdAt: new Date().toISOString() }, LV_MAP);
+        const data = convertTo({ id: newId(), empId: emp.id, date: selDh.date, half: "1日", leaveStart: "", leaveEnd: "", reason: "指定休", status: "approved", createdAt: new Date().toISOString() }, LV_MAP);
         await gasSave("有給申請", data);
       }
       alert(`${targets.length}名に指定休を付与しました`);
