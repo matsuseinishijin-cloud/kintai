@@ -60,12 +60,14 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     }
 
     try {
-      const halfVal = form.half === "full" ? "1日" : form.half;      const data = convertTo({
+      const halfVal = form.half === "full" ? "1日" : form.half;
+      const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
         half: halfVal,
         reason: form.reason, status: "pending",
         leaveStart: form.leaveStart, leaveEnd: form.leaveEnd,
       }, LV_REQ_MAP);
+      console.log("送信データ:", JSON.stringify(data));
       await gasSave("有給申請", data);
       setForm({ date: "", half: "full", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
