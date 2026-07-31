@@ -93,6 +93,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   });
   const buckets = bucketsWithRem;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
+  const canSubmit = form.date && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
 
   return (
     <div>
