@@ -67,7 +67,6 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         reason: form.reason, status: "pending",
         leaveStart: form.leaveStart, leaveEnd: form.leaveEnd,
       }, LV_REQ_MAP);
-      console.log("送信データ:", JSON.stringify(data));
       await gasSave("有給申請", data);
       setForm({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
@@ -75,11 +74,11 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     } catch (e) { alert("申請失敗：" + e.message); }
   };
 
-  // バケツ一覧（付与履歴・残日数付き）
+  // バケツ一覧（付与履歴・残日数付き・申請の帰属を追跡）
   const allRecords = myLeaves.flatMap(l => {
     try { return JSON.parse(l.records || "[]").filter(r => r.type === "grant"); } catch { return []; }
-  }).sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
-  const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days) }));
+  }).sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // LIFO：新しい順
+  const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days), assignedReqs: [] }));
   const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
   approvedSorted.forEach(req => {
     const days = isHalfLeave(req.half) ? 0.5 : 1;
@@ -88,10 +87,22 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
       if (b.expiresAt && b.expiresAt < req.date) continue;
       const deduct = Math.min(b.remaining, days);
       b.remaining -= deduct;
+      b.assignedReqs.push(req);
       break;
     }
   });
-  const buckets = bucketsWithRem;
+  // 承認待ちも同様に割り当て
+  const pendingReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "pending")
+    .sort((a, b) => a.date > b.date ? 1 : -1);
+  pendingReqs.forEach(req => {
+    const days = isHalfLeave(req.half) ? 0.5 : 1;
+    for (const b of bucketsWithRem) {
+      if (b.expiresAt && b.expiresAt < req.date) continue;
+      b.assignedReqs.push(req);
+      break;
+    }
+  });
+  const buckets = bucketsWithRem.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
   const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
 
@@ -121,7 +132,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
           {/* 日付 */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>取得日</div>
-            <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
+            <input type="date" value={form.date} max="2099-12-31" onChange={e => setForm(p => ({ ...p, date: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
           </div>
 
           {/* シフト表示 */}
@@ -185,13 +196,6 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                 const bucketId = b.id || b.grantedAt;
                 const td2 = today();
                 const isExpired = b.expiresAt && b.expiresAt < td2;
-                // このバケツに紐づく申請（LIFO順で消化されたもの）
-                // 簡易的に申請日順で表示
-                const bucketReqs = myReqs.filter(r => {
-                  if (r.date < b.grantedAt) return false;
-                  if (b.expiresAt && r.date > b.expiresAt) return false;
-                  return true;
-                });
                 return (
                   <div key={bucketId} style={{ marginBottom: 12, borderRadius: 8, border: `1px solid ${isExpired ? "#e9ddd0" : "#c7d2fe"}`, overflow: "hidden" }}>
                     {/* バケツヘッダー */}
@@ -203,9 +207,9 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                       {b.note && <span style={{ fontSize: 11, color: "#6b7280" }}>{b.note}</span>}
                     </div>
                     {/* このバケツの申請履歴 */}
-                    {bucketReqs.length === 0 ? (
+                    {b.assignedReqs.length === 0 ? (
                       <div style={{ padding: "6px 12px", fontSize: 12, color: "#9ca3af" }}>　申請なし</div>
-                    ) : bucketReqs.map(r => (
+                    ) : b.assignedReqs.map(r => (
                       <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #e9ddd0", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
                         <span style={{ color: "#6b7280" }}>└</span>
                         <span style={{ fontWeight: 500 }}>{r.date}</span>
