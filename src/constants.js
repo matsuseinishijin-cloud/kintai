@@ -49,9 +49,6 @@ export const isOvertimeTarget = emp =>
   emp.role === "理学療法士" && emp.type === "正社員" &&
   !!emp.weeklyLimit && Number(emp.weeklyLimit) < 40;
 
-// ── 半休判定（am/pmのみ半休、それ以外は全日） ─────────────────────────────────
-export const isHalfLeave = half => half === "am" || half === "pm";
-
 // ── 責任者ロール ──────────────────────────────────────────────────────────────
 export const REHA_LEAD_ROLES = ["理学療法士", "リハマネ", "AT"]; // リハ科責任者の担当
 export const SHIFT_LEAD_ROLES = ["医療事務", "看護師", "放射線技師"]; // シフト責任者の担当
@@ -67,7 +64,7 @@ export const AVATAR_COLORS = [
 export const EMP_MAP    = { id:"id", "氏名":"name", "職種":"role", "雇用形態":"type", "週間労働時間":"weeklyLimit", "固定残業時間":"fixedOTLimit", "責任者":"isLead" };
 export const SHIFT_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト種別":"shiftType" };
 export const PUNCH_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "出勤":"in", "退勤":"out", "休憩":"break", "補正済":"adjusted" };
-export const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "区分":"type", "理由":"reason", "状態":"status", "半日":"half", "有休開始":"leaveStart", "有休終了":"leaveEnd" };
+export const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "区分":"half", "理由":"reason", "状態":"status", "有休開始":"leaveStart", "有休終了":"leaveEnd" };
 export const LEAVE_MAP  = { id:"id", "従業員id":"empId", "付与日数":"granted", "取得日数":"used", "履歴":"records" };
 export const PW_MAP     = { id:"id", "従業員id":"empId", "パスワード":"password" };
 export const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", "申請出勤":"reqIn", "申請退勤":"reqOut", "理由":"reason", "状態":"status", "元出勤":"origIn", "元退勤":"origOut", "申請日時":"createdAt", "コメント":"comment" };
@@ -75,7 +72,10 @@ export const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "タイプ":"
 export const EARLY_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト開始":"shiftStart", "申請開始":"requestedStart", "理由":"reason", "状態":"status", "申請日時":"createdAt" };
 export const OTHER_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "内容":"content", "状態":"status", "申請日時":"createdAt", "コメント":"comment" };
 
-// マッピング変換関数
+// 有休の半日判定（am/pmのみ半日）
+export const isHalfLeave = half => half === "am" || half === "pm";
+// 有休の日数計算
+export const leaveDays = half => isHalfLeave(half) ? 0.5 : 1;
 export function convertFrom(row, map) {
   const o = {};
   Object.entries(map).forEach(([jp, en]) => {
