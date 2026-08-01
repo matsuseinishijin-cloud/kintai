@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { gasSave, gasDelete } from "../api/gas";
-import { today, toMin, newId } from "../utils/time";
+import { today, toMin } from "../utils/time";
 import { convertTo, isHalfLeave, LV_REQ_MAP, TIME_TRANSFER_MAP } from "../constants";
 
 const iS = { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, width: "100%" };
@@ -135,6 +135,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
   const allReqs = [
     ...(lvReqs || []).map(r => ({ ...r, _type: "leave", _label: "有給申請" })),
     ...(otReqs || []).filter(r => r.type === "early").map(r => ({ ...r, _type: "early", _label: "早出申請" })),
+    ...(otReqs || []).filter(r => r.type === "overtime").map(r => ({ ...r, _type: "otextend", _label: "残業申請(PT)" })),
     ...(timeTransferReqs || []).filter(r => r.transferType === "A").map(r => ({ ...r, _type: "timetransfer", _label: "時間振替" })),
     ...(timeTransferReqs || []).filter(r => r.transferType === "C").map(r => ({ ...r, _type: "overtime", _label: "時間外申請" })),
     ...(punchFixReqs || []).map(r => ({ ...r, _type: "punchfix", _label: "打刻修正" })),
@@ -156,6 +157,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
   const renderDetail = r => {
     if (r._type === "leave") return `${r.date}（${isHalfLeave(r.half) ? "半日" : "全日"}）${r.leaveStart ? r.leaveStart + "〜" + r.leaveEnd : ""} 理由：${r.reason || "―"}`;
     if (r._type === "early") return `${r.date} 申請開始：${r.requestedEnd || "―"} 理由：${r.reason || "―"}`;
+    if (r._type === "otextend") return `${r.date} 申請退勤：${r.requestedEnd || "―"} 理由：${r.reason || "―"}`;
     if (r._type === "timetransfer") return `超過週：${r.overWeekStart} → 不足週：${r.shortWeekStart}`;
     if (r._type === "overtime") return `対象週：${r.overWeekStart}`;
     if (r._type === "punchfix") return `${r.date} 申請：${r.reqIn}〜${r.reqOut} 理由：${r.reason || "―"}`;
@@ -165,7 +167,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
 
   const renderActions = r => {
     const isPending = r.status === "pending";
-    const sheetMap = { leave: "有給申請", early: "残業申請", timetransfer: "時間振替申請", overtime: "時間振替申請", punchfix: "打刻修正申請", other: "その他申請" };
+    const sheetMap = { leave: "有給申請", early: "残業申請", otextend: "残業申請", timetransfer: "時間振替申請", overtime: "時間振替申請", punchfix: "打刻修正申請", other: "その他申請" };
     const sheet = sheetMap[r._type];
 
     if (r._type === "other") {
@@ -190,13 +192,13 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
           <>
             <ABtn label="承認" bg="#EAF3DE" color="#3B6D11" onClick={() => {
               if (r._type === "leave") decideLv(r.id, "approved");
-              else if (r._type === "early") decideOT(r.id, "approved");
+              else if (r._type === "early" || r._type === "otextend") decideOT(r.id, "approved");
               else if (r._type === "timetransfer" || r._type === "overtime") decideTR(r.id, "approved");
               else if (r._type === "punchfix") decidePF(r.id, "approved");
             }} />
             <ABtn label="却下" bg="#FFF0F0" color="#A32D2D" onClick={() => {
               if (r._type === "leave") decideLv(r.id, "rejected");
-              else if (r._type === "early") decideOT(r.id, "rejected");
+              else if (r._type === "early" || r._type === "otextend") decideOT(r.id, "rejected");
               else if (r._type === "timetransfer" || r._type === "overtime") decideTR(r.id, "rejected");
               else if (r._type === "punchfix") decidePF(r.id, "rejected");
             }} />
@@ -205,7 +207,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
           <>
             <ABtn label="差し戻し" bg="#FAEEDA" color="#854F0B" onClick={() => {
               if (r._type === "leave") decideLv(r.id, "pending");
-              else if (r._type === "early") decideOT(r.id, "pending");
+              else if (r._type === "early" || r._type === "otextend") decideOT(r.id, "pending");
               else if (r._type === "timetransfer" || r._type === "overtime") decideTR(r.id, "pending");
               else if (r._type === "punchfix") decidePF(r.id, "pending");
             }} />
@@ -224,6 +226,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
           <option value="all">全申請種別</option>
           <option value="leave">有給申請</option>
           <option value="early">早出申請</option>
+          <option value="otextend">残業申請(PT)</option>
           <option value="timetransfer">時間振替</option>
           <option value="overtime">時間外申請</option>
           <option value="punchfix">打刻修正</option>

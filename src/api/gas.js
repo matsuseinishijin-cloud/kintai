@@ -31,13 +31,3 @@ export async function gasDelete(sheet, id) {
   return j.data;
 }
 
-// ── オーバーレイなし保存（複数回呼ぶ場合） ───────────────────────────────────
-export async function gasSaveRaw(sheet, data) {
-  const r = await fetch(GAS_URL, {
-    method: "POST",
-    body: JSON.stringify({ action: "save", sheet, data }),
-  });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error);
-  return j.data;
-}

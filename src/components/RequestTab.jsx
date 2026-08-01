@@ -3,7 +3,8 @@ import LeaveRequest from "./LeaveRequest";
 import EarlyRequest from "./EarlyRequest";
 import TimeTransferRequest from "./TimeTransferRequest";
 import OvertimeRequest from "./OvertimeRequest";
-import { EARLY_TARGET_ROLES, isOvertimeTarget } from "../constants";
+import OvertimeExtendRequest from "./OvertimeExtendRequest";
+import { EARLY_TARGET_ROLES, isOvertimeTarget, isPTPart } from "../constants";
 import { today } from "../utils/time";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
@@ -20,7 +21,8 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
   });
   if (hasLeave) sections.push({ key: "leave", label: "有給申請" });
   sections.push({ key: "punchfix", label: "打刻修正" });
-  if (emp.type === "正社員" && EARLY_TARGET_ROLES.includes(emp.role)) sections.push({ key: "early", label: "早出申請" });
+  if ((emp.type === "正社員" && EARLY_TARGET_ROLES.includes(emp.role)) || isPTPart(emp)) sections.push({ key: "early", label: "早出申請" });
+  if (isPTPart(emp)) sections.push({ key: "otextend", label: "残業申請" });
   if (emp.type === "正社員") sections.push({ key: "timetransfer", label: "時間振替" });
   if (isOvertimeTarget(emp)) sections.push({ key: "overtime", label: "時間外申請" });
   sections.push({ key: "other", label: "その他" });
@@ -49,6 +51,11 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
       {/* 早出申請 */}
       {active === "early" && (
         <EarlyRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reload} />
+      )}
+
+      {/* 残業申請（PTパート用：退勤延長） */}
+      {active === "otextend" && (
+        <OvertimeExtendRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reload} />
       )}
 
       {/* 時間振替申請 */}

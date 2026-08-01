@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toMin, toHStr, fmtTime, pad, DOW_JP, getPeriodRange, getPeriodDays, today } from "../utils/time";
+import { toMin, toHStr, DOW_JP, getPeriodRange, getPeriodDays, today } from "../utils/time";
 import { BREAK_MIN, getOtRule } from "../constants";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };

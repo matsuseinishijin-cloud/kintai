@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
-import { today, newId, toMin, isWeekend, pad } from "../utils/time";
+import { today, newId, toMin } from "../utils/time";
 import { convertTo, isHalfLeave, LV_REQ_MAP } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
@@ -66,6 +66,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         half: halfVal,
         reason: form.reason, status: "pending",
         leaveStart: form.leaveStart, leaveEnd: form.leaveEnd,
+        leaveBreak: isHalfLeave(form.half) && form.leaveBreak ? "1" : "",
       }, LV_REQ_MAP);
       await gasSave("有給申請", data);
       setForm({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
@@ -155,7 +156,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
           </div>
 
           {/* 休憩（半日のみ） */}
-          {form.half === "half" && (
+          {isHalfLeave(form.half) && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />

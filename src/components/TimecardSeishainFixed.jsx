@@ -95,6 +95,7 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
   const eC = rows.filter(r => r.earlyLeave).length;
   const lvC = rows.filter(r => r.isLeave).length;
   const totalOtMin = rows.reduce((s, r) => s + r.otMin, 0);
+  const fixedOTLimitMin = emp.fixedOTLimit ? Number(emp.fixedOTLimit) * 60 : null;
 
   // タイプC承認済み時間外
   const periodWeekStarts = new Set(periodDays.map(ds => {
@@ -146,12 +147,13 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
 
       {/* サマリー */}
       <div style={{ ...crd, padding: "12px 14px", marginBottom: "1rem" }}>
-        {/* 上段：勤務日数・有休・時間外 */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+        {/* 上段：勤務日数・有休・時間外・固定残業消化（管理者のみ） */}
+        <div style={{ display: "grid", gridTemplateColumns: isAdmin && fixedOTLimitMin ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
           {[
             ["勤務日数", attendDays + "日", ""],
             ["有休", lvC > 0 ? lvC + "日" : "―", lvC > 0 ? "#0F6E56" : ""],
             ["時間外", approvedTypeC > 0 ? toHStr(approvedTypeC) : "―", approvedTypeC > 0 ? "#854F0B" : ""],
+            ...(isAdmin && fixedOTLimitMin ? [["固定残業消化", `${toHStr(totalOtMin)} / ${toHStr(fixedOTLimitMin)}`, totalOtMin > fixedOTLimitMin ? "#A32D2D" : "#374151"]] : []),
           ].map(([l, v, c]) => (
             <div key={l} style={{ textAlign: "center", padding: "10px 4px", background: "#fef9f3", borderRadius: 8 }}>
               <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>{l}</div>

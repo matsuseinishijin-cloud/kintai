@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
-import { today, nowStr, newId, toHStr, toMin, pad, DOW_JP, isWeekend } from "../utils/time";
+import { today, nowStr, newId, toHStr, toMin, pad } from "../utils/time";
 import { BREAK_MIN, convertTo, PUNCH_MAP, PUNCH_FIX_MAP } from "../constants";
 
 // ── スタイル ──────────────────────────────────────────────────────────────────
@@ -115,6 +115,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
           const d2 = new Date(mon);
           d2.setDate(mon.getDate() + i);
           const ds2 = `${d2.getFullYear()}-${pad(d2.getMonth() + 1)}-${pad(d2.getDate())}`;
+          if (ds2 > td) continue; // 今日より先の日付は実績ベース集計から除外
           const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds2);
           const def2 = getShiftDef(sr?.shiftType, shiftDefs);
           if (def2.start && def2.end) {
@@ -124,7 +125,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
           const lv = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds2 && (r.status === "approved" || r.status === "pending"));
           if (lv && lv.leaveStart && lv.leaveEnd) {
             const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
-            const breakMin = lv.leaveBreak ? 60 : 0;
+            const breakMin = lv.leaveBreak === "1" ? 60 : 0;
             wMin += Math.max(0, lvMin - breakMin);
           }
         }

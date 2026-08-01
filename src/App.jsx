@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { newId, today } from "./utils/time";
 import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
@@ -134,7 +133,7 @@ export default function App() {
       {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
-        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll} />}
+        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll} />}
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && (()=>{
           const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";

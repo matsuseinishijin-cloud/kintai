@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
-import { today, newId, toMin, toHStr, pad, getPeriodDays, daysInMonth } from "../utils/time";
+import { newId, toMin, toHStr, pad, daysInMonth } from "../utils/time";
 import { convertTo, TIME_TRANSFER_MAP, BREAK_MIN } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
