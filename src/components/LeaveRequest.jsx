@@ -17,7 +17,7 @@ function getShiftDef(shiftType, shiftDefs) {
 }
 
 export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, reload }) {
-  const [form, setForm] = useState({ date: "", half: "full", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
+  const [form, setForm] = useState({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
   const [sub, setSub] = useState(false);
   const [warn, setWarn] = useState("");
 
@@ -69,7 +69,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
       }, LV_REQ_MAP);
       console.log("送信データ:", JSON.stringify(data));
       await gasSave("有給申請", data);
-      setForm({ date: "", half: "full", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
+      setForm({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
@@ -93,7 +93,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   });
   const buckets = bucketsWithRem;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.date && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
+  const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
 
   return (
     <div>
