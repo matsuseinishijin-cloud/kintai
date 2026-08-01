@@ -82,25 +82,22 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
   approvedSorted.forEach(req => {
     const days = isHalfLeave(req.half) ? 0.5 : 1;
-    for (const b of bucketsWithRem) {
-      if (b.remaining <= 0) continue;
-      if (b.expiresAt && b.expiresAt < req.date) continue;
-      const deduct = Math.min(b.remaining, days);
-      b.remaining -= deduct;
-      b.assignedReqs.push(req);
-      break;
-    }
+    // 付与日が取得日以前かつ有効期限内のバケツのうち最新から消化（LIFO）
+    const eligible = bucketsWithRem.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date) && b.remaining > 0);
+    if (eligible.length === 0) return;
+    const b = eligible[0]; // bucketsWithRemは新しい順なので[0]が最新
+    const deduct = Math.min(b.remaining, days);
+    b.remaining -= deduct;
+    b.assignedReqs.push(req);
   });
   // 承認待ちも同様に割り当て
   const pendingReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "pending")
     .sort((a, b) => a.date > b.date ? 1 : -1);
   pendingReqs.forEach(req => {
-    const days = isHalfLeave(req.half) ? 0.5 : 1;
-    for (const b of bucketsWithRem) {
-      if (b.expiresAt && b.expiresAt < req.date) continue;
-      b.assignedReqs.push(req);
-      break;
-    }
+    const eligible = bucketsWithRem.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date));
+    if (eligible.length === 0) return;
+    const b = eligible[0];
+    b.assignedReqs.push(req);
   });
   const buckets = bucketsWithRem.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
