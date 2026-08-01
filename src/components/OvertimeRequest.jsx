@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
-import { newId, toMin, toHStr, pad, daysInMonth } from "../utils/time";
+import { newId, toMin, toHStr, pad, daysInMonth, today } from "../utils/time";
 import { convertTo, TIME_TRANSFER_MAP, BREAK_MIN } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -28,11 +28,13 @@ function getMondayOf(ds) {
 
 function getWeekShiftMin(weekStart, empId, shifts, shiftDefs, lvReqs) {
   if (!weekStart) return 0;
+  const td = today();
   const [wy, wm, wd] = weekStart.split("-").map(Number);
   let total = 0;
   for (let i = 0; i < 7; i++) {
     const d = new Date(wy, wm - 1, wd + i);
     const ds = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (ds > td) continue; // 実績ベース：今日より先の日付は集計対象外
     const sr = shifts.find(s => String(s.empId) === String(empId) && s.date === ds);
     const def = getShiftDef(sr?.shiftType, shiftDefs);
     if (def.start && def.end) {

@@ -73,7 +73,15 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
         if (seen.has(mon)) continue;
         seen.add(mon);
         const wMin = getWeekShiftMin(mon, emp.id, shifts, shiftDefs, lvReqs);
-        const diff = wMin - weeklyLimit;
+        const rawDiff = wMin - weeklyLimit;
+        // 既にこの週を使って申請済み（承認待ち・承認済）の分を差し引く
+        const usedAsOver = (timeTransferReqs || [])
+          .filter(r => String(r.empId) === String(emp.id) && r.overWeekStart === mon && (r.transferType === "A" || r.transferType === "C") && (r.status === "pending" || r.status === "approved"))
+          .reduce((s, r) => s + Number(r.offsetMin || 0), 0);
+        const usedAsShort = (timeTransferReqs || [])
+          .filter(r => String(r.empId) === String(emp.id) && r.shortWeekStart === mon && r.transferType === "A" && (r.status === "pending" || r.status === "approved"))
+          .reduce((s, r) => s + Number(r.offsetMin || 0), 0);
+        const diff = rawDiff > 0 ? rawDiff - usedAsOver : rawDiff < 0 ? rawDiff + usedAsShort : rawDiff;
         opts.push({ mon, wMin, diff });
       }
     }
