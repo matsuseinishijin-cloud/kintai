@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { gasSave } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
-import { BREAK_MIN, ROLES } from "../constants";
+import { BREAK_MIN, ROLES, isHalfLeave } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };

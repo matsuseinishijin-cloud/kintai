@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave, gasDelete } from "../api/gas";
-import { today, toMin } from "../utils/time";
-import { convertTo, isHalfLeave, LV_REQ_MAP, TIME_TRANSFER_MAP } from "../constants";
+import { today, toMin, newId } from "../utils/time";
+import { convertTo, isHalfLeave, LV_REQ_MAP, TIME_TRANSFER_MAP, PUNCH_MAP, BREAK_MIN } from "../constants";
 
 const iS = { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, width: "100%" };
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
@@ -29,7 +29,7 @@ function getShiftDef(shiftType, shiftDefs) {
   return shiftDefs[st] || { start: null, end: null };
 }
 
-export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs, punchFixReqs, otherReqs, shifts, shiftDefs, leaves, reload }) {
+export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs, punchFixReqs, otherReqs, shifts, shiftDefs, leaves, punches, reload }) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [empFilter, setEmpFilter] = useState("");
@@ -103,12 +103,18 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     try {
       const data = { id: req.id, "従業員id": req.empId, "日付": req.date, "申請出勤": req.reqIn, "申請退勤": req.reqOut, "理由": req.reason, "状態": status, "元出勤": req.origIn, "元退勤": req.origOut };
       if (status === "approved") {
-        // 打刻を修正
-        const existingPunch = shifts; // punches参照のため後で追加
-        await gasSave("打刻修正申請", data);
-      } else {
-        await gasSave("打刻修正申請", data);
+        // 打刻を実際に修正（既存レコードがあれば上書き、なければ新規作成）
+        const existingPunch = (punches || []).find(p => String(p.empId) === String(req.empId) && p.date === req.date);
+        const punchData = convertTo({
+          id: existingPunch?.id || newId(),
+          empId: req.empId, date: req.date,
+          in: req.reqIn, out: req.reqOut,
+          break: existingPunch?.break != null ? existingPunch.break : BREAK_MIN,
+          adjusted: true,
+        }, PUNCH_MAP);
+        await gasSave("打刻", punchData);
       }
+      await gasSave("打刻修正申請", data);
       await reload();
     } catch (e) { alert("更新失敗：" + e.message); }
   };

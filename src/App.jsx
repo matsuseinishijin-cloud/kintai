@@ -155,7 +155,7 @@ export default function App() {
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
           {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} reload={loadAll} />}
+          {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
           {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
           {aTab === 5 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>打刻履歴（準備中）</div>}
