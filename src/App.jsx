@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -118,7 +118,7 @@ export default function App() {
 
   if (loading) return <Loading />;
   if (error) return <Err msg={error} />;
-  if (!loginId) return <LoginScreen emps={emps} passwords={passwords} onLogin={id => { setLoginId(id); setTab(0); }} />;
+  if (!loginId) return <LoginScreen emps={emps.filter(isActiveEmp)} passwords={passwords} onLogin={id => { setLoginId(id); setTab(0); }} />;
 
   const isAdmin = loginId === "admin";
   const cur = emps.find(e => e.id === loginId);

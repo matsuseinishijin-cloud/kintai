@@ -47,6 +47,9 @@ export const EARLY_TARGET_ROLES = ["看護師", "医療事務", "放射線技師
 // ── PTパート判定（早出・残業申請の対象） ─────────────────────────────────────
 export const isPTPart = emp => emp.role === "理学療法士" && emp.type === "パート";
 
+// ── 在籍判定（未設定＝既存データは在籍扱いとする後方互換） ─────────────────────
+export const isActiveEmp = emp => emp.isActive !== "false";
+
 // ── 時間外申請対象（理学療法士正社員・週所定40h未満） ─────────────────────────
 export const isOvertimeTarget = emp =>
   emp.role === "理学療法士" && emp.type === "正社員" &&
@@ -64,7 +67,7 @@ export const AVATAR_COLORS = [
 ];
 
 // ── スプレッドシートマッピング ─────────────────────────────────────────────────
-export const EMP_MAP    = { id:"id", "氏名":"name", "職種":"role", "雇用形態":"type", "週間労働時間":"weeklyLimit", "固定残業時間":"fixedOTLimit", "責任者":"isLead" };
+export const EMP_MAP    = { id:"id", "氏名":"name", "職種":"role", "雇用形態":"type", "週間労働時間":"weeklyLimit", "固定残業時間":"fixedOTLimit", "責任者":"isLead", "在籍":"isActive" };
 export const SHIFT_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト種別":"shiftType" };
 export const PUNCH_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "出勤":"in", "退勤":"out", "休憩":"break", "補正済":"adjusted" };
 export const LV_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "区分":"half", "理由":"reason", "状態":"status", "有休開始":"leaveStart", "有休終了":"leaveEnd", "休憩":"leaveBreak" };

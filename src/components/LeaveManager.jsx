@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave, gasDelete } from "../api/gas";
 import { today, newId } from "../utils/time";
-import { convertTo, isHalfLeave, LEAVE_MAP } from "../constants";
+import { convertTo, isHalfLeave, LEAVE_MAP, isActiveEmp } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -270,7 +270,7 @@ function DesignatedHolidayManager({ designatedHolidays, emps, lvReqs, reload }) 
   const DH_MAP = { id: "id", "日付": "date", "メモ": "memo" };
   const LV_MAP = { id:"id","従業員id":"empId","日付":"date","区分":"half","理由":"reason","状態":"status","有休開始":"leaveStart","有休終了":"leaveEnd" };
 
-  const seishainEmps = emps.filter(e => e.type === "正社員");
+  const seishainEmps = emps.filter(e => e.type === "正社員" && isActiveEmp(e));
 
   const add = async () => {
     if (!form.date) return;

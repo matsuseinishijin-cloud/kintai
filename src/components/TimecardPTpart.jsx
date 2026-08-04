@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toMin, toHStr, fmtTime, DOW_JP, getPeriodRange, getPeriodDays, today } from "../utils/time";
+import { getOtRule } from "../constants";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -21,6 +22,7 @@ function getShiftDef(shiftType, shiftDefs) {
 
 // 理学療法士パート専用計算（+7分補正・申請制）
 function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
+  const roundMin = getOtRule(emp).roundMin || 10;
   const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
   const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
   const punch = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
@@ -57,13 +59,13 @@ function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
     // 遅刻（4分以上で10分単位切り上げ控除）
     lateMin = Math.max(0, pIn - shiftStart);
     isLate = lateMin >= 1;
-    if (lateMin >= 4) lateDeduct = Math.ceil(lateMin / 10) * 10;
+    if (lateMin >= 4) lateDeduct = Math.ceil(lateMin / roundMin) * roundMin;
 
     // 実働（10分切り捨て）
     const breakMin = def.breakMin != null ? Number(def.breakMin) : 0;
     if (adjOutMin !== null) {
       const rawWork = Math.max(0, adjOutMin - workStart - breakMin - lateDeduct);
-      workMin = Math.floor(rawWork / 10) * 10;
+      workMin = Math.floor(rawWork / roundMin) * roundMin;
       otMin = Math.max(0, adjOutMin - shiftEnd);
       isEarly = adjOutMin < shiftEnd - 1;
       isOT = otMin > 0;

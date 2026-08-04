@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toMin, toHStr, DOW_JP, getPeriodRange, getPeriodDays, today } from "../utils/time";
+import { getOtRule } from "../constants";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -36,6 +37,7 @@ function calcNurseSlots(inMin, outMin, dow) {
 }
 
 function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
+  const roundMin = getOtRule(emp).roundMin || 10;
   const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
   const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
   const punch = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
@@ -55,7 +57,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
     const im = toMin(punch.in), om = toMin(punch.out);
     const bk = punch.break != null ? Number(punch.break) : 0;
     const raw = Math.max(0, om - im - bk);
-    awMin = Math.floor(raw / 10) * 10;
+    awMin = Math.floor(raw / roundMin) * roundMin;
     slots = calcNurseSlots(im, om, dow);
 
     if (!isOff && def.start) {

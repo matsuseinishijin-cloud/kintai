@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { gasSave, gasDelete } from "../api/gas";
+import { gasSave } from "../api/gas";
 import { newId } from "../utils/time";
-import { ROLES, REHA_LEAD_ROLES, SHIFT_LEAD_ROLES, EMP_MAP, PW_MAP, EMP_ID_PREFIX, convertTo } from "../constants";
+import { ROLES, REHA_LEAD_ROLES, SHIFT_LEAD_ROLES, EMP_MAP, PW_MAP, EMP_ID_PREFIX, convertTo, isActiveEmp } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -33,11 +33,12 @@ export default function EmpManager({ emps, passwords, reload }) {
   const [form, setForm] = useState({ name: "", role: "医療事務", type: "正社員", isLead: false, weeklyLimit: "", fixedOTLimit: "" });
   const [pwEdit, setPwEdit] = useState(null);
   const [newPw, setNewPw] = useState("");
-  const [filter, setFilter] = useState({ role: "", type: "" });
+  const [filter, setFilter] = useState({ role: "", type: "", status: "active" });
 
   const filteredEmps = emps.filter(e =>
     (!filter.role || e.role === filter.role) &&
-    (!filter.type || e.type === filter.type)
+    (!filter.type || e.type === filter.type) &&
+    (filter.status === "all" || (filter.status === "active" ? isActiveEmp(e) : !isActiveEmp(e)))
   );
 
   const startNew = () => {
@@ -58,7 +59,9 @@ export default function EmpManager({ emps, passwords, reload }) {
     if (!form.name) { alert("氏名を入力してください"); return; }
     try {
       const empId = editId || genEmpId(emps, form.role, form.type);
-      const data = convertTo({ id: empId, name: form.name, role: form.role, type: form.type, isLead: form.isLead ? "true" : "false", weeklyLimit: form.weeklyLimit || "", fixedOTLimit: form.fixedOTLimit || "" }, EMP_MAP);
+      const existingEmp = editId ? emps.find(e => e.id === editId) : null;
+      const isActive = existingEmp ? (existingEmp.isActive !== "false" ? "true" : "false") : "true";
+      const data = convertTo({ id: empId, name: form.name, role: form.role, type: form.type, isLead: form.isLead ? "true" : "false", weeklyLimit: form.weeklyLimit || "", fixedOTLimit: form.fixedOTLimit || "", isActive }, EMP_MAP);
       await gasSave("従業員", data);
       // 新規の場合はパスワードも設定（初期値=社員番号）
       if (!editId) {
@@ -70,12 +73,20 @@ export default function EmpManager({ emps, passwords, reload }) {
     } catch (e) { alert("保存失敗：" + e.message); }
   };
 
-  const del = async emp => {
-    if (!confirm(`${emp.name}を削除しますか？`)) return;
+  // 退職・復職（論理削除：データは残したまま在籍フラグのみ切替）
+  const setActiveStatus = async (emp, active) => {
+    const label = active ? "復職" : "退職";
+    if (!confirm(`${emp.name}を${label}扱いにしますか？`)) return;
     try {
-      await gasDelete("従業員", emp.id);
+      const data = convertTo({
+        id: emp.id, name: emp.name, role: emp.role, type: emp.type,
+        isLead: isLeadVal(emp.isLead) ? "true" : "false",
+        weeklyLimit: emp.weeklyLimit || "", fixedOTLimit: emp.fixedOTLimit || "",
+        isActive: active ? "true" : "false",
+      }, EMP_MAP);
+      await gasSave("従業員", data);
       await reload();
-    } catch (e) { alert("削除失敗：" + e.message); }
+    } catch (e) { alert(`${label}処理失敗：` + e.message); }
   };
 
   const savePw = async () => {
@@ -104,6 +115,11 @@ export default function EmpManager({ emps, passwords, reload }) {
           <option value="">全雇用形態</option>
           <option>正社員</option>
           <option>パート</option>
+        </select>
+        <select value={filter.status} onChange={e => setFilter(p => ({ ...p, status: e.target.value }))} style={{ ...iS, width: "auto" }}>
+          <option value="active">在籍中</option>
+          <option value="resigned">退職済み</option>
+          <option value="all">すべて</option>
         </select>
         <button onClick={startNew} style={{ ...bP, marginLeft: "auto" }}>＋ 新規追加</button>
       </div>
@@ -185,11 +201,13 @@ export default function EmpManager({ emps, passwords, reload }) {
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr>{["社員番号", "氏名", "職種", "雇用形態", "週所定", "固定残業", "責任者", "操作"].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+            <tr>{["社員番号", "氏名", "職種", "雇用形態", "週所定", "固定残業", "責任者", "在籍", "操作"].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
           </thead>
           <tbody>
-            {filteredEmps.map(emp => (
-              <tr key={emp.id} style={{ borderBottom: "0.5px solid #e9ddd0" }}>
+            {filteredEmps.map(emp => {
+              const active = isActiveEmp(emp);
+              return (
+              <tr key={emp.id} style={{ borderBottom: "0.5px solid #e9ddd0", opacity: active ? 1 : 0.55 }}>
                 <td style={{ ...tdS, color: "#6b7280" }}>{emp.id}</td>
                 <td style={{ ...tdS, fontWeight: 500 }}>{emp.name}</td>
                 <td style={tdS}>{emp.role}</td>
@@ -197,15 +215,19 @@ export default function EmpManager({ emps, passwords, reload }) {
                 <td style={{ ...tdS, color: emp.weeklyLimit ? "#1251a3" : "#9ca3af" }}>{emp.weeklyLimit ? emp.weeklyLimit + "h" : "―"}</td>
                 <td style={{ ...tdS, color: emp.fixedOTLimit ? "#854F0B" : "#9ca3af" }}>{emp.fixedOTLimit ? emp.fixedOTLimit + "h" : "―"}</td>
                 <td style={tdS}>{isLeadVal(emp.isLead) ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#FAEEDA", color: "#854F0B" }}>★責任者</span> : "―"}</td>
+                <td style={tdS}>{active ? <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#EAF3DE", color: "#3B6D11" }}>在籍中</span> : <span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#F5F5F5", color: "#6b7280" }}>退職済</span>}</td>
                 <td style={tdS}>
                   <div style={{ display: "flex", gap: 4 }}>
                     <button onClick={() => startEdit(emp)} style={bE}>編集</button>
                     <button onClick={() => { setPwEdit(emp.id); setNewPw(""); }} style={bE}>PW変更</button>
-                    <button onClick={() => del(emp)} style={bD}>削除</button>
+                    {active
+                      ? <button onClick={() => setActiveStatus(emp, false)} style={bD}>退職</button>
+                      : <button onClick={() => setActiveStatus(emp, true)} style={{ ...bE, color: "#3B6D11" }}>復職</button>}
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
