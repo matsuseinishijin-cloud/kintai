@@ -12,6 +12,7 @@ import TimecardNursepart from "./components/TimecardNursepart";
 import EmpManager from "./components/EmpManager";
 import ShiftCalendar from "./components/ShiftCalendar";
 import ApprovalCenter from "./components/ApprovalCenter";
+import PunchHistory from "./components/PunchHistory";
 import LeaveManager from "./components/LeaveManager";
 
 const _style = document.createElement("style");
@@ -158,7 +159,7 @@ export default function App() {
           {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
           {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
-          {aTab === 5 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>打刻履歴（準備中）</div>}
+          {aTab === 5 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
         </div>;
       })()}
     </div>
