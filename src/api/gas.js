@@ -3,7 +3,7 @@ export const GAS_URL = "https://script.google.com/macros/s/AKfycbx7YjvfSj3N-KOev
 
 // ── 全件取得 ──────────────────────────────────────────────────────────────────
 export async function gasGet(sheet) {
-  const r = await fetch(`${GAS_URL}?action=getAll&sheet=${encodeURIComponent(sheet)}`);
+  const r = await fetch(`${GAS_URL}?action=getAll&sheet=${encodeURIComponent(sheet)}`, { cache: "no-store" });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error);
   return j.data;
