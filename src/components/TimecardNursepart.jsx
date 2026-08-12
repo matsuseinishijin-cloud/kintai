@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toMin, toHStr, DOW_JP, getPeriodRange, getPeriodDays, today } from "../utils/time";
-import { getOtRule } from "../constants";
+import { getOtRule, isHalfLeave } from "../constants";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -104,7 +104,7 @@ export default function TimecardNursepart({ emp, shifts, punches, shiftDefs, lvR
   const disp = filter === "issues" ? rows.filter(r => r.absent || r.late || r.earlyLeave || r.needsConfirm || r.missingOut) : rows;
 
   const statusBadge = r => {
-    if (r.isLeave) return <Badge label={r.lv?.half ? "半休" : "有休"} bg="#E1F5EE" color="#0F6E56" />;
+    if (r.isLeave) return <Badge label={isHalfLeave(r.lv?.half) ? "半休" : "有休"} bg="#E1F5EE" color="#0F6E56" />;
     if (r.absent) return <Badge label="欠勤" bg="#FFF0F0" color="#A32D2D" />;
     if (r.missingOut) return <Badge label="退勤忘れ" bg="#FCEBEB" color="#A32D2D" />;
     if (r.needsConfirm) return <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />;

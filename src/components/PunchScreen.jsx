@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
 import { today, nowStr, newId, toHStr, toMin, pad } from "../utils/time";
-import { BREAK_MIN, convertTo, PUNCH_MAP, PUNCH_FIX_MAP } from "../constants";
+import { BREAK_MIN, convertTo, PUNCH_MAP, PUNCH_FIX_MAP, isHalfLeave } from "../constants";
 
 // ── スタイル ──────────────────────────────────────────────────────────────────
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
@@ -155,7 +155,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   const leave = (leaves || []).find(l => String(l.empId) === String(emp.id));
   if (leave) {
     const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
-    const usedDays = approved.reduce((s, r) => s + (r.half ? 0.5 : 1), 0);
+    const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
     const rem = (Number(leave.granted) || 0) - usedDays;
     if (rem > 0 && rem < 5) notifications.push({ type: "info", msg: `有休残日数が少なくなっています（残${rem}日）` });
   }
