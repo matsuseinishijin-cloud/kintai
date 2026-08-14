@@ -6,6 +6,7 @@ const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
 const thS = { padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #e9ddd0", textAlign: "left", fontWeight: 400, whiteSpace: "nowrap" };
 const tdS = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid #e9ddd0" };
+const iST = { padding: "3px 5px", borderRadius: 6, border: "1px solid #d1d5db", background: "#FFFDF5", color: "#111827", fontSize: 12, width: 92 };
 
 function Badge({ label, bg, color }) {
   return <span style={{ padding: "2px 7px", borderRadius: 99, fontSize: 11, fontWeight: 500, background: bg, color }}>{label}</span>;
@@ -72,7 +73,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   return { ds, dow: new Date(ds).getDay(), def, punch, lv, isOff, isLeave, swMin, awMin, otMin, late, earlyLeave, earlyLeaveMin, absent, missingOut, needsConfirm };
 }
 
-export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs, lvReqs, timeTransferReqs, isAdmin = false }) {
+export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs, lvReqs, timeTransferReqs, isAdmin = false, editMode = false, edits = {}, onEdit }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -188,7 +189,7 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
               const dc = r.dow === 0 ? "#A32D2D" : r.dow === 6 ? "#1251a3" : "#374151";
               const isToday = r.ds === td;
               return (
-                <tr key={r.ds} style={{ borderBottom: "0.5px solid #e9ddd0", background: isToday ? "#EFF6FF" : r.needsConfirm || r.absent ? "#FFF8F8" : "inherit" }}>
+                <tr key={r.ds} style={{ borderBottom: "0.5px solid #e9ddd0", background: isToday ? "#EFF6FF" : edits[r.ds] ? "#FFF8E1" : r.needsConfirm || r.absent ? "#FFF8F8" : "inherit" }}>
                   <td style={{ ...tdS, fontWeight: isToday ? 700 : 400, color: dc }}>{r.ds.slice(5).replace("-", "/")}</td>
                   <td style={{ ...tdS, color: dc }}>{DOW_JP[r.dow]}</td>
                   <td style={tdS}>
@@ -196,8 +197,8 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
                       ? <span style={{ fontSize: 12, color: r.def.tc }}>{r.def.start}〜{r.def.end}</span>
                       : <span style={{ color: "#9ca3af", fontSize: 12 }}>休日</span>}
                   </td>
-                  <td style={tdS}>{r.punch?.in || "―"}</td>
-                  <td style={tdS}>{r.punch?.out || "―"}</td>
+                  <td style={tdS}>{editMode ? <input type="time" value={edits[r.ds]?.in ?? r.punch?.in ?? ""} onChange={e => onEdit(r.ds, "in", e.target.value)} style={iST} /> : (r.punch?.in || "―")}</td>
+                  <td style={tdS}>{editMode ? <input type="time" value={edits[r.ds]?.out ?? r.punch?.out ?? ""} onChange={e => onEdit(r.ds, "out", e.target.value)} style={iST} /> : (r.punch?.out || "―")}</td>
                   <td style={tdS}>{r.awMin > 0 ? toHStr(r.awMin) : "―"}</td>
                   <td style={tdS}>{statusBadge(r)}</td>
                 </tr>
