@@ -99,6 +99,7 @@ export default function TimecardPTpart({ emp, shifts, punches, shiftDefs, lvReqs
 
   // サマリー計算
   const totalWorkMin = rows.reduce((s, r) => s + r.workMin, 0);
+  const totalOtMin = rows.reduce((s, r) => s + r.otMin, 0);
   const attendDays = rows.filter(r => r.punch?.in && !r.absent).length;
   const cd = rows.filter(r => r.needsConfirm).length;
   const abC = rows.filter(r => r.absent).length;
@@ -140,9 +141,10 @@ export default function TimecardPTpart({ emp, shifts, punches, shiftDefs, lvReqs
       {/* サマリー */}
       <div style={{ ...crd, padding: "12px 14px", marginBottom: "1rem" }}>
         {/* 上段 */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
           {[
             ["合計就労時間", totalWorkMin > 0 ? toHStr(totalWorkMin) : "―", ""],
+            ["残業合計", totalOtMin > 0 ? toHStr(totalOtMin) : "―", totalOtMin > 0 ? "#854F0B" : ""],
             ["出勤日数", attendDays + "日", ""],
             ["要確認", cd > 0 ? cd + "件" : "―", cd > 0 ? "#A32D2D" : ""],
           ].map(([l, v, c]) => (
