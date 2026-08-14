@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -14,6 +14,8 @@ import ShiftCalendar from "./components/ShiftCalendar";
 import ApprovalCenter from "./components/ApprovalCenter";
 import PunchHistory from "./components/PunchHistory";
 import TimecardAdmin from "./components/TimecardAdmin";
+import ShiftDefManager from "./components/ShiftDefManager";
+import WeekPatternManager from "./components/WeekPatternManager";
 import LeaveManager from "./components/LeaveManager";
 
 const _style = document.createElement("style");
@@ -80,6 +82,7 @@ export default function App() {
   const [passwords, setPasswords] = useState([]);
   const [shiftDefs, setShiftDefs] = useState({});
   const [shiftDefList, setShiftDefList] = useState([]);
+  const [weekPatterns, setWeekPatterns] = useState([]);
   const [timeTransferReqs, setTimeTransferReqs] = useState([]);
   const [punchFixReqs, setPunchFixReqs] = useState([]);
   const [otReqs, setOtReqs] = useState([]);
@@ -91,14 +94,16 @@ export default function App() {
   const [loginId, setLoginId] = useState(null);
   const [tab, setTab] = useState(0);
   const [aTab, setATab] = useState(0);
+  const [shiftSettingSub, setShiftSettingSub] = useState(0);
 
   const loadAll = useCallback(async () => {
     try {
-      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh] = await Promise.all([
+      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp] = await Promise.all([
         gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
         gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
         gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
         gasGet("残業申請"), gasGet("その他申請"), gasGet("指定休"),
+        gasGet("週間パターン"),
       ]);
       setEmps(e.map(r => convertFrom(r, EMP_MAP)));
       setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
@@ -111,11 +116,12 @@ export default function App() {
       setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
       setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
       setDesignatedHolidays(dh.map(r => convertFrom(r, { id:"id","日付":"date","メモ":"memo" })));
+      setWeekPatterns(wp.map(r => convertFrom(r, WEEK_PATTERN_MAP)));
       const defsMap = {};
       const defsList = [];
       sd.forEach(d => {
         if (!d["キー"]) return;
-        const entry = { key: d["キー"], dept: d["部署"] || "", label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 };
+        const entry = { id: d["id"], key: d["キー"], dept: d["部署"] || "", label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60, order: d["順番"] != null && d["順番"] !== "" ? Number(d["順番"]) : 999 };
         // 同じキー（例："A"）が部署をまたいで重複定義されるケースがあるため、
         // 「部署:キー」の組み合わせで正しく引けるようにする（部署単位が優先）。
         // キーのみのエントリも後方互換のため残すが、複数部署で重複する場合は最後の1件で上書きされる点に注意。
@@ -171,17 +177,32 @@ export default function App() {
         })()}
       </div>)}
       {isAdmin && (() => {
-        const aTabs = ["従業員管理", "シフト", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
+        const aTabs = ["従業員管理", "シフト", "シフト設定", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
         return <div>
           <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>
             {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
-          {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 4 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={loadAll} />}
-          {aTab === 5 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
+          {aTab === 2 && (() => {
+            const shiftSettingTabs = ["シフト定義", "週間パターン"];
+            return <div>
+              <div style={{ display: "flex", gap: 0, marginBottom: "1rem", borderBottom: "2px solid #e9ddd0" }}>
+                {shiftSettingTabs.map((t, i) => (
+                  <button key={t} onClick={() => setShiftSettingSub(i)}
+                    style={{ padding: "8px 20px", border: "none", borderBottom: shiftSettingSub === i ? "2.5px solid #1251a3" : "2.5px solid transparent", background: "transparent", color: shiftSettingSub === i ? "#1251a3" : "#6b7280", fontWeight: shiftSettingSub === i ? 600 : 400, fontSize: 13, cursor: "pointer" }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {shiftSettingSub === 0 && <ShiftDefManager shiftDefList={shiftDefList} reload={loadAll} />}
+              {shiftSettingSub === 1 && <WeekPatternManager weekPatterns={weekPatterns} shiftDefList={shiftDefList} reload={loadAll} />}
+            </div>;
+          })()}
+          {aTab === 3 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
+          {aTab === 4 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
+          {aTab === 5 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={loadAll} />}
+          {aTab === 6 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
         </div>;
       })()}
     </div>

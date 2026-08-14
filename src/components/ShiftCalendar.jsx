@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
-import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp } from "../constants";
+import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp, DOW_KEY_ORDER } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -112,7 +112,7 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -125,6 +125,11 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   const [customBreak, setCustomBreak] = useState(60);
   const [saving, setSaving] = useState(false);
   const [tooltip, setTooltip] = useState(null);
+  const [showPatternPanel, setShowPatternPanel] = useState(false);
+  const [patternEmpId, setPatternEmpId] = useState("");
+  const [patternId, setPatternId] = useState("");
+  const [patternStart, setPatternStart] = useState("");
+  const [patternWeeks, setPatternWeeks] = useState(1);
 
   const period = getPeriodRange(year, month);
   const periodDays = getPeriodDays(year, month);
@@ -231,6 +236,30 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
   const td = today();
 
+  const applyPattern = () => {
+    if (!patternEmpId || !patternId || !patternStart) { alert("従業員・パターン・開始日を選んでください"); return; }
+    const pattern = (weekPatterns || []).find(p => p.id === patternId);
+    if (!pattern) return;
+    const [sy, sm, sd] = patternStart.split("-").map(Number);
+    const startDate = new Date(sy, sm - 1, sd);
+    const dow = startDate.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    startDate.setDate(startDate.getDate() + mondayOffset); // 選択日を含む週の月曜に補正
+    const newEdits = {};
+    for (let w = 0; w < patternWeeks; w++) {
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + w * 7 + i);
+        const ds = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const shiftKey = pattern[DOW_KEY_ORDER[i]] || "off";
+        newEdits[`${patternEmpId}_${ds}`] = shiftKey;
+      }
+    }
+    setLocalEdits(prev => ({ ...prev, ...newEdits }));
+    setShowPatternPanel(false);
+    alert(`${patternWeeks}週分をローカルに反映しました。内容を確認して「シフト保存」を押してください。`);
+  };
+
   return (
     <div>
       {/* ツールチップ */}
@@ -256,12 +285,47 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
             <option>パート</option>
           </select>
         )}
+        <button onClick={() => setShowPatternPanel(o => !o)} style={{ ...bS, marginLeft: "auto" }}>📋 パターン適用</button>
         <button onClick={saveAll} disabled={!hasEdits || saving}
-          style={{ ...bP, marginLeft: "auto", padding: "6px 14px", fontSize: 12, background: hasEdits ? "#1251a3" : "#9ca3af", opacity: hasEdits ? 1 : 0.5 }}>
+          style={{ ...bP, padding: "6px 14px", fontSize: 12, background: hasEdits ? "#1251a3" : "#9ca3af", opacity: hasEdits ? 1 : 0.5 }}>
           {saving ? "保存中..." : `シフト保存（${Object.keys(localEdits).length}件）`}
         </button>
         {hasEdits && <button onClick={() => { if (confirm("変更を破棄しますか？")) setLocalEdits({}); }} style={{ ...bS, fontSize: 12 }}>変更を破棄</button>}
       </div>
+
+      {/* パターン適用パネル */}
+      {showPatternPanel && (
+        <div style={{ ...crd, padding: "1rem", marginBottom: "1rem", background: "#F5F9FE", border: "1px solid #93C5FD" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>パターン適用</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>従業員</div>
+              <select value={patternEmpId} onChange={e => { setPatternEmpId(e.target.value); setPatternId(""); }} style={{ ...iS, width: "auto" }}>
+                <option value="">選択してください</option>
+                {emps.filter(isActiveEmp).map(e => <option key={e.id} value={e.id}>{e.name}（{e.role}）</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>パターン</div>
+              <select value={patternId} onChange={e => setPatternId(e.target.value)} style={{ ...iS, width: "auto" }} disabled={!patternEmpId}>
+                <option value="">選択してください</option>
+                {(weekPatterns || []).filter(p => p.dept === emps.find(e => String(e.id) === String(patternEmpId))?.role).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>開始週（含む日から自動で月曜に補正）</div>
+              <input type="date" value={patternStart} onChange={e => setPatternStart(e.target.value)} style={{ ...iS, width: "auto" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>週数</div>
+              <input type="number" min="1" max="12" value={patternWeeks} onChange={e => setPatternWeeks(Number(e.target.value) || 1)} style={{ ...iS, width: 70 }} />
+            </div>
+            <button onClick={applyPattern} style={bP}>反映</button>
+            <button onClick={() => setShowPatternPanel(false)} style={bS}>閉じる</button>
+          </div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>反映すると下書き状態になります。カレンダーで内容を確認してから「シフト保存」を押してください。</div>
+        </div>
+      )}
 
       {/* シフト選択バー */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "0.75rem", padding: "10px 12px", background: "#fef9f3", borderRadius: 10, border: "1px solid #e9ddd0", alignItems: "center" }}>

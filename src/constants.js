@@ -77,6 +77,9 @@ export const PUNCH_FIX_MAP = { id:"id", "従業員id":"empId", "日付":"date", 
 export const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "タイプ":"transferType", "不足週開始日":"shortWeekStart", "超過週開始日":"overWeekStart", "不足日":"shortDate", "超過日":"overDate", "相殺時間":"offsetMin", "理由":"reason", "状態":"status", "申請日時":"createdAt" };
 export const EARLY_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト開始":"shiftStart", "申請開始":"requestedStart", "理由":"reason", "状態":"status", "申請日時":"createdAt" };
 export const OTHER_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "内容":"content", "状態":"status", "申請日時":"createdAt", "コメント":"comment" };
+export const WEEK_PATTERN_MAP = { id:"id", "職種":"dept", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
+export const DOW_KEY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+export const DOW_LABELS_MON_START = ["月", "火", "水", "木", "金", "土", "日"];
 
 // 有休の半日判定（am/pmのみ半日）
 export const isHalfLeave = half => half === "am" || half === "pm";
