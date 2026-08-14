@@ -171,7 +171,7 @@ export default function App() {
           {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
           {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 4 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} />}
+          {aTab === 4 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={loadAll} />}
           {aTab === 5 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
         </div>;
       })()}
