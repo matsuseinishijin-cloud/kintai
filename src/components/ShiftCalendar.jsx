@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { gasSave } from "../api/gas";
+import { gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
 import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp } from "../constants";
 
@@ -185,12 +185,12 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
     setSaving(true);
     try {
       const entries = Object.entries(localEdits);
-      for (const [key, shiftType] of entries) {
+      const dataArray = entries.map(([key, shiftType]) => {
         const sepIdx = key.indexOf("_"); const empId = key.slice(0, sepIdx); const date = key.slice(sepIdx + 1);
         const existing = shiftsFromProps.find(s => String(s.empId) === String(empId) && s.date === date);
-        const data = { id: existing?.id || newId(), "従業員id": empId, "日付": date, "シフト種別": shiftType };
-        await gasSave("シフト", data);
-      }
+        return { id: existing?.id || newId(), "従業員id": empId, "日付": date, "シフト種別": shiftType };
+      });
+      await gasSaveBatch("シフト", dataArray);
       setLocalEdits({});
       await reload();
     } catch (e) { alert("保存失敗：" + e.message); }
