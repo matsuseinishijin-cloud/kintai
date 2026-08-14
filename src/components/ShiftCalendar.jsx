@@ -79,6 +79,8 @@ function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferR
 }
 
 // 週グループ生成（月曜始まり）
+// 先頭（16日を含む週）は月曜まで遡り、末尾（15日を含む週）は日曜まで延長して
+// 週の合計計算が常に「月〜日」のフルセットになるようにする（表示は期間内の日付のみ）
 function buildWeekGroups(periodDays) {
   if (!periodDays.length) return [];
   const [sy, sm, sd] = periodDays[0].split("-").map(Number);
@@ -90,6 +92,17 @@ function buildWeekGroups(periodDays) {
     allDs.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
   }
   periodDays.forEach(ds => allDs.push(ds));
+
+  // 末尾（15日を含む週）を日曜まで延長
+  const lastDs = periodDays[periodDays.length - 1];
+  const [ly, lm, ld] = lastDs.split("-").map(Number);
+  const lastDow = new Date(ly, lm - 1, ld).getDay();
+  const nextCount = lastDow === 0 ? 0 : 7 - lastDow;
+  for (let i = 1; i <= nextCount; i++) {
+    const d = new Date(ly, lm - 1, ld + i);
+    allDs.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+  }
+
   const groups = []; let wk = [];
   allDs.forEach(ds => {
     wk.push(ds);
@@ -273,9 +286,6 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
               <th style={{ padding: "6px 10px", textAlign: "left", background: "#fef9f3", borderBottom: "1px solid #e9ddd0", position: "sticky", left: 0, zIndex: 1, minWidth: 100 }}>従業員</th>
               {weekGroups.map((wk, wi) => (
                 <React.Fragment key={`wh${wi}`}>
-                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderLeft: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60 }}>
-                    W{wi + 1}<br />合計
-                  </th>
                   {wk.filter(ds => periodDays.includes(ds)).map(ds => {
                     const d = new Date(ds); const dow = d.getDay();
                     const isHol = dow === 0 || dow === 6;
@@ -286,6 +296,9 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                       </th>
                     );
                   })}
+                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderRight: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60 }}>
+                    W{wi + 1}<br />合計
+                  </th>
                 </React.Fragment>
               ))}
             </tr>
@@ -313,24 +326,6 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
                     return (
                       <React.Fragment key={`wg${wi}_${emp.id}`}>
-                        {/* 週合計セル */}
-                        <td key={`w${wi}_${emp.id}`}
-                          style={{ padding: "4px 6px", textAlign: "center", background: bgColor, borderLeft: "2px solid #1251a3", cursor: comments.length > 0 ? "help" : "default" }}
-                          onMouseEnter={e => { if (comments.length > 0) { const rect = e.currentTarget.getBoundingClientRect(); setTooltip({ x: rect.left, y: rect.bottom + 4, lines: comments }); } }}
-                          onMouseLeave={() => setTooltip(null)}
-                        >
-                          {hasLimit ? (
-                            <>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: textColor }}>
-                                {isExact ? "完了✓" : isOver ? `+${(diff).toFixed(1)}超過` : `残${(-diff).toFixed(1)}h`}
-                              </div>
-                              <div style={{ fontSize: 9, color: "#9ca3af" }}>{(rawShiftMin / 60).toFixed(1)}/{weekLimit}h</div>
-                            </>
-                          ) : (
-                            <div style={{ fontSize: 11, color: "#6b7280" }}>{(rawShiftMin / 60).toFixed(1)}h</div>
-                          )}
-                        </td>
-
                         {/* シフトセル */}
                         {wk.filter(ds => periodDays.includes(ds)).map(ds => {
                           const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
@@ -381,6 +376,24 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                             </td>
                           );
                         })}
+
+                        {/* 週合計セル */}
+                        <td key={`w${wi}_${emp.id}`}
+                          style={{ padding: "4px 6px", textAlign: "center", background: bgColor, borderRight: "2px solid #1251a3", cursor: comments.length > 0 ? "help" : "default" }}
+                          onMouseEnter={e => { if (comments.length > 0) { const rect = e.currentTarget.getBoundingClientRect(); setTooltip({ x: rect.left, y: rect.bottom + 4, lines: comments }); } }}
+                          onMouseLeave={() => setTooltip(null)}
+                        >
+                          {hasLimit ? (
+                            <>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: textColor }}>
+                                {isExact ? "完了✓" : isOver ? `+${(diff).toFixed(1)}超過` : `残${(-diff).toFixed(1)}h`}
+                              </div>
+                              <div style={{ fontSize: 9, color: "#9ca3af" }}>{(rawShiftMin / 60).toFixed(1)}/{weekLimit}h</div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 11, color: "#6b7280" }}>{(rawShiftMin / 60).toFixed(1)}h</div>
+                          )}
+                        </td>
                       </React.Fragment>
                     );
                   })}
