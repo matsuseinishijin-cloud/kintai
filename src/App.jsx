@@ -13,6 +13,7 @@ import EmpManager from "./components/EmpManager";
 import ShiftCalendar from "./components/ShiftCalendar";
 import ApprovalCenter from "./components/ApprovalCenter";
 import PunchHistory from "./components/PunchHistory";
+import TimecardAdmin from "./components/TimecardAdmin";
 import LeaveManager from "./components/LeaveManager";
 
 const _style = document.createElement("style");
@@ -170,7 +171,7 @@ export default function App() {
           {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
           {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}
+          {aTab === 4 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} />}
           {aTab === 5 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
         </div>;
       })()}
