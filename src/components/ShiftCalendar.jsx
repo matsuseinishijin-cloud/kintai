@@ -117,6 +117,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [roleFilter, setRoleFilter] = useState("");
+  const [ptTypeFilter, setPtTypeFilter] = useState("");
   const [localEdits, setLocalEdits] = useState({});
   const [selectedShift, setSelectedShift] = useState("off");
   const [customStart, setCustomStart] = useState("09:00");
@@ -154,7 +155,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
   // 職種フィルター後の従業員
   const filteredEmps = emps
-    .filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter))
+    .filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter) && (roleFilter !== "理学療法士" || !ptTypeFilter || e.type === ptTypeFilter))
     .sort((a, b) => (a.type === "正社員" ? 0 : 1) - (b.type === "正社員" ? 0 : 1));
 
   // セルクリック
@@ -226,10 +227,17 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
         <button onClick={prevM} style={bS}>‹</button>
         <span style={{ fontSize: 14, fontWeight: 600, color: "#1251a3" }}>{period.label}</span>
         <button onClick={nextM} style={bS}>›</button>
-        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ ...iS, width: "auto" }}>
+        <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); if (e.target.value !== "理学療法士") setPtTypeFilter(""); }} style={{ ...iS, width: "auto" }}>
           <option value="">全職種</option>
           {ROLES.map(r => <option key={r}>{r}</option>)}
         </select>
+        {roleFilter === "理学療法士" && (
+          <select value={ptTypeFilter} onChange={e => setPtTypeFilter(e.target.value)} style={{ ...iS, width: "auto" }}>
+            <option value="">全雇用形態</option>
+            <option>正社員</option>
+            <option>パート</option>
+          </select>
+        )}
         <button onClick={saveAll} disabled={!hasEdits || saving}
           style={{ ...bP, marginLeft: "auto", padding: "6px 14px", fontSize: 12, background: hasEdits ? "#1251a3" : "#9ca3af", opacity: hasEdits ? 1 : 0.5 }}>
           {saving ? "保存中..." : `シフト保存（${Object.keys(localEdits).length}件）`}
@@ -281,24 +289,24 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
       </div>
 
       {/* グリッド */}
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflow: "auto", maxHeight: "70vh", border: "1px solid #e9ddd0", borderRadius: 8 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: "max-content" }}>
           <thead>
             <tr>
-              <th style={{ padding: "6px 10px", textAlign: "left", background: "#fef9f3", borderBottom: "1px solid #e9ddd0", position: "sticky", left: 0, zIndex: 1, minWidth: 100 }}>従業員</th>
+              <th style={{ padding: "6px 10px", textAlign: "left", background: "#fef9f3", borderBottom: "1px solid #e9ddd0", position: "sticky", left: 0, top: 0, zIndex: 2, minWidth: 100 }}>従業員</th>
               {weekGroups.map((wk, wi) => (
                 <React.Fragment key={`wh${wi}`}>
                   {wk.filter(ds => periodDays.includes(ds)).map(ds => {
                     const d = new Date(ds); const dow = d.getDay();
                     const isHol = dow === 0 || dow === 6;
                     return (
-                      <th key={ds} style={{ padding: "4px 6px", textAlign: "center", background: isHol ? "#FFF0F0" : "#fef9f3", borderBottom: "1px solid #e9ddd0", minWidth: 44, color: dow === 0 ? "#A32D2D" : dow === 6 ? "#1251a3" : "#374151" }}>
+                      <th key={ds} style={{ padding: "4px 6px", textAlign: "center", background: isHol ? "#FFF0F0" : "#fef9f3", borderBottom: "1px solid #e9ddd0", minWidth: 44, color: dow === 0 ? "#A32D2D" : dow === 6 ? "#1251a3" : "#374151", position: "sticky", top: 0, zIndex: 1 }}>
                         <div style={{ fontSize: 11 }}>{ds.slice(5).replace("-", "/")}</div>
                         <div style={{ fontSize: 10 }}>{DOW_JP_SHORT[dow]}</div>
                       </th>
                     );
                   })}
-                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderRight: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60 }}>
+                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderRight: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60, position: "sticky", top: 0, zIndex: 1 }}>
                     W{wi + 1}<br />合計
                   </th>
                 </React.Fragment>
