@@ -46,10 +46,15 @@ function calcBucketsWithRemaining(records, lvReqs, empId) {
   return buckets;
 }
 
+// 残日数の合計（マイナスも許容：不足分を承認した場合に負の値で正しく表示するため）
 function calcTotalRemaining(records, lvReqs, empId) {
   const td = today();
-  const buckets = calcBucketsWithRemaining(records, lvReqs, empId);
-  return buckets.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0);
+  let recs = [];
+  try { recs = JSON.parse(records || "[]"); } catch { recs = []; }
+  const totalGranted = recs.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td)).reduce((s, r) => s + Number(r.days || 0), 0);
+  const used = (lvReqs || []).filter(r => String(r.empId) === String(empId) && r.status === "approved")
+    .reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
+  return totalGranted - used;
 }
 
 export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays, reload }) {
@@ -144,7 +149,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
           {/* 残日数サマリー */}
           <div style={{ ...crd, padding: "1rem", marginBottom: "1rem" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {[["付与合計", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", displayRem + "日", displayRem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
+              {[["付与合計", totalGranted + "日", ""], ["取得済", usedDays + "日", ""], ["残日数", displayRem.toFixed(1) + "日", displayRem < 3 ? "#A32D2D" : "#0F6E56"]].map(([l, v, c]) => (
                 <div key={l} style={{ textAlign: "center", padding: "10px 4px", background: "#fef9f3", borderRadius: 8 }}>
                   <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>{l}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: c || "#111827" }}>{v}</div>

@@ -34,7 +34,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const totalGranted = validLeaves.reduce((s, r) => s + (Number(r.days) || 0), 0);
   const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
   const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
-  const rem = Math.max(0, totalGranted - usedDays);
+  const rem = totalGranted - usedDays;
 
   // 選択日のシフト
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;

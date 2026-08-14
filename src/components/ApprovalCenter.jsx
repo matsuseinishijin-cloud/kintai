@@ -54,10 +54,13 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
   const decideLv = async (id, status) => {
     const req = (lvReqs || []).find(r => r.id === id); if (!req) return;
     if (status === "approved") {
-      // 残日数チェック
+      // 残日数チェック（不足していてもブロックせず、確認の上で承認できるようにする）
       const rem = calcRem(req.empId);
       const days = isHalfLeave(req.half) ? 0.5 : 1;
-      if (rem < days) { alert(`有給残日数が不足しています（残${rem}日、必要${days}日）`); return; }
+      if (rem < days) {
+        const ok = confirm(`有給残日数が不足しています（残${rem}日、必要${days}日）。\nこのまま承認すると残日数がマイナスになります。承認してよろしいですか？`);
+        if (!ok) return;
+      }
       // シフト重なりチェック
       const shiftRow = shifts.find(s => String(s.empId) === String(req.empId) && s.date === req.date);
       const reqEmpRole = emps.find(e => String(e.id) === String(req.empId))?.role;
