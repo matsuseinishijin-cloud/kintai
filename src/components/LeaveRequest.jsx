@@ -66,7 +66,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         half: halfVal,
         reason: form.reason, status: "pending",
         leaveStart: form.leaveStart, leaveEnd: form.leaveEnd,
-        leaveBreak: isHalfLeave(form.half) && form.leaveBreak ? "1" : "",
+        leaveBreak: form.leaveBreak ? "1" : "",
       }, LV_REQ_MAP);
       await gasSave("有給申請", data);
       setForm({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
@@ -155,8 +155,8 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             </div>
           </div>
 
-          {/* 休憩（半日のみ） */}
-          {isHalfLeave(form.half) && (
+          {/* 休憩（全日・半日どちらでも表示） */}
+          {form.half && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />
