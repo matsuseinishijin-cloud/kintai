@@ -9,16 +9,16 @@ const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 
 const thS = { padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #e9ddd0", textAlign: "left", fontWeight: 400 };
 const tdS = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid #e9ddd0" };
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { start: null, end: null, breakMin: 0 };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { start: match[1], end: match[2], breakMin: match[3] ? Number(match[3]) : 60 };
   }
-  return shiftDefs[shiftType] || { start: null, end: null, breakMin: BREAK_MIN };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { start: null, end: null, breakMin: BREAK_MIN };
 }
 
-function getWeekShiftMin(weekStart, empId, shifts, shiftDefs, lvReqs) {
+function getWeekShiftMin(weekStart, empId, shifts, shiftDefs, lvReqs, dept) {
   if (!weekStart) return 0;
   const [wy, wm, wd] = weekStart.split("-").map(Number);
   let total = 0;
@@ -26,7 +26,7 @@ function getWeekShiftMin(weekStart, empId, shifts, shiftDefs, lvReqs) {
     const d = new Date(wy, wm - 1, wd + i);
     const ds = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const sr = shifts.find(s => String(s.empId) === String(empId) && s.date === ds);
-    const def = getShiftDef(sr?.shiftType, shiftDefs);
+    const def = getShiftDef(sr?.shiftType, shiftDefs, dept);
     if (def.start && def.end) {
       const bk = def.breakMin != null ? def.breakMin : BREAK_MIN;
       total += Math.max(0, toMin(def.end) - toMin(def.start) - bk);
@@ -72,7 +72,7 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
         const mon = getMondayOf(ds);
         if (seen.has(mon)) continue;
         seen.add(mon);
-        const wMin = getWeekShiftMin(mon, emp.id, shifts, shiftDefs, lvReqs);
+        const wMin = getWeekShiftMin(mon, emp.id, shifts, shiftDefs, lvReqs, emp.role);
         const rawDiff = wMin - weeklyLimit;
         // 既にこの週を使って申請済み（承認待ち・承認済）の分を差し引く
         const usedAsOver = (timeTransferReqs || [])

@@ -19,7 +19,7 @@ async function fetchHolidays(year) {
 }
 
 // シフト定義からdef取得
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") {
     return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af" };
   }
@@ -27,7 +27,7 @@ function getShiftDef(shiftType, shiftDefs) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2], color: "#EDE9FE", tc: "#5B21B6" };
   }
-  return shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280" };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280" };
 }
 
 export default function MyShift({ emp, shifts, shiftDefs, lvReqs }) {
@@ -80,7 +80,7 @@ export default function MyShift({ emp, shifts, shiftDefs, lvReqs }) {
 
           // シフト
           const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
-          const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+          const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
 
           // 有休
           const lvApproved = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds && r.status === "approved");

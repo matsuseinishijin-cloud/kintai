@@ -13,13 +13,13 @@ const tdS = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid #e9d
 // シフト終了：実際のシフト終了時刻（参考値）／申請退勤：延長後の退勤希望時刻／種別："overtime"
 const OT_MAP = { id:"id","従業員id":"empId","日付":"date","シフト終了":"shiftEnd","申請退勤":"requestedEnd","理由":"reason","状態":"status","種別":"type" };
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { start: null, end: null };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2})/);
     if (match) return { start: match[1], end: match[2] };
   }
-  return shiftDefs[shiftType] || { start: null, end: null };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { start: null, end: null };
 }
 
 export default function OvertimeExtendRequest({ emp, shifts, shiftDefs, otReqs, reload }) {
@@ -28,7 +28,7 @@ export default function OvertimeExtendRequest({ emp, shifts, shiftDefs, otReqs, 
   const [sub, setSub] = useState(false);
 
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;
-  const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+  const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
 
   const submit = async () => {
     if (!form.requestedEnd || !form.reason) return;

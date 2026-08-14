@@ -1,9 +1,9 @@
 // ── GAS API URL ───────────────────────────────────────────────────────────────
-export const GAS_URL = "https://script.google.com/macros/s/AKfycbx7YjvfSj3N-KOevAwh-VcLnnWCaX0PnBjA24Qd2M_ApGiAU7myXp15u2LewU7lL1KaSQ/exec";
+export const GAS_URL = "https://script.google.com/macros/s/AKfycbx9o7kzpjy7XWrBJEZb0sauLsbwK7HXSGe8dklw4dFlPCnficmqiCiuYucKKL7-KL32Vw/exec";
 
 // ── 全件取得 ──────────────────────────────────────────────────────────────────
 export async function gasGet(sheet) {
-  const r = await fetch(`${GAS_URL}?action=getAll&sheet=${encodeURIComponent(sheet)}`, { cache: "no-store" });
+  const r = await fetch(`${GAS_URL}?action=getAll&sheet=${encodeURIComponent(sheet)}`);
   const j = await r.json();
   if (!j.ok) throw new Error(j.error);
   return j.data;

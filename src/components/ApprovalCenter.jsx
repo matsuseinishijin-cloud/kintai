@@ -19,14 +19,14 @@ function ABtn({ label, bg, color, onClick }) {
   return <button onClick={onClick} style={{ padding: "4px 10px", borderRadius: 6, background: bg, color, border: "none", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{label}</button>;
 }
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { start: null, end: null };
   const st = String(shiftType);
   if (st.startsWith("custom:")) {
     const match = st.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2})/);
     if (match) return { start: match[1], end: match[2] };
   }
-  return shiftDefs[st] || { start: null, end: null };
+  return (dept && shiftDefs[`${dept}:${st}`]) || shiftDefs[st] || { start: null, end: null };
 }
 
 export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs, punchFixReqs, otherReqs, shifts, shiftDefs, leaves, punches, reload }) {
@@ -60,7 +60,8 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
       if (rem < days) { alert(`有給残日数が不足しています（残${rem}日、必要${days}日）`); return; }
       // シフト重なりチェック
       const shiftRow = shifts.find(s => String(s.empId) === String(req.empId) && s.date === req.date);
-      const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+      const reqEmpRole = emps.find(e => String(e.id) === String(req.empId))?.role;
+      const def = getShiftDef(shiftRow?.shiftType, shiftDefs, reqEmpRole);
       if (def.start) {
         if (!isHalfLeave(req.half)) {
           alert(`${req.date} はシフトが入っているため承認できません。先にシフトを休日に変更してください。`);

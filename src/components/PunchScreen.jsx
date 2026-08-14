@@ -10,7 +10,7 @@ const bS = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 
 // ── シフト定義からdef取得 ─────────────────────────────────────────────────────
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") {
     return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#6b7280" };
   }
@@ -18,7 +18,7 @@ function getShiftDef(shiftType, shiftDefs) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2], breakMin: match[3] ? Number(match[3]) : 60, color: "#EDE9FE", tc: "#5B21B6" };
   }
-  return shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280" };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280" };
 }
 
 // ── 通知アイテム ──────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
 
   const td = today();
   const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === td);
-  const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+  const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
   const punch = punches.find(p => String(p.empId) === String(emp.id) && p.date === td);
 
   // ── 打刻処理 ────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
           const ds2 = `${d2.getFullYear()}-${pad(d2.getMonth() + 1)}-${pad(d2.getDate())}`;
           if (ds2 > td) continue; // 今日より先の日付は実績ベース集計から除外
           const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds2);
-          const def2 = getShiftDef(sr?.shiftType, shiftDefs);
+          const def2 = getShiftDef(sr?.shiftType, shiftDefs, emp.role);
           if (def2.start && def2.end) {
             const bk = def2.breakMin != null ? def2.breakMin : BREAK_MIN;
             wMin += Math.max(0, toMin(def2.end) - toMin(def2.start) - bk);
@@ -141,7 +141,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   for (let d = 1; d <= now2.getDate(); d++) {
     const ds = `${now2.getFullYear()}-${pad(now2.getMonth() + 1)}-${pad(d)}`;
     const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
-    const def2 = getShiftDef(sr?.shiftType, shiftDefs);
+    const def2 = getShiftDef(sr?.shiftType, shiftDefs, emp.role);
     const p2 = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
     if (def2.start && !p2) confirmCount++;
     if (p2?.in && !p2?.out && ds < td) confirmCount++;

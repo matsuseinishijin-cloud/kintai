@@ -7,13 +7,13 @@ const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2] };
   }
-  return shiftDefs[shiftType] || { label: shiftType, start: null, end: null };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { label: shiftType, start: null, end: null };
 }
 
 export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, reload }) {
@@ -38,7 +38,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
 
   // 選択日のシフト
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;
-  const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+  const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
   const hasShift = def.start !== null;
 
   // シフトとの重なりチェック

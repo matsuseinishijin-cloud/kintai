@@ -10,18 +10,18 @@ const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 
 
 const DOW_JP_SHORT = ["日", "月", "火", "水", "木", "金", "土"];
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af", breakMin: 0 };
   const st = String(shiftType);
   if (st.startsWith("custom:")) {
     const match = st.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2], color: "#EDE9FE", tc: "#5B21B6", breakMin: match[3] ? Number(match[3]) : 60 };
   }
-  return shiftDefs[st] || { label: st, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: BREAK_MIN };
+  return (dept && shiftDefs[`${dept}:${st}`]) || shiftDefs[st] || { label: st, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: BREAK_MIN };
 }
 
 // 週合計計算（振替・有休を含む）
-function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferReqs) {
+function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferReqs, dept) {
   const firstDs = weekDays[0];
   const d = new Date(firstDs); const dow = d.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
   d.setDate(d.getDate() + diff);
@@ -32,7 +32,7 @@ function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferR
 
   weekDays.forEach(ds => {
     const sr = shifts.find(s => String(s.empId) === String(empId) && s.date === ds);
-    const def = getShiftDef(sr?.shiftType, shiftDefs);
+    const def = getShiftDef(sr?.shiftType, shiftDefs, dept);
     if (def.start && def.end) {
       const bk = def.breakMin != null ? def.breakMin : BREAK_MIN;
       const min = Math.max(0, toMin(def.end) - toMin(def.start) - bk);
@@ -99,7 +99,7 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -129,14 +129,21 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
     return base;
   })();
 
-  // 表示するシフト定義キーリスト（職種別）
-  const shiftKeys = Object.keys(shiftDefs).filter(k => k !== "off");
+  // 表示するシフト定義（職種フィルターで絞り込み。同じキーが複数部署にまたがることがあるため、
+  // 職種を選択していない状態では一意に決められず、ボタンを出さずに選択を促す）
+  const visibleShiftDefs = (() => {
+    const list = (shiftDefList || []).filter(d => d.key !== "off");
+    if (!roleFilter) return [];
+    const deptMatched = list.filter(d => d.dept === roleFilter);
+    // 部署情報が未設定の古いデータ用フォールバック（部署列が空のものも一応出す）
+    return deptMatched.length > 0 ? deptMatched : list.filter(d => !d.dept);
+  })();
 
   // 職種フィルター後の従業員
   const filteredEmps = emps.filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter));
 
   // セルクリック
-  const setCell = (empId, ds) => {
+  const setCell = (empId, ds, dept) => {
     // 全日有休チェック
     const lvApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && !isHalfLeave(r.half));
     if (lvApproved) { alert("この日は全日有休が承認済みのためシフト変更できません。"); return; }
@@ -145,7 +152,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
     const lvHalfApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && isHalfLeave(r.half));
     if (lvHalfApproved && lvHalfApproved.leaveStart && lvHalfApproved.leaveEnd) {
       const actual = selectedShift === "custom" ? `custom:${customStart}-${customEnd}:${customBreak}` : selectedShift;
-      const def = getShiftDef(actual, shiftDefs);
+      const def = getShiftDef(actual, shiftDefs, dept);
       if (def.start) {
         const selS = toMin(def.start), selE = toMin(def.end);
         const lvS = toMin(lvHalfApproved.leaveStart), lvE = toMin(lvHalfApproved.leaveEnd);
@@ -223,8 +230,13 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
           休日
         </div>
         {/* 定義済みシフト */}
-        {shiftKeys.map(k => {
-          const def = shiftDefs[k];
+        {!roleFilter && (
+          <span style={{ fontSize: 12, color: "#A32D2D", padding: "4px 8px" }}>
+            ⚠️ 同じ記号（A・Bなど）が職種をまたいで別の時間で使われているため、まず上の「職種」フィルターを選択してください
+          </span>
+        )}
+        {visibleShiftDefs.map(def => {
+          const k = def.key;
           return (
             <div key={k} onClick={() => setSelectedShift(k)}
               style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, background: def.color, border: selectedShift === k ? "2px solid #1251a3" : "2px solid transparent", cursor: "pointer" }}>
@@ -290,7 +302,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
                   {weekGroups.map((wk, wi) => {
                     // 週合計
-                    const { total, rawShiftMin, typeCApproved, weekMon, comments } = calcWeekTotal(emp.id, wk, shifts, shiftDefs, lvReqs, timeTransferReqs);
+                    const { total, rawShiftMin, typeCApproved, weekMon, comments } = calcWeekTotal(emp.id, wk, shifts, shiftDefs, lvReqs, timeTransferReqs, emp.role);
                     const weekLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) : emp.type === "正社員" ? 40 : null;
                     const hasLimit = !!weekLimit;
                     const diff = hasLimit ? total / 60 - weekLimit : 0;
@@ -323,7 +335,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                         {wk.filter(ds => periodDays.includes(ds)).map(ds => {
                           const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
                           const shiftType = sr?.shiftType || "off";
-                          const def = getShiftDef(shiftType, shiftDefs);
+                          const def = getShiftDef(shiftType, shiftDefs, emp.role);
                           const isEdited = localEdits[`${emp.id}_${ds}`] !== undefined;
                           const lv = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds);
                           const lvApproved = lv?.status === "approved";
@@ -338,7 +350,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                           return (
                             <td key={ds}
                               style={{ padding: "2px", textAlign: "center", background: isToday ? "#EFF6FF" : isHol ? "#FFF8F8" : "inherit", cursor: "pointer", userSelect: "none" }}
-                              onClick={() => setCell(emp.id, ds)}
+                              onClick={() => setCell(emp.id, ds, emp.role)}
                             >
                               <div style={{ position: "relative", display: "inline-block", width: "100%" }}>
                                 {/* シフト表示 */}

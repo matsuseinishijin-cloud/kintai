@@ -78,6 +78,7 @@ export default function App() {
   const [leaves, setLeaves] = useState([]);
   const [passwords, setPasswords] = useState([]);
   const [shiftDefs, setShiftDefs] = useState({});
+  const [shiftDefList, setShiftDefList] = useState([]);
   const [timeTransferReqs, setTimeTransferReqs] = useState([]);
   const [punchFixReqs, setPunchFixReqs] = useState([]);
   const [otReqs, setOtReqs] = useState([]);
@@ -109,8 +110,19 @@ export default function App() {
       setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
       setDesignatedHolidays(dh.map(r => convertFrom(r, { id:"id","日付":"date","メモ":"memo" })));
       const defsMap = {};
-      sd.forEach(d => { if (d["キー"]) { defsMap[d["キー"]] = { label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 }; } });
+      const defsList = [];
+      sd.forEach(d => {
+        if (!d["キー"]) return;
+        const entry = { key: d["キー"], dept: d["部署"] || "", label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60 };
+        // 同じキー（例："A"）が部署をまたいで重複定義されるケースがあるため、
+        // 「部署:キー」の組み合わせで正しく引けるようにする（部署単位が優先）。
+        // キーのみのエントリも後方互換のため残すが、複数部署で重複する場合は最後の1件で上書きされる点に注意。
+        defsMap[d["キー"]] = entry;
+        if (d["部署"]) defsMap[`${d["部署"]}:${d["キー"]}`] = entry;
+        defsList.push(entry);
+      });
       setShiftDefs(defsMap);
+      setShiftDefList(defsList);
     } catch (e) { setError(e.message); }
     setLoading(false);
   }, []);
@@ -155,7 +167,7 @@ export default function App() {
             {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 2 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
           {aTab === 3 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 4 && <div style={{ ...crd, padding: "2rem", color: "#6b7280" }}>タイムカード（準備中）</div>}

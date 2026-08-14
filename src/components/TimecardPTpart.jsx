@@ -11,20 +11,20 @@ function Badge({ label, bg, color }) {
   return <span style={{ padding: "2px 7px", borderRadius: 99, fontSize: 11, fontWeight: 500, background: bg, color }}>{label}</span>;
 }
 
-function getShiftDef(shiftType, shiftDefs) {
+function getShiftDef(shiftType, shiftDefs, dept) {
   if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af", breakMin: 0 };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
     if (match) return { label: "臨時", start: match[1], end: match[2], color: "#EDE9FE", tc: "#5B21B6", breakMin: match[3] ? Number(match[3]) : 0 };
   }
-  return shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: 0 };
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: 0 };
 }
 
 // 理学療法士パート専用計算（+7分補正・申請制）
 function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
   const roundMin = getOtRule(emp).roundMin || 10;
   const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
-  const def = getShiftDef(shiftRow?.shiftType, shiftDefs);
+  const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
   const punch = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
   const lv = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds && r.status === "approved");
 
