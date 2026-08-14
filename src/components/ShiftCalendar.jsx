@@ -263,7 +263,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
           return (
             <div key={k} onClick={() => setSelectedShift(k)}
               style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, background: def.color, border: selectedShift === k ? "2px solid #1251a3" : "2px solid transparent", cursor: "pointer" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: def.tc }}>{k}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: def.tc }}>{def.label}</span>
               {def.start && <span style={{ fontSize: 11, color: def.tc }}>{def.start}〜{def.end}</span>}
             </div>
           );
