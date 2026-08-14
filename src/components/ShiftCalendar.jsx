@@ -153,7 +153,9 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   })();
 
   // 職種フィルター後の従業員
-  const filteredEmps = emps.filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter));
+  const filteredEmps = emps
+    .filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter))
+    .sort((a, b) => (a.type === "正社員" ? 0 : 1) - (b.type === "正社員" ? 0 : 1));
 
   // セルクリック
   const setCell = (empId, ds, dept) => {

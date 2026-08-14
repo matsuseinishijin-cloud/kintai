@@ -87,6 +87,7 @@ export default function App() {
   const [designatedHolidays, setDesignatedHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [loginId, setLoginId] = useState(null);
   const [tab, setTab] = useState(0);
   const [aTab, setATab] = useState(0);
@@ -130,6 +131,11 @@ export default function App() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  const doRefresh = async () => {
+    setRefreshing(true);
+    try { await loadAll(); } finally { setRefreshing(false); }
+  };
+
   if (loading) return <Loading />;
   if (error) return <Err msg={error} />;
   if (!loginId) return <LoginScreen emps={emps.filter(isActiveEmp)} passwords={passwords} onLogin={id => { setLoginId(id); setTab(0); }} />;
@@ -142,7 +148,10 @@ export default function App() {
     <div style={{ padding: "0 0 2rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", ...crd, marginBottom: "1rem" }}>
         <div><div style={{ fontSize: 16, fontWeight: 700 }}>クリニック勤怠</div><div style={{ fontSize: 12, color: "#6b7280" }}>{isAdmin ? "管理者" : cur?.name}</div></div>
-        <button onClick={() => { setLoginId(null); setTab(0); }} style={bS}>ログアウト</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={doRefresh} disabled={refreshing} style={{ ...bS, opacity: refreshing ? 0.5 : 1 }}>{refreshing ? "更新中..." : "🔄 更新"}</button>
+          <button onClick={() => { setLoginId(null); setTab(0); }} style={bS}>ログアウト</button>
+        </div>
       </div>
       {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>

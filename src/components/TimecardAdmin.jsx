@@ -111,7 +111,6 @@ function BulkPunchEditor({ emp, punches, reload }) {
 export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs, timeTransferReqs, otReqs, reload }) {
   const [roleFilter, setRoleFilter] = useState("");
   const [empId, setEmpId] = useState(emps[0]?.id || "");
-  const [refreshing, setRefreshing] = useState(false);
 
   const filteredEmps = emps.filter(e => !roleFilter || e.role === roleFilter);
   const emp = filteredEmps.find(e => String(e.id) === String(empId)) || filteredEmps[0];
@@ -120,11 +119,6 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
     setRoleFilter(r);
     const first = (r ? emps.filter(e => e.role === r) : emps)[0];
     if (first) setEmpId(first.id);
-  };
-
-  const doRefresh = async () => {
-    setRefreshing(true);
-    try { await reload(); } finally { setRefreshing(false); }
   };
 
   if (!emp) {
@@ -147,9 +141,6 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
         <select value={emp.id} onChange={e => setEmpId(e.target.value)} style={iS}>
           {filteredEmps.map(e => <option key={e.id} value={e.id}>{e.name}（{e.role}・{e.type}）</option>)}
         </select>
-        <button onClick={doRefresh} disabled={refreshing} style={{ ...bS, marginLeft: "auto", opacity: refreshing ? 0.5 : 1 }}>
-          {refreshing ? "更新中..." : "🔄 更新"}
-        </button>
       </div>
 
       <BulkPunchEditor emp={emp} punches={punches} reload={reload} />
