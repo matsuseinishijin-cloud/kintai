@@ -194,6 +194,24 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
         return { id: existing?.id || newId(), "従業員id": empId, "日付": date, "シフト種別": shiftType };
       });
       await gasSaveBatch("シフト", dataArray);
+
+      // 「指定有休」を割り当てたセルは、有給申請（承認待ち）としても自動登録する
+      // ※対象は正社員のみ（有給管理タブの指定休一括付与と同じ対象範囲）
+      const leaveDataArray = entries
+        .filter(([, shiftType]) => shiftType === "designated")
+        .map(([key]) => {
+          const sepIdx = key.indexOf("_"); const empId = key.slice(0, sepIdx); const date = key.slice(sepIdx + 1);
+          return { empId, date };
+        })
+        .filter(({ empId }) => emps.find(e => String(e.id) === String(empId))?.type === "正社員")
+        .filter(({ empId, date }) => !(lvReqs || []).some(r => String(r.empId) === String(empId) && r.date === date && r.status !== "rejected"))
+        .map(({ empId, date }) => ({
+          id: newId(), "従業員id": empId, "日付": date,
+          "区分": "1日", "理由": "指定有休（シフトより自動作成）", "状態": "pending",
+          "有休開始": "", "有休終了": "", "休憩": "",
+        }));
+      if (leaveDataArray.length > 0) await gasSaveBatch("有給申請", leaveDataArray);
+
       setLocalEdits({});
       await reload();
     } catch (e) { alert("保存失敗：" + e.message); }
@@ -359,7 +377,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                             >
                               <div style={{ position: "relative", display: "inline-block", width: "100%" }}>
                                 {/* シフト表示 */}
-                                <div style={{ background: isEdited ? "#FFF8E1" : def.color, color: def.tc, borderRadius: 4, padding: "2px 3px", fontSize: isCustom ? 7 : 15, fontWeight: 400, border: isEdited ? "1px solid #F59E0B" : "1px solid transparent", lineHeight: isCustom ? 1.4 : undefined, textAlign: "center", minWidth: isCustom ? 56 : 48, height: isCustom ? 36 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap" }}>
+                                <div style={{ background: isEdited ? "#FFF8E1" : def.color, color: def.tc, borderRadius: 4, padding: "2px 3px", fontSize: isCustom ? 7 : (def.label || "").length > 2 ? 11 : 15, fontWeight: 400, border: isEdited ? "1px solid #F59E0B" : "1px solid transparent", lineHeight: isCustom ? 1.4 : undefined, textAlign: "center", minWidth: isCustom ? 56 : 48, height: isCustom ? 36 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap" }}>
                                   {isCustom ? (
                                     <>
                                       <div style={{ fontSize: 9, lineHeight: 1.4, whiteSpace: "nowrap", fontWeight: 500 }}>{def.start}</div>
@@ -367,7 +385,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                                     </>
                                   ) : isOff ? (
                                     <span style={{ color: "#9ca3af" }}>休</span>
-                                  ) : shiftType}
+                                  ) : (def.label || shiftType)}
                                 </div>
                                 {/* 有休バッジ（右上絶対配置） */}
                                 {lv && (
