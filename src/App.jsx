@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -44,7 +44,7 @@ function LoginScreen({ emps, passwords, onLogin }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const allRoles = ["全て", ...ROLES];
-  const filteredEmps = roleFilter === "全て" ? emps : emps.filter(e => e.role === roleFilter);
+  const filteredEmps = sortEmps(roleFilter === "全て" ? emps : emps.filter(e => e.role === roleFilter));
   const onRoleChange = r => { setRoleFilter(r); const first = (r === "全て" ? emps : emps.filter(e => e.role === r))[0]; if (first) setSel(first.id); };
   const doLogin = () => { setErr(""); if (mode === "admin") { if (pw === ADMIN_PASSWORD) { onLogin("admin"); } else { setErr("パスワードが違います"); } } else { const pwRec = passwords.find(p => p.empId === sel); const correct = pwRec?.password || String(sel); if (pw === correct) { onLogin(sel); } else { setErr("パスワードが違います"); } } };
   return (

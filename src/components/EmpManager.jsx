@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSave } from "../api/gas";
 import { newId } from "../utils/time";
-import { ROLES, REHA_LEAD_ROLES, SHIFT_LEAD_ROLES, EMP_MAP, PW_MAP, EMP_ID_PREFIX, convertTo, isActiveEmp } from "../constants";
+import { ROLES, REHA_LEAD_ROLES, SHIFT_LEAD_ROLES, EMP_MAP, PW_MAP, EMP_ID_PREFIX, convertTo, isActiveEmp, sortEmps } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
@@ -35,11 +35,11 @@ export default function EmpManager({ emps, passwords, reload }) {
   const [newPw, setNewPw] = useState("");
   const [filter, setFilter] = useState({ role: "", type: "", status: "active" });
 
-  const filteredEmps = emps.filter(e =>
+  const filteredEmps = sortEmps(emps.filter(e =>
     (!filter.role || e.role === filter.role) &&
     (!filter.type || e.type === filter.type) &&
     (filter.status === "all" || (filter.status === "active" ? isActiveEmp(e) : !isActiveEmp(e)))
-  );
+  ));
 
   const startNew = () => {
     setEditId(null);

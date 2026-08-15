@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
-import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp, DOW_KEY_ORDER } from "../constants";
+import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp, DOW_KEY_ORDER, sortEmps } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -159,9 +159,9 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   })();
 
   // 職種フィルター後の従業員
-  const filteredEmps = emps
-    .filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter) && (roleFilter !== "理学療法士" || !ptTypeFilter || e.type === ptTypeFilter))
-    .sort((a, b) => (a.type === "正社員" ? 0 : 1) - (b.type === "正社員" ? 0 : 1));
+  const filteredEmps = sortEmps(
+    emps.filter(e => isActiveEmp(e) && (!roleFilter || e.role === roleFilter) && (roleFilter !== "理学療法士" || !ptTypeFilter || e.type === ptTypeFilter))
+  );
 
   // セルクリック
   const setCell = (empId, ds, dept) => {
@@ -302,7 +302,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
               <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>従業員</div>
               <select value={patternEmpId} onChange={e => { setPatternEmpId(e.target.value); setPatternId(""); }} style={{ ...iS, width: "auto" }}>
                 <option value="">選択してください</option>
-                {emps.filter(isActiveEmp).map(e => <option key={e.id} value={e.id}>{e.name}（{e.role}）</option>)}
+                {sortEmps(emps.filter(isActiveEmp)).map(e => <option key={e.id} value={e.id}>{e.name}（{e.role}）</option>)}
               </select>
             </div>
             <div>

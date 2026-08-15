@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { gasDelete } from "../api/gas";
+import { sortEmps } from "../constants";
 
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "auto" };
@@ -43,7 +44,7 @@ export default function PunchHistory({ emps, punches, reload }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "1rem", alignItems: "center" }}>
         <select value={empFilter} onChange={e => setEmpFilter(e.target.value)} style={iS}>
           <option value="">全従業員</option>
-          {emps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          {sortEmps(emps).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
         <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} style={iS} />
         {(empFilter || monthFilter) && <button onClick={() => { setEmpFilter(""); setMonthFilter(""); }} style={bS}>絞り込み解除</button>}

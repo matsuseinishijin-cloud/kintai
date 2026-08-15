@@ -50,6 +50,25 @@ export const isPTPart = emp => emp.role === "理学療法士" && emp.type === "�
 // ── 在籍判定（未設定＝既存データは在籍扱いとする後方互換） ─────────────────────
 export const isActiveEmp = emp => emp.isActive !== "false";
 
+// ── 従業員の並び順ルール（全画面共通） ────────────────────────────────────────
+// 優先順位：①職種（ROLES定義順）→②雇用形態（正社員→パート）→③社員番号（昇順）→④名前（あいうえお順）
+export function compareEmps(a, b) {
+  const roleIdx = r => { const i = ROLES.indexOf(r); return i === -1 ? ROLES.length : i; };
+  const ra = roleIdx(a.role), rb = roleIdx(b.role);
+  if (ra !== rb) return ra - rb;
+
+  const ta = a.type === "正社員" ? 0 : 1;
+  const tb = b.type === "正社員" ? 0 : 1;
+  if (ta !== tb) return ta - tb;
+
+  const ia = Number(a.id), ib = Number(b.id);
+  if (!isNaN(ia) && !isNaN(ib) && ia !== ib) return ia - ib;
+  if (String(a.id) !== String(b.id)) return String(a.id).localeCompare(String(b.id));
+
+  return (a.name || "").localeCompare(b.name || "", "ja");
+}
+export const sortEmps = emps => [...(emps || [])].sort(compareEmps);
+
 // ── 時間外申請対象（理学療法士正社員・週所定40h未満） ─────────────────────────
 export const isOvertimeTarget = emp =>
   emp.role === "理学療法士" && emp.type === "正社員" &&
