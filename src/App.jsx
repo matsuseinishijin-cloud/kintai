@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps } from "./constants";
+import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps, WEEK_ALERT_EXCLUSION_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -88,6 +88,7 @@ export default function App() {
   const [otReqs, setOtReqs] = useState([]);
   const [otherReqs, setOtherReqs] = useState([]);
   const [designatedHolidays, setDesignatedHolidays] = useState([]);
+  const [weekAlertExclusions, setWeekAlertExclusions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -129,6 +130,12 @@ export default function App() {
       setOtherReqs(otr2.map(r => convertFrom(r, { id: "id", "従業員id": "empId", "日付": "date", "内容": "content", "状態": "status", "申請日時": "createdAt", "コメント": "comment" })));
     } catch (e) { setError(e.message); }
   }, []);
+  const reloadWeekAlertExclusions = useCallback(async () => {
+    try {
+      const wae = await gasGet("週アラート除外");
+      setWeekAlertExclusions(wae.map(r => convertFrom(r, WEEK_ALERT_EXCLUSION_MAP)));
+    } catch (e) { setError(e.message); }
+  }, []);
   // 打刻修正の承認：申請ステータスと実際の打刻データの両方が変わるため両方を再取得
   const reloadPunchFixAndPunches = useCallback(async () => {
     await Promise.all([reloadPunchFixReqs(), reloadPunches()]);
@@ -136,12 +143,12 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp] = await Promise.all([
+      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp, wae] = await Promise.all([
         gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
         gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
         gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
         gasGet("残業申請"), gasGet("その他申請"), gasGet("指定休"),
-        gasGet("週間パターン"),
+        gasGet("週間パターン"), gasGet("週アラート除外"),
       ]);
       setEmps(e.map(r => convertFrom(r, EMP_MAP)));
       setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
@@ -154,6 +161,7 @@ export default function App() {
       setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
       setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
       setDesignatedHolidays(dh.map(r => convertFrom(r, { id:"id","日付":"date","メモ":"memo" })));
+      setWeekAlertExclusions(wae.map(r => convertFrom(r, WEEK_ALERT_EXCLUSION_MAP)));
       setWeekPatterns(wp.map(r => convertFrom(r, WEEK_PATTERN_MAP)));
       const defsMap = {};
       const defsList = [];
@@ -199,7 +207,7 @@ export default function App() {
       </div>
       {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
-        {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} reloadPunches={reloadPunches} />}
+        {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll} reloadPunches={reloadPunches} />}
         {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll}
           reloadLeaveReqs={reloadLeaveReqs} reloadPunchFixReqs={reloadPunchFixReqs} reloadOtReqs={reloadOtReqs} reloadTimeTransferReqs={reloadTimeTransferReqs} reloadOtherReqs={reloadOtherReqs} />}
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
@@ -222,7 +230,7 @@ export default function App() {
             {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions} reload={loadAll} />}
           {aTab === 2 && (() => {
             const shiftSettingTabs = ["シフト定義", "週間パターン"];
             return <div>

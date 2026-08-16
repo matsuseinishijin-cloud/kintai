@@ -37,7 +37,7 @@ function NotificationItem({ type, msg }) {
 }
 
 // ── 打刻画面 ──────────────────────────────────────────────────────────────────
-export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, lvReqs, timeTransferReqs, reload, reloadPunches }) {
+export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, lvReqs, timeTransferReqs, weekAlertExclusions, reload, reloadPunches }) {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingType, setSavingType] = useState(null); // "in" | "out" | null
@@ -143,8 +143,9 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
           .reduce((s, r) => s + Number(r.offsetMin || 0), 0);
         const netExcess = Math.max(0, wMin - weekLimit - usedAsOver);
         const netShort = Math.max(0, weekLimit - wMin - usedAsShort);
+        const isWeekExcluded = (weekAlertExclusions || []).some(w => String(w.empId) === String(emp.id) && w.weekStart === monStr);
         if (netExcess > 0) notifications.push({ type: "warn", msg: `${monStr}週：シフト超過（+${toHStr(netExcess)}）`, _week: monStr, _kind: "over" });
-        else if (netShort > 0 && wMin > 0) notifications.push({ type: "info", msg: `${monStr}週：シフト不足（残${toHStr(netShort)}）`, _week: monStr, _kind: "short" });
+        else if (netShort > 0 && wMin > 0 && !isWeekExcluded) notifications.push({ type: "info", msg: `${monStr}週：シフト不足（残${toHStr(netShort)}）`, _week: monStr, _kind: "short" });
       }
     }
   }

@@ -97,6 +97,7 @@ export const TIME_TRANSFER_MAP = { id:"id", "従業員id":"empId", "タイプ":"
 export const EARLY_MAP  = { id:"id", "従業員id":"empId", "日付":"date", "シフト開始":"shiftStart", "申請開始":"requestedStart", "理由":"reason", "状態":"status", "申請日時":"createdAt" };
 export const OTHER_REQ_MAP = { id:"id", "従業員id":"empId", "日付":"date", "内容":"content", "状態":"status", "申請日時":"createdAt", "コメント":"comment" };
 export const WEEK_PATTERN_MAP = { id:"id", "職種":"dept", "パターン名":"name", "月":"mon", "火":"tue", "水":"wed", "木":"thu", "金":"fri", "土":"sat", "日":"sun" };
+export const WEEK_ALERT_EXCLUSION_MAP = { id:"id", "従業員id":"empId", "週開始日":"weekStart", "理由":"reason" };
 export const DOW_KEY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 export const DOW_LABELS_MON_START = ["月", "火", "水", "木", "金", "土", "日"];
 

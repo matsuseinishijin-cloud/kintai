@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { gasSaveBatch } from "../api/gas";
+import { gasSave, gasDelete, gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, getPeriodRange, getPeriodDays, today } from "../utils/time";
-import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp, DOW_KEY_ORDER, sortEmps } from "../constants";
+import { BREAK_MIN, ROLES, isHalfLeave, isActiveEmp, DOW_KEY_ORDER, sortEmps, convertTo, WEEK_ALERT_EXCLUSION_MAP } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const bS = { padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
@@ -112,7 +112,7 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, reload }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -413,8 +413,25 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                     const diff = hasLimit ? total / 60 - weekLimit : 0;
                     const isExact = hasLimit && Math.abs(diff) < 0.1;
                     const isOver = hasLimit && diff > 0.05;
-                    const bgColor = !hasLimit ? "#f5f5f5" : isExact || typeCApproved ? "#f0f4ff" : "#FCEBEB";
-                    const textColor = !hasLimit ? "#6b7280" : isExact || typeCApproved ? "#1251a3" : "#A32D2D";
+                    const isShortfall = hasLimit && !isExact && !isOver;
+                    const isExcluded = (weekAlertExclusions || []).some(w => String(w.empId) === String(emp.id) && w.weekStart === weekMon);
+                    const clickableForExclusion = hasLimit && (isShortfall || isExcluded);
+                    const bgColor = !hasLimit ? "#f5f5f5" : isExcluded ? "#F5F9FE" : isExact || typeCApproved ? "#f0f4ff" : "#FCEBEB";
+                    const textColor = !hasLimit ? "#6b7280" : isExcluded ? "#6b7280" : isExact || typeCApproved ? "#1251a3" : "#A32D2D";
+
+                    const toggleWeekAlertExclusion = async () => {
+                      if (!clickableForExclusion) return;
+                      try {
+                        if (isExcluded) {
+                          const existing = (weekAlertExclusions || []).find(w => String(w.empId) === String(emp.id) && w.weekStart === weekMon);
+                          if (existing) await gasDelete("週アラート除外", existing.id);
+                        } else {
+                          const data = convertTo({ id: newId(), empId: emp.id, weekStart: weekMon, reason: "" }, WEEK_ALERT_EXCLUSION_MAP);
+                          await gasSave("週アラート除外", data);
+                        }
+                        await (reloadWeekAlertExclusions || reload)();
+                      } catch (e) { alert("更新失敗：" + e.message); }
+                    };
 
                     return (
                       <React.Fragment key={`wg${wi}_${emp.id}`}>
@@ -471,17 +488,26 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
                         {/* 週合計セル */}
                         <td key={`w${wi}_${emp.id}`}
-                          style={{ padding: "4px 6px", textAlign: "center", background: bgColor, borderRight: "2px solid #1251a3", cursor: comments.length > 0 ? "help" : "default" }}
+                          style={{ padding: "4px 6px", textAlign: "center", background: bgColor, borderRight: "2px solid #1251a3", cursor: clickableForExclusion ? "pointer" : comments.length > 0 ? "help" : "default" }}
+                          onClick={clickableForExclusion ? toggleWeekAlertExclusion : undefined}
                           onMouseEnter={e => { if (comments.length > 0) { const rect = e.currentTarget.getBoundingClientRect(); setTooltip({ x: rect.left, y: rect.bottom + 4, lines: comments }); } }}
                           onMouseLeave={() => setTooltip(null)}
+                          title={clickableForExclusion ? (isExcluded ? "クリックでアラートを再度有効化" : "クリックでこの週のシフト不足アラートを除外") : undefined}
                         >
                           {hasLimit ? (
-                            <>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: textColor }}>
-                                {isExact ? "完了✓" : isOver ? `+${(diff).toFixed(1)}超過` : `残${(-diff).toFixed(1)}h`}
-                              </div>
-                              <div style={{ fontSize: 9, color: "#9ca3af" }}>{(rawShiftMin / 60).toFixed(1)}/{weekLimit}h</div>
-                            </>
+                            isExcluded ? (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: textColor }}>除外中</div>
+                                <div style={{ fontSize: 9, color: "#9ca3af" }}>{(rawShiftMin / 60).toFixed(1)}/{weekLimit}h</div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: textColor }}>
+                                  {isExact ? "完了✓" : isOver ? `+${(diff).toFixed(1)}超過` : `残${(-diff).toFixed(1)}h`}
+                                </div>
+                                <div style={{ fontSize: 9, color: "#9ca3af" }}>{(rawShiftMin / 60).toFixed(1)}/{weekLimit}h</div>
+                              </>
+                            )
                           ) : (
                             <div style={{ fontSize: 11, color: "#6b7280" }}>{(rawShiftMin / 60).toFixed(1)}h</div>
                           )}
