@@ -93,9 +93,11 @@ function PunchFixRequest({ emp, punchFixReqs, reload }) {
 
   const [form, setForm] = useState({ date: maxDate, reqIn: "", reqOut: "", reason: "" });
   const [sub, setSub] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (!form.reqIn || !form.reqOut || !form.reason) return;
+    if (!form.reqIn || !form.reqOut || !form.reason || submitting) return;
+    setSubmitting(true);
     try {
       const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
@@ -108,10 +110,11 @@ function PunchFixRequest({ emp, punchFixReqs, reload }) {
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
+    setSubmitting(false);
   };
 
   const myReqs = (punchFixReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.reqIn && form.reqOut && form.reason;
+  const canSubmit = form.reqIn && form.reqOut && form.reason && !submitting;
 
   return (
     <div>
@@ -129,7 +132,7 @@ function PunchFixRequest({ emp, punchFixReqs, reload }) {
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>理由</div>
           <input type="text" value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="例：打刻忘れ" style={iS} />
         </div>
-        <button onClick={submit} disabled={!canSubmit} style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>申請する</button>
+        <button onClick={submit} disabled={!canSubmit} style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>{submitting ? "送信中…" : "申請する"}</button>
         {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
       </div>
       {myReqs.length > 0 && (
@@ -155,9 +158,11 @@ function PunchFixRequest({ emp, punchFixReqs, reload }) {
 function OtherRequest({ emp, reload }) {
   const [form, setForm] = useState({ date: today(), content: "" });
   const [sub, setSub] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (!form.date || !form.content) return;
+    if (!form.date || !form.content || submitting) return;
+    setSubmitting(true);
     try {
       const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
@@ -169,6 +174,7 @@ function OtherRequest({ emp, reload }) {
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
+    setSubmitting(false);
   };
 
   return (
@@ -182,7 +188,7 @@ function OtherRequest({ emp, reload }) {
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>内容</div>
         <textarea value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} placeholder="申請内容を入力してください" rows={4} style={{ ...iS, resize: "vertical" }} />
       </div>
-      <button onClick={submit} disabled={!form.content} style={{ ...bP, width: "100%", padding: "10px 0", opacity: form.content ? 1 : 0.4 }}>申請する</button>
+      <button onClick={submit} disabled={!form.content || submitting} style={{ ...bP, width: "100%", padding: "10px 0", opacity: (form.content && !submitting) ? 1 : 0.4 }}>{submitting ? "送信中…" : "申請する"}</button>
       {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
     </div>
   );

@@ -19,6 +19,7 @@ function getShiftDef(shiftType, shiftDefs, dept) {
 export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, reload }) {
   const [form, setForm] = useState({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
   const [sub, setSub] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [warn, setWarn] = useState("");
 
   // 有休残日数（バケツ方式・LIFO・有効期限考慮）
@@ -50,7 +51,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   };
 
   const submit = async () => {
-    if (!form.date || !form.leaveStart || !form.leaveEnd || !form.reason) return;
+    if (!form.date || !form.leaveStart || !form.leaveEnd || !form.reason || submitting) return;
     if (rem <= 0) { alert("有休残日数がありません"); return; }
     // シフト重なり警告（申請は可能）
     if (checkOverlap()) {
@@ -59,6 +60,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
       setWarn("");
     }
 
+    setSubmitting(true);
     try {
       const halfVal = form.half === "full" ? "1日" : form.half;
       const data = convertTo({
@@ -73,6 +75,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
+    setSubmitting(false);
   };
 
   // バケツ一覧（付与履歴・残日数付き・申請の帰属を追跡）
@@ -102,7 +105,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   });
   const buckets = bucketsWithRem.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0;
+  const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0 && !submitting;
 
   return (
     <div>
@@ -176,7 +179,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
 
           <button onClick={submit} disabled={!canSubmit}
             style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>
-            申請する
+            {submitting ? "送信中…" : "申請する"}
           </button>
           {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
         </div>

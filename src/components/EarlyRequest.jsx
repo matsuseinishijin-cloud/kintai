@@ -24,12 +24,14 @@ export default function EarlyRequest({ emp, shifts, shiftDefs, otReqs, reload })
   const td = today();
   const [form, setForm] = useState({ date: td, requestedStart: "", reason: "" });
   const [sub, setSub] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;
   const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
 
   const submit = async () => {
-    if (!form.requestedStart || !form.reason) return;
+    if (!form.requestedStart || !form.reason || submitting) return;
+    setSubmitting(true);
     try {
       const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
@@ -42,10 +44,11 @@ export default function EarlyRequest({ emp, shifts, shiftDefs, otReqs, reload })
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
+    setSubmitting(false);
   };
 
   const myReqs = (otReqs || []).filter(r => String(r.empId) === String(emp.id) && r.type === "early").sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.requestedStart && form.reason;
+  const canSubmit = form.requestedStart && form.reason && !submitting;
 
   return (
     <div>
@@ -68,7 +71,7 @@ export default function EarlyRequest({ emp, shifts, shiftDefs, otReqs, reload })
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>理由</div>
           <input type="text" value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="例：業務の都合" style={iS} />
         </div>
-        <button onClick={submit} disabled={!canSubmit} style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>申請する</button>
+        <button onClick={submit} disabled={!canSubmit} style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>{submitting ? "送信中…" : "申請する"}</button>
         {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
       </div>
       {myReqs.length > 0 && (
