@@ -41,6 +41,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingType, setSavingType] = useState(null); // "in" | "out" | null
+  const [showPastWeeks, setShowPastWeeks] = useState(false);
   const [fixForm, setFixForm] = useState({ date: today(), reqIn: "", reqOut: "", reason: "" });
   const [fixSub, setFixSub] = useState(false);
 
@@ -133,8 +134,17 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
             wMin += Math.max(0, lvMin - breakMin);
           }
         }
-        if (wMin > weekLimit) notifications.push({ type: "warn", msg: `${monStr}週：シフト超過（+${toHStr(wMin - weekLimit)}）` });
-        else if (wMin < weekLimit && wMin > 0) notifications.push({ type: "info", msg: `${monStr}週：シフト不足（残${toHStr(weekLimit - wMin)}）` });
+        // 既に時間振替・時間外申請で相殺済み（承認済み・申請中）の分を差し引く
+        const usedAsOver = (timeTransferReqs || [])
+          .filter(r => String(r.empId) === String(emp.id) && r.overWeekStart === monStr && (r.transferType === "A" || r.transferType === "C") && (r.status === "approved" || r.status === "pending"))
+          .reduce((s, r) => s + Number(r.offsetMin || 0), 0);
+        const usedAsShort = (timeTransferReqs || [])
+          .filter(r => String(r.empId) === String(emp.id) && r.shortWeekStart === monStr && r.transferType === "A" && (r.status === "approved" || r.status === "pending"))
+          .reduce((s, r) => s + Number(r.offsetMin || 0), 0);
+        const netExcess = Math.max(0, wMin - weekLimit - usedAsOver);
+        const netShort = Math.max(0, weekLimit - wMin - usedAsShort);
+        if (netExcess > 0) notifications.push({ type: "warn", msg: `${monStr}週：シフト超過（+${toHStr(netExcess)}）`, _week: monStr, _kind: "over" });
+        else if (netShort > 0 && wMin > 0) notifications.push({ type: "info", msg: `${monStr}週：シフト不足（残${toHStr(netShort)}）`, _week: monStr, _kind: "short" });
       }
     }
   }
@@ -172,12 +182,36 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   const sc = status === "勤務中" ? "#1251a3" : status === "退勤済" ? "#3B6D11" : "#6b7280";
   const sb = status === "勤務中" ? "#E6F1FB" : status === "退勤済" ? "#EAF3DE" : "#F5F9FE";
 
+  // 週次の超過/不足通知は、今週分だけ目立たせ、過去分は折りたたみにまとめる（見やすさ優先）
+  const [ty, tmo, tda] = td.split("-").map(Number);
+  const tdDow = new Date(ty, tmo - 1, tda).getDay();
+  const curMonDate = new Date(ty, tmo - 1, tda + (tdDow === 0 ? -6 : 1 - tdDow));
+  const curMonStr = `${curMonDate.getFullYear()}-${pad(curMonDate.getMonth() + 1)}-${pad(curMonDate.getDate())}`;
+  const weeklyNotifs = notifications.filter(n => n._week);
+  const otherNotifs = notifications.filter(n => !n._week);
+  const currentWeekNotif = weeklyNotifs.find(n => n._week === curMonStr);
+  const pastWeekNotifs = weeklyNotifs.filter(n => n._week !== curMonStr);
+
   return (
     <div style={{ maxWidth: 440 }}>
       {/* 通知エリア */}
-      {notifications.length > 0 && (
+      {(otherNotifs.length > 0 || currentWeekNotif || pastWeekNotifs.length > 0) && (
         <div style={{ marginBottom: "1rem", display: "flex", flexDirection: "column", gap: 6 }}>
-          {notifications.map((n, i) => <NotificationItem key={i} {...n} />)}
+          {otherNotifs.map((n, i) => <NotificationItem key={`o${i}`} {...n} />)}
+          {currentWeekNotif && <NotificationItem {...currentWeekNotif} />}
+          {pastWeekNotifs.length > 0 && (
+            <div>
+              <div onClick={() => setShowPastWeeks(s => !s)}
+                style={{ cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 500, background: "#FFF8E1", color: "#854F0B", border: "1px solid #F59E0B" }}>
+                ⚠️ 過去{pastWeekNotifs.length}週分の未解消の超過・不足があります {showPastWeeks ? "▲" : "▼ タップで表示"}
+              </div>
+              {showPastWeeks && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+                  {pastWeekNotifs.map((n, i) => <NotificationItem key={`p${i}`} {...n} />)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
