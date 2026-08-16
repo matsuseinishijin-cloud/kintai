@@ -208,7 +208,7 @@ export default function App() {
       {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll} reloadPunches={reloadPunches} />}
-        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll}
+        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll}
           reloadLeaveReqs={reloadLeaveReqs} reloadPunchFixReqs={reloadPunchFixReqs} reloadOtReqs={reloadOtReqs} reloadTimeTransferReqs={reloadTimeTransferReqs} reloadOtherReqs={reloadOtherReqs} />}
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && (()=>{

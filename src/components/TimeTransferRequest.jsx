@@ -50,7 +50,7 @@ function getMondayOf(ds) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransferReqs, lvReqs, reload }) {
+export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransferReqs, lvReqs, weekAlertExclusions, reload }) {
   const [form, setForm] = useState({ overWeekStart: "", shortWeekStart: "", reason: "" });
   const [sub, setSub] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -90,7 +90,9 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
   })();
 
   const overWeeks = weekOptions.filter(o => o.diff > 0);
-  const shortWeeks = weekOptions.filter(o => o.diff < 0);
+  const shortWeeks = weekOptions.filter(o =>
+    o.diff < 0 && !(weekAlertExclusions || []).some(w => String(w.empId) === String(emp.id) && w.weekStart === o.mon)
+  );
   const selOver = weekOptions.find(o => o.mon === form.overWeekStart);
   const selShort = weekOptions.find(o => o.mon === form.shortWeekStart);
   const offsetMin = selOver && selShort ? Math.min(selOver.diff, Math.abs(selShort.diff)) : 0;

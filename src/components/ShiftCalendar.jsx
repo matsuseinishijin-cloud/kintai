@@ -421,6 +421,10 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
                     const toggleWeekAlertExclusion = async () => {
                       if (!clickableForExclusion) return;
+                      const confirmMsg = isExcluded
+                        ? `${emp.name}さんの${weekMon}週について、シフト不足アラートを再度有効にしますか？`
+                        : `${emp.name}さんの${weekMon}週について、シフト不足アラートを除外しますか？\n（本人の打刻画面での「シフト不足」通知が出なくなります）`;
+                      if (!confirm(confirmMsg)) return;
                       try {
                         if (isExcluded) {
                           const existing = (weekAlertExclusions || []).find(w => String(w.empId) === String(emp.id) && w.weekStart === weekMon);

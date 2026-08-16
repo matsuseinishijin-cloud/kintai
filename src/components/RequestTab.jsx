@@ -10,7 +10,7 @@ import { today } from "../utils/time";
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = active => ({ padding: "7px 14px", borderRadius: 8, border: "none", borderBottom: active ? "2px solid #1251a3" : "2px solid transparent", background: "transparent", color: active ? "#1251a3" : "#6b7280", fontWeight: active ? 600 : 400, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" });
 
-export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otReqs, timeTransferReqs, punchFixReqs, reload, reloadLeaveReqs, reloadPunchFixReqs, reloadOtReqs, reloadTimeTransferReqs, reloadOtherReqs }) {
+export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otReqs, timeTransferReqs, punchFixReqs, weekAlertExclusions, reload, reloadLeaveReqs, reloadPunchFixReqs, reloadOtReqs, reloadTimeTransferReqs, reloadOtherReqs }) {
   // 申請種別の決定
   const sections = [];
   const td2 = today();
@@ -60,7 +60,7 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
 
       {/* 時間振替申請 */}
       {active === "timetransfer" && (
-        <TimeTransferRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reloadTimeTransferReqs || reload} />
+        <TimeTransferRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} weekAlertExclusions={weekAlertExclusions} reload={reloadTimeTransferReqs || reload} />
       )}
 
       {/* 時間外申請 */}
