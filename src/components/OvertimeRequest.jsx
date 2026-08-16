@@ -55,7 +55,6 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
   const [selectedWeeks, setSelectedWeeks] = useState(new Set());
   const [sub, setSub] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [debugData, setDebugData] = useState(null); // 調査用（原因特定できたら削除します）
 
   const weeklyLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) * 60 : null;
 
@@ -111,10 +110,7 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
         offsetMin: o.remaining,
         reason: "時間外申請", status: "pending"
       }, TIME_TRANSFER_MAP));
-      // ▼▼▼ 調査用（原因特定できたら削除します） ▼▼▼
-      const result = await gasSaveBatch("時間振替申請", dataArray);
-      setDebugData("【送信前データ】\n" + JSON.stringify(dataArray, null, 2) + "\n\n【GASが受け取ったデータ】\n" + JSON.stringify(result._debugReceived, null, 2));
-      // ▲▲▲ 調査用 ▲▲▲
+      await gasSaveBatch("時間振替申請", dataArray);
       setSelectedWeeks(new Set());
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
@@ -161,12 +157,6 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
             <button onClick={submit} disabled={selectedWeeks.size === 0 || submitting} style={{ ...bP, width: "100%", padding: "10px 0", opacity: (selectedWeeks.size > 0 && !submitting) ? 1 : 0.4 }}>
               {submitting ? "送信中…" : `申請する（${selectedWeeks.size}週）`}
             </button>
-            {debugData && (
-              <div style={{ marginTop: 10, padding: 10, background: "#111827", color: "#4ADE80", borderRadius: 8, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", fontFamily: "monospace" }}>
-                【調査用】送信前後のデータ比較（今回は実際に送信されています）：
-                {"\n"}{debugData}
-              </div>
-            )}
             {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
           </>
         )}
