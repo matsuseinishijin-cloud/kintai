@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { gasSave } from "../api/gas";
+import { gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, daysInMonth, today } from "../utils/time";
 import { convertTo, TIME_TRANSFER_MAP, BREAK_MIN } from "../constants";
 
@@ -102,17 +102,15 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
     if (selectedWeeks.size === 0 || submitting) return;
     setSubmitting(true);
     try {
-      for (const o of selectedOptions) {
-        const data = convertTo({
-          id: newId(), empId: emp.id,
-          transferType: "C",
-          shortWeekStart: "", overWeekStart: o.mon,
-          shortDate: "", overDate: "",
-          offsetMin: o.remaining,
-          reason: "時間外申請", status: "pending"
-        }, TIME_TRANSFER_MAP);
-        await gasSave("時間振替申請", data);
-      }
+      const dataArray = selectedOptions.map(o => convertTo({
+        id: newId(), empId: emp.id,
+        transferType: "C",
+        shortWeekStart: "", overWeekStart: o.mon,
+        shortDate: "", overDate: "",
+        offsetMin: o.remaining,
+        reason: "時間外申請", status: "pending"
+      }, TIME_TRANSFER_MAP));
+      await gasSaveBatch("時間振替申請", dataArray);
       setSelectedWeeks(new Set());
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
