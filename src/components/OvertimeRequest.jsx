@@ -110,6 +110,9 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
         offsetMin: o.remaining,
         reason: "時間外申請", status: "pending"
       }, TIME_TRANSFER_MAP));
+      // ▼▼▼ 調査用の一時表示（原因特定できたら削除します） ▼▼▼
+      alert("送信データ確認：\n" + JSON.stringify(dataArray, null, 2));
+      // ▲▲▲ 調査用の一時表示 ▲▲▲
       await gasSaveBatch("時間振替申請", dataArray);
       setSelectedWeeks(new Set());
       setSub(true); setTimeout(() => setSub(false), 3000);
