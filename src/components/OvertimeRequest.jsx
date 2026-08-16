@@ -55,6 +55,7 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
   const [selectedWeeks, setSelectedWeeks] = useState(new Set());
   const [sub, setSub] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [debugData, setDebugData] = useState(null); // 調査用（原因特定できたら削除します）
 
   const weeklyLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) * 60 : null;
 
@@ -110,13 +111,13 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
         offsetMin: o.remaining,
         reason: "時間外申請", status: "pending"
       }, TIME_TRANSFER_MAP));
-      // ▼▼▼ 調査用の一時表示（原因特定できたら削除します） ▼▼▼
-      alert("送信データ確認：\n" + JSON.stringify(dataArray, null, 2));
-      // ▲▲▲ 調査用の一時表示 ▲▲▲
-      await gasSaveBatch("時間振替申請", dataArray);
-      setSelectedWeeks(new Set());
-      setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      // ▼▼▼ 調査用の一時停止（原因特定できたら削除します） ▼▼▼
+      // ここで一旦送信を止めて画面にデータを表示するだけにしている。
+      // 原因特定後、この if ブロックを削除して下のgasSaveBatch以降を有効化する。
+      setDebugData(JSON.stringify(dataArray, null, 2));
+      setSubmitting(false);
+      return;
+      // ▲▲▲ 調査用の一時停止 ▲▲▲
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };
@@ -160,6 +161,12 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
             <button onClick={submit} disabled={selectedWeeks.size === 0 || submitting} style={{ ...bP, width: "100%", padding: "10px 0", opacity: (selectedWeeks.size > 0 && !submitting) ? 1 : 0.4 }}>
               {submitting ? "送信中…" : `申請する（${selectedWeeks.size}週）`}
             </button>
+            {debugData && (
+              <div style={{ marginTop: 10, padding: 10, background: "#111827", color: "#4ADE80", borderRadius: 8, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", fontFamily: "monospace" }}>
+                【調査用】送信データ確認（このままではまだ送信していません）：
+                {"\n"}{debugData}
+              </div>
+            )}
             {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
           </>
         )}
