@@ -111,13 +111,13 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
         offsetMin: o.remaining,
         reason: "時間外申請", status: "pending"
       }, TIME_TRANSFER_MAP));
-      // ▼▼▼ 調査用の一時停止（原因特定できたら削除します） ▼▼▼
-      // ここで一旦送信を止めて画面にデータを表示するだけにしている。
-      // 原因特定後、この if ブロックを削除して下のgasSaveBatch以降を有効化する。
-      setDebugData(JSON.stringify(dataArray, null, 2));
-      setSubmitting(false);
-      return;
-      // ▲▲▲ 調査用の一時停止 ▲▲▲
+      // ▼▼▼ 調査用（原因特定できたら削除します） ▼▼▼
+      const result = await gasSaveBatch("時間振替申請", dataArray);
+      setDebugData("【送信前データ】\n" + JSON.stringify(dataArray, null, 2) + "\n\n【GASが受け取ったデータ】\n" + JSON.stringify(result._debugReceived, null, 2));
+      // ▲▲▲ 調査用 ▲▲▲
+      setSelectedWeeks(new Set());
+      setSub(true); setTimeout(() => setSub(false), 3000);
+      await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };
@@ -163,7 +163,7 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
             </button>
             {debugData && (
               <div style={{ marginTop: 10, padding: 10, background: "#111827", color: "#4ADE80", borderRadius: 8, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", fontFamily: "monospace" }}>
-                【調査用】送信データ確認（このままではまだ送信していません）：
+                【調査用】送信前後のデータ比較（今回は実際に送信されています）：
                 {"\n"}{debugData}
               </div>
             )}
