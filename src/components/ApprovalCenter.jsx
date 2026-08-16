@@ -29,7 +29,7 @@ function getShiftDef(shiftType, shiftDefs, dept) {
   return (dept && shiftDefs[`${dept}:${st}`]) || shiftDefs[st] || { start: null, end: null };
 }
 
-export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs, punchFixReqs, otherReqs, shifts, shiftDefs, leaves, punches, reload }) {
+export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs, punchFixReqs, otherReqs, shifts, shiftDefs, leaves, punches, reload, reloadLeaveReqs, reloadPunchFixAndPunches, reloadOtReqs, reloadTimeTransferReqs, reloadOtherReqs }) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [empFilter, setEmpFilter] = useState("");
@@ -79,7 +79,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     }
     try {
       await gasSave("有給申請", convertTo({ ...req, status }, LV_REQ_MAP));
-      await reload();
+      await (reloadLeaveReqs || reload)();
     } catch (e) { alert("更新失敗：" + e.message); }
   };
 
@@ -88,7 +88,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     const req = (otReqs || []).find(r => r.id === id); if (!req) return;
     try {
       await gasSave("残業申請", { id: req.id, "従業員id": req.empId, "日付": req.date, "シフト終了": req.shiftEnd, "申請退勤": req.requestedEnd, "理由": req.reason, "状態": status, "種別": req.type });
-      await reload();
+      await (reloadOtReqs || reload)();
     } catch (e) { alert("更新失敗：" + e.message); }
   };
 
@@ -97,7 +97,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     const req = (timeTransferReqs || []).find(r => r.id === id); if (!req) return;
     try {
       await gasSave("時間振替申請", convertTo({ ...req, status }, TIME_TRANSFER_MAP));
-      await reload();
+      await (reloadTimeTransferReqs || reload)();
     } catch (e) { alert("更新失敗：" + e.message); }
   };
 
@@ -119,7 +119,7 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
         await gasSave("打刻", punchData);
       }
       await gasSave("打刻修正申請", data);
-      await reload();
+      await (reloadPunchFixAndPunches || reload)();
     } catch (e) { alert("更新失敗：" + e.message); }
   };
 
@@ -130,14 +130,15 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
     try {
       await gasSave("その他申請", { id: req.id, "従業員id": req.empId, "日付": req.date, "内容": req.content, "状態": status, "申請日時": req.createdAt, "コメント": comment });
       setCommentEdit(prev => { const n = { ...prev }; delete n[id]; return n; });
-      await reload();
+      await (reloadOtherReqs || reload)();
     } catch (e) { alert("更新失敗：" + e.message); }
   };
 
   // 削除
   const deleteReq = async (sheet, id) => {
     if (!confirm("この申請を削除しますか？")) return;
-    try { await gasDelete(sheet, id); await reload(); }
+    const reloadMap = { "有給申請": reloadLeaveReqs, "残業申請": reloadOtReqs, "時間振替申請": reloadTimeTransferReqs, "打刻修正申請": reloadPunchFixAndPunches, "その他申請": reloadOtherReqs };
+    try { await gasDelete(sheet, id); await (reloadMap[sheet] || reload)(); }
     catch (e) { alert("削除失敗：" + e.message); }
   };
 

@@ -96,6 +96,44 @@ export default function App() {
   const [aTab, setATab] = useState(0);
   const [shiftSettingSub, setShiftSettingSub] = useState(0);
 
+  // 打刻専用の軽量リロード（全13シートではなく打刻データだけ再取得。打刻は最も頻繁な操作なので専用に高速化）
+  const reloadPunches = useCallback(async () => {
+    try {
+      const p = await gasGet("打刻");
+      setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
+    } catch (e) { setError(e.message); }
+  }, []);
+
+  // 申請系の軽量リロード（申請したデータの種類だけ再取得）
+  const reloadLeaveReqs = useCallback(async () => {
+    try { const lr = await gasGet("有給申請"); setLvReqs(lr.map(r => convertFrom(r, LV_REQ_MAP))); }
+    catch (e) { setError(e.message); }
+  }, []);
+  const reloadPunchFixReqs = useCallback(async () => {
+    try { const pfr = await gasGet("打刻修正申請"); setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP))); }
+    catch (e) { setError(e.message); }
+  }, []);
+  const reloadOtReqs = useCallback(async () => {
+    try {
+      const otr = await gasGet("残業申請");
+      setOtReqs(otr.map(r => convertFrom(r, { id: "id", "従業員id": "empId", "日付": "date", "種別": "type", "状態": "status", "申請退勤": "requestedEnd", "シフト終了": "shiftEnd" })));
+    } catch (e) { setError(e.message); }
+  }, []);
+  const reloadTimeTransferReqs = useCallback(async () => {
+    try { const ttr = await gasGet("時間振替申請"); setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP))); }
+    catch (e) { setError(e.message); }
+  }, []);
+  const reloadOtherReqs = useCallback(async () => {
+    try {
+      const otr2 = await gasGet("その他申請");
+      setOtherReqs(otr2.map(r => convertFrom(r, { id: "id", "従業員id": "empId", "日付": "date", "内容": "content", "状態": "status", "申請日時": "createdAt", "コメント": "comment" })));
+    } catch (e) { setError(e.message); }
+  }, []);
+  // 打刻修正の承認：申請ステータスと実際の打刻データの両方が変わるため両方を再取得
+  const reloadPunchFixAndPunches = useCallback(async () => {
+    await Promise.all([reloadPunchFixReqs(), reloadPunches()]);
+  }, [reloadPunchFixReqs, reloadPunches]);
+
   const loadAll = useCallback(async () => {
     try {
       const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp] = await Promise.all([
@@ -161,8 +199,9 @@ export default function App() {
       </div>
       {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
-        {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} />}
-        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll} />}
+        {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} reload={loadAll} reloadPunches={reloadPunches} />}
+        {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} reload={loadAll}
+          reloadLeaveReqs={reloadLeaveReqs} reloadPunchFixReqs={reloadPunchFixReqs} reloadOtReqs={reloadOtReqs} reloadTimeTransferReqs={reloadTimeTransferReqs} reloadOtherReqs={reloadOtherReqs} />}
         {tab === 2 && <MyShift emp={cur} shifts={shifts} shiftDefs={shiftDefs} lvReqs={lvReqs} />}
         {tab === 3 && (()=>{
           const isFixed=(cur.role==="理学療法士"||cur.role==="AT")&&cur.type==="正社員";
@@ -199,7 +238,8 @@ export default function App() {
               {shiftSettingSub === 1 && <WeekPatternManager weekPatterns={weekPatterns} shiftDefList={shiftDefList} reload={loadAll} />}
             </div>;
           })()}
-          {aTab === 3 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll} />}
+          {aTab === 3 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll}
+            reloadLeaveReqs={reloadLeaveReqs} reloadPunchFixAndPunches={reloadPunchFixAndPunches} reloadOtReqs={reloadOtReqs} reloadTimeTransferReqs={reloadTimeTransferReqs} reloadOtherReqs={reloadOtherReqs} />}
           {aTab === 4 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
           {aTab === 5 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={loadAll} />}
           {aTab === 6 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}

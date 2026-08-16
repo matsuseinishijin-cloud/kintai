@@ -10,7 +10,7 @@ import { today } from "../utils/time";
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const bS = active => ({ padding: "7px 14px", borderRadius: 8, border: "none", borderBottom: active ? "2px solid #1251a3" : "2px solid transparent", background: "transparent", color: active ? "#1251a3" : "#6b7280", fontWeight: active ? 600 : 400, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" });
 
-export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otReqs, timeTransferReqs, punchFixReqs, reload }) {
+export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otReqs, timeTransferReqs, punchFixReqs, reload, reloadLeaveReqs, reloadPunchFixReqs, reloadOtReqs, reloadTimeTransferReqs, reloadOtherReqs }) {
   // 申請種別の決定
   const sections = [];
   const td2 = today();
@@ -40,37 +40,37 @@ export default function RequestTab({ emp, leaves, lvReqs, shifts, shiftDefs, otR
 
       {/* 有給申請 */}
       {active === "leave" && (
-        <LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} reload={reload} />
+        <LeaveRequest emp={emp} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} reload={reloadLeaveReqs || reload} />
       )}
 
       {/* 打刻修正申請（過去分） */}
       {active === "punchfix" && (
-        <PunchFixRequest emp={emp} punchFixReqs={punchFixReqs} reload={reload} />
+        <PunchFixRequest emp={emp} punchFixReqs={punchFixReqs} reload={reloadPunchFixReqs || reload} />
       )}
 
       {/* 早出申請 */}
       {active === "early" && (
-        <EarlyRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reload} />
+        <EarlyRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reloadOtReqs || reload} />
       )}
 
       {/* 残業申請（PTパート用：退勤延長） */}
       {active === "otextend" && (
-        <OvertimeExtendRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reload} />
+        <OvertimeExtendRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} reload={reloadOtReqs || reload} />
       )}
 
       {/* 時間振替申請 */}
       {active === "timetransfer" && (
-        <TimeTransferRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reload} />
+        <TimeTransferRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reloadTimeTransferReqs || reload} />
       )}
 
       {/* 時間外申請 */}
       {active === "overtime" && (
-        <OvertimeRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reload} />
+        <OvertimeRequest emp={emp} shifts={shifts} shiftDefs={shiftDefs} timeTransferReqs={timeTransferReqs} lvReqs={lvReqs} reload={reloadTimeTransferReqs || reload} />
       )}
 
       {/* その他申請 */}
       {active === "other" && (
-        <OtherRequest emp={emp} reload={reload} />
+        <OtherRequest emp={emp} reload={reloadOtherReqs || reload} />
       )}
     </div>
   );
