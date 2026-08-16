@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { gasSave, gasDelete } from "../api/gas";
+import { gasSave, gasDelete, gasSaveBatch } from "../api/gas";
 import { today, toMin, newId } from "../utils/time";
 import { convertTo, isHalfLeave, LV_REQ_MAP, TIME_TRANSFER_MAP, PUNCH_MAP, BREAK_MIN } from "../constants";
 
@@ -34,6 +34,8 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
   const [statusFilter, setStatusFilter] = useState("pending");
   const [empFilter, setEmpFilter] = useState("");
   const [commentEdit, setCommentEdit] = useState({});
+  const [selected, setSelected] = useState(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const empName = id => emps.find(e => String(e.id) === String(id))?.name || id;
 
@@ -164,6 +166,89 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
 
   const pendingCount = allReqs.filter(r => r.status === "pending").length;
 
+  // ── 一括承認・一括却下 ────────────────────────────────────────────────────────
+  // 「その他申請」は状態がpending/approved/rejectedの二択ではないため一括対象から除外
+  const selectableIds = filtered.filter(r => r.status === "pending" && r._type !== "other").map(r => r.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selected.has(id));
+  const toggleSelect = id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelectAll = () => setSelected(allSelected ? new Set() : new Set(selectableIds));
+
+  const bulkDecide = async status => {
+    const targets = allReqs.filter(r => selected.has(r.id) && r.status === "pending");
+    if (targets.length === 0) return;
+
+    let finalTargets = targets;
+    if (status === "approved") {
+      // 有給申請：残日数不足チェック（まとめて警告）
+      const leaveTargets = targets.filter(r => r._type === "leave");
+      const insufficient = leaveTargets.filter(r => calcRem(r.empId) < (isHalfLeave(r.half) ? 0.5 : 1));
+      if (insufficient.length > 0) {
+        const names = insufficient.map(r => `${empName(r.empId)}（${r.date}）`).join("、");
+        if (!confirm(`次の申請は有給残日数が不足しています：\n${names}\nこのまま一括承認すると残日数がマイナスになります。承認してよろしいですか？`)) return;
+      }
+      // 有給申請：シフト重なりチェック（全日はブロック、半日は時間帯重なりのみブロック）
+      const blocked = leaveTargets.filter(r => {
+        const shiftRow = shifts.find(s => String(s.empId) === String(r.empId) && s.date === r.date);
+        const role = emps.find(e => String(e.id) === String(r.empId))?.role;
+        const def = getShiftDef(shiftRow?.shiftType, shiftDefs, role);
+        if (!def.start) return false;
+        if (!isHalfLeave(r.half)) return true;
+        if (r.leaveStart && r.leaveEnd) {
+          const ss = toMin(def.start), se = toMin(def.end), ls = toMin(r.leaveStart), le = toMin(r.leaveEnd);
+          return ls < se && le > ss;
+        }
+        return false;
+      });
+      if (blocked.length > 0) {
+        alert(`次の申請はシフトと重なっているため一括承認から除外しました。個別に確認してください：\n${blocked.map(r => `${empName(r.empId)}（${r.date}）`).join("、")}`);
+        const blockedIds = new Set(blocked.map(r => r.id));
+        finalTargets = targets.filter(r => !blockedIds.has(r.id));
+      }
+    }
+    if (finalTargets.length === 0) { setSelected(new Set()); return; }
+    if (!confirm(`選択した${finalTargets.length}件を一括${status === "approved" ? "承認" : "却下"}しますか？`)) return;
+
+    setBulkProcessing(true);
+    try {
+      const bySheet = {};
+      const push = (sheet, data) => { if (!bySheet[sheet]) bySheet[sheet] = []; bySheet[sheet].push(data); };
+
+      finalTargets.forEach(r => {
+        if (r._type === "leave") push("有給申請", convertTo({ ...r, status }, LV_REQ_MAP));
+        else if (r._type === "early" || r._type === "otextend") push("残業申請", { id: r.id, "従業員id": r.empId, "日付": r.date, "シフト終了": r.shiftEnd, "申請退勤": r.requestedEnd, "理由": r.reason, "状態": status, "種別": r.type });
+        else if (r._type === "timetransfer" || r._type === "overtime") push("時間振替申請", convertTo({ ...r, status }, TIME_TRANSFER_MAP));
+        else if (r._type === "punchfix") push("打刻修正申請", { id: r.id, "従業員id": r.empId, "日付": r.date, "申請出勤": r.reqIn, "申請退勤": r.reqOut, "理由": r.reason, "状態": status, "元出勤": r.origIn, "元退勤": r.origOut });
+      });
+
+      // 打刻修正が承認された分は、実際の打刻データも同時に更新
+      if (status === "approved") {
+        const pfTargets = finalTargets.filter(r => r._type === "punchfix");
+        if (pfTargets.length > 0) {
+          pfTargets.forEach(r => {
+            const existingPunch = (punches || []).find(p => String(p.empId) === String(r.empId) && p.date === r.date);
+            push("打刻", convertTo({
+              id: existingPunch?.id || newId(), empId: r.empId, date: r.date,
+              in: r.reqIn, out: r.reqOut,
+              break: existingPunch?.break != null ? existingPunch.break : BREAK_MIN,
+              adjusted: true,
+            }, PUNCH_MAP));
+          });
+        }
+      }
+
+      await Promise.all(Object.entries(bySheet).map(([sheet, data]) => gasSaveBatch(sheet, data)));
+
+      setSelected(new Set());
+      const reloadPromises = [];
+      if (bySheet["有給申請"]) reloadPromises.push((reloadLeaveReqs || reload)());
+      if (bySheet["残業申請"]) reloadPromises.push((reloadOtReqs || reload)());
+      if (bySheet["時間振替申請"]) reloadPromises.push((reloadTimeTransferReqs || reload)());
+      if (bySheet["打刻修正申請"] || bySheet["打刻"]) reloadPromises.push((reloadPunchFixAndPunches || reload)());
+      await Promise.all(reloadPromises);
+    } catch (e) { alert("一括処理失敗：" + e.message); }
+    setBulkProcessing(false);
+  };
+
   // 行の表示内容
   const renderDetail = r => {
     if (r._type === "leave") return `${r.date}（${isHalfLeave(r.half) ? "半日" : "全日"}）${r.leaveStart ? r.leaveStart + "〜" + r.leaveEnd : ""} 理由：${r.reason || "―"}`;
@@ -251,6 +336,22 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
         <input type="text" placeholder="スタッフ名で絞り込み" value={empFilter} onChange={e => setEmpFilter(e.target.value)} style={{ ...iS, width: 160 }} />
       </div>
 
+      {/* 一括操作バー */}
+      {selected.size > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: "1rem", padding: "10px 14px", background: "#FFFEF5", border: "1px solid #F5E6A8", borderRadius: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size}件選択中</span>
+          <button onClick={() => bulkDecide("approved")} disabled={bulkProcessing}
+            style={{ padding: "6px 16px", borderRadius: 6, background: "#EAF3DE", color: "#3B6D11", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: bulkProcessing ? 0.5 : 1 }}>
+            {bulkProcessing ? "処理中…" : "一括承認"}
+          </button>
+          <button onClick={() => bulkDecide("rejected")} disabled={bulkProcessing}
+            style={{ padding: "6px 16px", borderRadius: 6, background: "#FFF0F0", color: "#A32D2D", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: bulkProcessing ? 0.5 : 1 }}>
+            {bulkProcessing ? "処理中…" : "一括却下"}
+          </button>
+          <button onClick={() => setSelected(new Set())} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 12, cursor: "pointer" }}>選択解除</button>
+        </div>
+      )}
+
       {/* 一覧 */}
       <div style={{ ...crd, overflow: "hidden" }}>
         <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>
@@ -262,11 +363,21 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr>{["種別", "スタッフ", "内容", "申請日時", "状態", "操作"].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+              <tr>
+                <th style={{ ...thS, width: 32 }}>
+                  {selectableIds.length > 0 && <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ width: 15, height: 15, cursor: "pointer" }} />}
+                </th>
+                {["種別", "スタッフ", "内容", "申請日時", "状態", "操作"].map(h => <th key={h} style={thS}>{h}</th>)}
+              </tr>
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0", background: r.status === "pending" ? "#FFFEF5" : "inherit" }}>
+                <tr key={r.id} style={{ borderBottom: "0.5px solid #e9ddd0", background: selected.has(r.id) ? "#EFF6FF" : r.status === "pending" ? "#FFFEF5" : "inherit" }}>
+                  <td style={tdS}>
+                    {r.status === "pending" && r._type !== "other" && (
+                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} style={{ width: 15, height: 15, cursor: "pointer" }} />
+                    )}
+                  </td>
                   <td style={tdS}><span style={{ padding: "2px 8px", borderRadius: 99, fontSize: 11, background: "#E6F1FB", color: "#1251a3" }}>{r._label}</span></td>
                   <td style={{ ...tdS, fontWeight: 500 }}>{empName(r.empId)}</td>
                   <td style={{ ...tdS, color: "#374151", maxWidth: 280 }}>{renderDetail(r)}</td>
