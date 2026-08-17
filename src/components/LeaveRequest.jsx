@@ -115,7 +115,12 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         <div style={{ ...crd, padding: "1.25rem" }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: "1rem" }}>有給申請</div>
 
-          {rem <= 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>有休残日数がありません</div>}
+          {rem < 0 && (
+            <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>
+              有休残日数が{Math.abs(rem)}日不足しています。次回付与時に、この不足分が繰り越して差し引かれます。
+            </div>
+          )}
+          {rem === 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>有休残日数がありません</div>}
 
           {/* 区分 */}
           <div style={{ marginBottom: 10 }}>
