@@ -75,27 +75,10 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
     setExporting(false);
   };
 
-  const exportPdf = async () => {
-    const rows = extractTableRows();
-    if (!rows) { alert("表が見つかりませんでした"); return; }
-    setExporting(true);
-    try {
-      const { default: jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
-      const doc = new jsPDF({ orientation: "landscape" });
-      doc.setFontSize(12);
-      doc.text(`タイムカード：${emp.name}（${emp.role}・${emp.type}）`, 14, 12);
-      autoTable(doc, {
-        head: [rows[0]],
-        body: rows.slice(1),
-        startY: 18,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [18, 81, 163] },
-      });
-      const fname = `タイムカード_${emp.name}_${today_()}.pdf`;
-      doc.save(fname);
-    } catch (e) { alert("PDF出力に失敗しました：" + e.message); }
-    setExporting(false);
+  // PDF出力はライブラリで作り直さず、アプリの見た目そのままブラウザの印刷機能を使う
+  // （印刷ダイアログの「送信先」で「PDFに保存」を選べば、そのままPDF化できる）
+  const printTimecard = () => {
+    window.print();
   };
 
   const today_ = () => {
@@ -135,7 +118,7 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "1rem", alignItems: "center" }}>
+      <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "1rem", alignItems: "center" }}>
         <select value={roleFilter} onChange={e => onRoleChange(e.target.value)} style={iS}>
           <option value="">全職種</option>
           {ROLES.map(r => <option key={r}>{r}</option>)}
@@ -155,13 +138,13 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
         {!editMode && (
           <>
             <button onClick={exportExcel} disabled={exporting} style={{ ...bE, opacity: exporting ? 0.5 : 1 }}>{exporting ? "出力中…" : "📊 Excel出力"}</button>
-            <button onClick={exportPdf} disabled={exporting} style={{ ...bS, opacity: exporting ? 0.5 : 1 }}>{exporting ? "出力中…" : "📄 PDF出力"}</button>
+            <button onClick={printTimecard} style={bS}>🖨️ 印刷/PDF保存</button>
           </>
         )}
       </div>
 
       {editMode && (
-        <div style={{ marginBottom: "1rem", padding: "8px 12px", background: "#FFF8E1", border: "1px solid #F59E0B", borderRadius: 8, fontSize: 12, color: "#854F0B" }}>
+        <div className="no-print" style={{ marginBottom: "1rem", padding: "8px 12px", background: "#FFF8E1", border: "1px solid #F59E0B", borderRadius: 8, fontSize: 12, color: "#854F0B" }}>
           編集モード中：下のタイムカード表の「出勤」「退勤」欄に直接時刻を入力できます。入力した日はオレンジ色でハイライトされます。編集が終わったら「変更を保存」を押してください。
         </div>
       )}

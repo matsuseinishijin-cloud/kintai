@@ -25,6 +25,14 @@ _style.textContent = `
   :root { --color-background-primary: #ffffff; --color-background-secondary: #fef9f3; --color-text-primary: #111827; --color-text-secondary: #374151; --color-text-tertiary: #6b7280; --color-border-secondary: #d1d5db; --color-border-tertiary: #e9ddd0; --color-accent: #1251a3; }
   #root { max-width: 1200px; margin: 0 auto; padding: 1rem; }
   select, input, textarea { font-family: inherit; }
+  @media print {
+    body { background: #fff !important; }
+    .no-print { display: none !important; }
+    #root { max-width: none !important; padding: 0 !important; }
+    .print-area { box-shadow: none !important; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
 `;
 document.head.appendChild(_style);
 
@@ -198,14 +206,14 @@ export default function App() {
 
   return (
     <div style={{ padding: "0 0 2rem" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", ...crd, marginBottom: "1rem" }}>
+      <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", ...crd, marginBottom: "1rem" }}>
         <div><div style={{ fontSize: 16, fontWeight: 700 }}>クリニック勤怠</div><div style={{ fontSize: 12, color: "#6b7280" }}>{isAdmin ? "管理者" : cur?.name}</div></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={doRefresh} disabled={refreshing} style={{ ...bS, opacity: refreshing ? 0.5 : 1 }}>{refreshing ? "更新中..." : "🔄 更新"}</button>
           <button onClick={() => { setLoginId(null); setTab(0); }} style={bS}>ログアウト</button>
         </div>
       </div>
-      {!isAdmin && (<div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
+      {!isAdmin && (<div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll} reloadPunches={reloadPunches} />}
         {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll}
@@ -226,7 +234,7 @@ export default function App() {
       {isAdmin && (() => {
         const aTabs = ["従業員管理", "シフト", "シフト設定", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
         return <div>
-          <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>
+          <div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>
             {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
