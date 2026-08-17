@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { gasSaveBatch } from "../api/gas";
 import { newId } from "../utils/time";
 import { ROLES, BREAK_MIN, sortEmps } from "../constants";
@@ -12,6 +12,7 @@ const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "auto" };
 const bP = { padding: "8px 16px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer" };
 const bS = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13, cursor: "pointer" };
+const bE = { padding: "8px 14px", borderRadius: 8, border: "1px solid #0F6E56", background: "#E1F5EE", color: "#0F6E56", fontSize: 13, cursor: "pointer", fontWeight: 500 };
 
 export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs, timeTransferReqs, otReqs, reload }) {
   const [roleFilter, setRoleFilter] = useState("");
@@ -19,6 +20,8 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
   const [editMode, setEditMode] = useState(false);
   const [edits, setEdits] = useState({}); // { date: { in, out } }
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const tableAreaRef = useRef(null);
 
   const filteredEmps = sortEmps(emps.filter(e => !roleFilter || e.role === roleFilter));
   const emp = filteredEmps.find(e => String(e.id) === String(empId)) || filteredEmps[0];
@@ -45,6 +48,59 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
     if (editMode && editedCount > 0 && !confirm("未保存の変更は破棄されます。よろしいですか？")) return;
     setEdits({});
     setEditMode(m => !m);
+  };
+
+  // 画面に実際に表示されているタイムカード表の中身を読み取る
+  // （職種ごとに計算ロジックが違うため、複製せず表示結果をそのまま抽出する）
+  const extractTableRows = () => {
+    const table = tableAreaRef.current?.querySelector("table");
+    if (!table) return null;
+    return Array.from(table.querySelectorAll("tr")).map(tr =>
+      Array.from(tr.children).map(cell => cell.textContent.replace(/\s+/g, " ").trim())
+    );
+  };
+
+  const exportExcel = async () => {
+    const rows = extractTableRows();
+    if (!rows) { alert("表が見つかりませんでした"); return; }
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "タイムカード");
+      const fname = `タイムカード_${emp.name}_${today_()}.xlsx`;
+      XLSX.writeFile(wb, fname);
+    } catch (e) { alert("Excel出力に失敗しました：" + e.message); }
+    setExporting(false);
+  };
+
+  const exportPdf = async () => {
+    const rows = extractTableRows();
+    if (!rows) { alert("表が見つかりませんでした"); return; }
+    setExporting(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(12);
+      doc.text(`タイムカード：${emp.name}（${emp.role}・${emp.type}）`, 14, 12);
+      autoTable(doc, {
+        head: [rows[0]],
+        body: rows.slice(1),
+        startY: 18,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [18, 81, 163] },
+      });
+      const fname = `タイムカード_${emp.name}_${today_()}.pdf`;
+      doc.save(fname);
+    } catch (e) { alert("PDF出力に失敗しました：" + e.message); }
+    setExporting(false);
+  };
+
+  const today_ = () => {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   };
 
   const saveAll = async () => {
@@ -96,6 +152,12 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
             {saving ? "保存中..." : `変更を保存（${editedCount}件）`}
           </button>
         )}
+        {!editMode && (
+          <>
+            <button onClick={exportExcel} disabled={exporting} style={{ ...bE, opacity: exporting ? 0.5 : 1 }}>{exporting ? "出力中…" : "📊 Excel出力"}</button>
+            <button onClick={exportPdf} disabled={exporting} style={{ ...bS, opacity: exporting ? 0.5 : 1 }}>{exporting ? "出力中…" : "📄 PDF出力"}</button>
+          </>
+        )}
       </div>
 
       {editMode && (
@@ -104,11 +166,13 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
         </div>
       )}
 
-      {isFixed && <TimecardSeishainFixed {...cardProps} timeTransferReqs={timeTransferReqs} isAdmin />}
-      {!isFixed && isPTpart && <TimecardPTpart {...cardProps} otReqs={otReqs} />}
-      {!isFixed && !isPTpart && isNursepart && <TimecardNursepart {...cardProps} />}
-      {!isFixed && !isPTpart && !isNursepart && isPartStd && <TimecardPartStd {...cardProps} />}
-      {!isFixed && !isPTpart && !isNursepart && !isPartStd && <TimecardSeishainStd {...cardProps} isAdmin />}
+      <div ref={tableAreaRef}>
+        {isFixed && <TimecardSeishainFixed {...cardProps} timeTransferReqs={timeTransferReqs} isAdmin />}
+        {!isFixed && isPTpart && <TimecardPTpart {...cardProps} otReqs={otReqs} />}
+        {!isFixed && !isPTpart && isNursepart && <TimecardNursepart {...cardProps} />}
+        {!isFixed && !isPTpart && !isNursepart && isPartStd && <TimecardPartStd {...cardProps} />}
+        {!isFixed && !isPTpart && !isNursepart && !isPartStd && <TimecardSeishainStd {...cardProps} isAdmin />}
+      </div>
     </div>
   );
 }
