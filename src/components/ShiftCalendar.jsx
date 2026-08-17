@@ -21,11 +21,16 @@ function getShiftDef(shiftType, shiftDefs, dept) {
 }
 
 // 週合計計算（振替・有休を含む）
-function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferReqs, dept) {
+// 週データ配列（月〜日）から、その週の月曜日の日付文字列を計算する
+function getWeekMonOf(weekDays) {
   const firstDs = weekDays[0];
   const d = new Date(firstDs); const dow = d.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
   d.setDate(d.getDate() + diff);
-  const weekMon = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferReqs, dept) {
+  const weekMon = getWeekMonOf(weekDays);
 
   let rawShiftMin = 0; // 実シフト時間（振替なし）
   let total = 0;
@@ -376,7 +381,44 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
           <thead>
             <tr>
               <th style={{ padding: "6px 10px", textAlign: "left", background: "#fef9f3", borderBottom: "1px solid #e9ddd0", position: "sticky", left: 0, top: 0, zIndex: 2, minWidth: 100 }}>従業員</th>
-              {weekGroups.map((wk, wi) => (
+              {weekGroups.map((wk, wi) => {
+                const weekMonHeader = getWeekMonOf(wk);
+                const bulkToggleWeekAlertExclusion = async () => {
+                  const relevantEmps = filteredEmps.filter(emp => {
+                    const weekLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) : emp.type === "正社員" ? 40 : null;
+                    if (!weekLimit) return false;
+                    const { total } = calcWeekTotal(emp.id, wk, shiftsFromProps, shiftDefs, lvReqs, timeTransferReqs, emp.role);
+                    const diff = total / 60 - weekLimit;
+                    const isExact = Math.abs(diff) < 0.1;
+                    const isOver = diff > 0.05;
+                    return !isExact && !isOver; // 不足している人のみ対象
+                  });
+                  if (relevantEmps.length === 0) { alert("この週にシフト不足の従業員がいません"); return; }
+
+                  const currentlyExcludedIds = new Set(
+                    (weekAlertExclusions || []).filter(w => w.weekStart === weekMonHeader).map(w => String(w.empId))
+                  );
+                  const allExcluded = relevantEmps.every(e => currentlyExcludedIds.has(String(e.id)));
+
+                  const ok = confirm(allExcluded
+                    ? `${weekMonHeader}週について、${relevantEmps.length}名分のシフト不足アラートを一括で再度有効にしますか？`
+                    : `${weekMonHeader}週について、シフト不足になっている${relevantEmps.length}名を一括で除外しますか？`);
+                  if (!ok) return;
+
+                  try {
+                    if (allExcluded) {
+                      const targets = (weekAlertExclusions || []).filter(w => w.weekStart === weekMonHeader && relevantEmps.some(e => String(e.id) === String(w.empId)));
+                      await Promise.all(targets.map(w => gasDelete("週アラート除外", w.id)));
+                    } else {
+                      const toAdd = relevantEmps.filter(e => !currentlyExcludedIds.has(String(e.id)));
+                      const dataArray = toAdd.map(e => convertTo({ id: newId(), empId: e.id, weekStart: weekMonHeader, reason: "" }, WEEK_ALERT_EXCLUSION_MAP));
+                      if (dataArray.length > 0) await gasSaveBatch("週アラート除外", dataArray);
+                    }
+                    await (reloadWeekAlertExclusions || reload)();
+                  } catch (e) { alert("一括更新失敗：" + e.message); }
+                };
+
+                return (
                 <React.Fragment key={`wh${wi}`}>
                   {wk.filter(ds => periodDays.includes(ds)).map(ds => {
                     const d = new Date(ds); const dow = d.getDay();
@@ -388,11 +430,14 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                       </th>
                     );
                   })}
-                  <th style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderRight: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60, position: "sticky", top: 0, zIndex: 1 }}>
+                  <th onClick={bulkToggleWeekAlertExclusion}
+                    title="クリックで、この週にシフト不足の従業員を一括で除外/再表示"
+                    style={{ padding: "4px 6px", textAlign: "center", background: "#E6F1FB", borderBottom: "1px solid #e9ddd0", borderRight: "2px solid #1251a3", fontSize: 11, color: "#1251a3", minWidth: 60, position: "sticky", top: 0, zIndex: 1, cursor: "pointer" }}>
                     W{wi + 1}<br />合計
                   </th>
                 </React.Fragment>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody>
