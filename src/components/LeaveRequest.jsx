@@ -84,11 +84,12 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   }).sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // LIFO：新しい順
   const bucketsWithRem = allRecords.map(b => ({ ...b, remaining: Number(b.days), assignedReqs: [] }));
   const approvedSorted = [...approved].sort((a, b) => a.date > b.date ? 1 : -1);
+  const unassignedReqs = []; // どのバケツからも消化できなかった申請（＝残日数不足の原因）
   approvedSorted.forEach(req => {
     const days = isHalfLeave(req.half) ? 0.5 : 1;
     // 付与日が取得日以前かつ有効期限内のバケツのうち最新から消化（LIFO）
     const eligible = bucketsWithRem.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date) && b.remaining > 0);
-    if (eligible.length === 0) return;
+    if (eligible.length === 0) { unassignedReqs.push(req); return; }
     const b = eligible[0]; // bucketsWithRemは新しい順なので[0]が最新
     const deduct = Math.min(b.remaining, days);
     b.remaining -= deduct;
@@ -115,11 +116,6 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         <div style={{ ...crd, padding: "1.25rem" }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: "1rem" }}>有給申請</div>
 
-          {rem < 0 && (
-            <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>
-              有休残日数が{Math.abs(rem)}日不足しています。次回付与時に、この不足分が繰り越して差し引かれます。
-            </div>
-          )}
           {rem === 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF0F0", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>有休残日数がありません</div>}
 
           {/* 区分 */}
@@ -229,6 +225,24 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                   </div>
                 );
               })}
+              {/* 繰り越し不足（どのバケツからも消化できなかった取得分＝次回付与時に差し引かれる） */}
+              {unassignedReqs.length > 0 && (
+                <div style={{ marginBottom: 12, borderRadius: 8, border: "1px solid #F09595", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", background: "#FFF0F0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#A32D2D" }}>繰り越し不足：{unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0)}日分</span>
+                    <span style={{ fontSize: 11, color: "#A32D2D" }}>次回付与時に差し引かれます</span>
+                  </div>
+                  {unassignedReqs.map(r => (
+                    <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #F09595", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                      <span style={{ color: "#A32D2D" }}>└</span>
+                      <span style={{ fontWeight: 500 }}>{r.date}</span>
+                      <span style={{ color: "#374151" }}>{isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
+                      {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
+                      <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
