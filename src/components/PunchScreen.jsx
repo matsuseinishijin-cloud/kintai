@@ -166,13 +166,23 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   // ③本日打刻忘れ
   if (def.start && !punch) notifications.push({ type: "warn", msg: "本日の出勤打刻がありません" });
 
-  // ④有休残日数が少ない（5日未満）
-  const leave = (leaves || []).find(l => String(l.empId) === String(emp.id));
-  if (leave) {
+  // ④有休残日数（0・不足時は赤で強めに、少ない時は青で知らせる）
+  // ※LeaveRequest.jsxと同じ計算方法（期限切れの付与を除外）に統一している
+  const myLeaves4 = (leaves || []).filter(l => String(l.empId) === String(emp.id));
+  if (myLeaves4.length > 0) {
+    const validLeaves4 = myLeaves4
+      .map(l => {
+        const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
+        return records.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td));
+      })
+      .flat();
+    const totalGranted4 = validLeaves4.reduce((s, r) => s + (Number(r.days) || 0), 0);
     const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
     const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
-    const rem = (Number(leave.granted) || 0) - usedDays;
-    if (rem > 0 && rem < 5) notifications.push({ type: "info", msg: `有休残日数が少なくなっています（残${rem}日）` });
+    const rem = totalGranted4 - usedDays;
+    if (rem < 0) notifications.push({ type: "error", msg: `有休残日数が不足しています（${Math.abs(rem)}日超過）` });
+    else if (rem === 0) notifications.push({ type: "error", msg: "有休残日数がありません" });
+    else if (rem < 2) notifications.push({ type: "info", msg: `有休残日数が少なくなっています（残${rem}日）` });
   }
 
   // ⑤時間外申請が承認待ち
