@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps, WEEK_ALERT_EXCLUSION_MAP } from "./constants";
+import { ADMIN_PASSWORD, ACCESS_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps, WEEK_ALERT_EXCLUSION_MAP } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -45,6 +45,37 @@ const nB = active => ({ flex: 1, minWidth: 80, padding: "8px 4px", borderRadius:
 function Loading() { return <div style={{ padding: "2rem", textAlign: "center", color: "#6b7280" }}>読み込み中...</div>; }
 function Err({ msg }) { return <div style={{ padding: "1rem", background: "#FFF0F0", borderRadius: 8, color: "#A32D2D" }}>エラー：{msg}</div>; }
 
+// ── アクセスゲート（この端末が院内で使用許可されているかの確認画面） ─────────────
+// 従業員のログインパスワードとは別に、アプリを開ける端末自体を絞り込む目的。
+// 一度正しい合言葉を入力すれば、この端末では次回から表示されない（localStorageに記憶）。
+const ACCESS_GATE_KEY = "kintai_access_granted";
+function AccessGate({ onPass }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const submit = () => {
+    if (pw === ACCESS_PASSWORD) {
+      try { localStorage.setItem(ACCESS_GATE_KEY, "1"); } catch { /* ignore */ }
+      onPass();
+    } else {
+      setErr("合言葉が違います");
+    }
+  };
+  return (
+    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...crd, padding: "2rem", width: 320 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>クリニック勤怠</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: "1.5rem" }}>院内スタッフ用の合言葉を入力してください</div>
+        <input type="password" value={pw} onChange={e => { setPw(e.target.value); setErr(""); }}
+          onKeyDown={e => e.key === "Enter" && submit()}
+          placeholder="合言葉" autoFocus
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 16, textAlign: "center", letterSpacing: "0.2em", marginBottom: "1rem" }} />
+        {err && <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF0F0", borderRadius: 8, fontSize: 12, color: "#A32D2D" }}>{err}</div>}
+        <button onClick={submit} disabled={!pw} style={{ width: "100%", padding: "10px 0", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: pw ? 1 : 0.4 }}>入る</button>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen({ emps, passwords, onLogin }) {
   const [mode, setMode] = useState("admin");
   const [roleFilter, setRoleFilter] = useState("全て");
@@ -82,6 +113,9 @@ function LoginScreen({ emps, passwords, onLogin }) {
 }
 
 export default function App() {
+  const [accessGranted, setAccessGranted] = useState(() => {
+    try { return localStorage.getItem(ACCESS_GATE_KEY) === "1"; } catch { return false; }
+  });
   const [emps, setEmps] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [punches, setPunches] = useState([]);
@@ -189,13 +223,14 @@ export default function App() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { if (accessGranted) loadAll(); }, [loadAll, accessGranted]);
 
   const doRefresh = async () => {
     setRefreshing(true);
     try { await loadAll(); } finally { setRefreshing(false); }
   };
 
+  if (!accessGranted) return <AccessGate onPass={() => setAccessGranted(true)} />;
   if (loading) return <Loading />;
   if (error) return <Err msg={error} />;
   if (!loginId) return <LoginScreen emps={emps.filter(isActiveEmp)} passwords={passwords} onLogin={id => { setLoginId(id); setTab(0); }} />;
