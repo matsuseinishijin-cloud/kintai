@@ -62,13 +62,13 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
 
   const weeklyLimit = emp.weeklyLimit ? Number(emp.weeklyLimit) * 60 : 40 * 60;
 
-  // 先月・当月の週オプション
+  // 2ヶ月前〜当月の週オプション
   const weekOptions = (() => {
     if (!weeklyLimit) return [];
     const opts = [];
     const now = new Date();
     const seen = new Set();
-    for (let mo = -1; mo <= 0; mo++) {
+    for (let mo = -2; mo <= 0; mo++) {
       const raw = now.getMonth() + 1 + mo;
       const y = raw <= 0 ? now.getFullYear() - 1 : now.getFullYear();
       const m = raw <= 0 ? raw + 12 : raw;
