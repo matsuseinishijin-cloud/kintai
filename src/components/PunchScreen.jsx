@@ -129,10 +129,14 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
             wMin += Math.max(0, toMin(def2.end) - toMin(def2.start) - bk);
           }
           const lv = (lvReqs || []).find(r => String(r.empId) === String(emp.id) && r.date === ds2 && (r.status === "approved" || r.status === "pending"));
-          if (lv && lv.leaveStart && lv.leaveEnd) {
-            const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
-            const breakMin = lv.leaveBreak === "1" ? 60 : 0;
-            wMin += Math.max(0, lvMin - breakMin);
+          if (lv) {
+            if (lv.leaveStart && lv.leaveEnd) {
+              const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
+              const breakMin = lv.leaveBreak === "1" ? 60 : 0;
+              wMin += Math.max(0, lvMin - breakMin);
+            } else if (!isHalfLeave(lv.half)) {
+              wMin += 480; // 全日・時間帯未指定は8時間で計上
+            }
           }
         }
         // 既に時間振替・時間外申請で相殺済み（承認済み・申請中）の分を差し引く

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { gasSaveBatch } from "../api/gas";
 import { newId, toMin, toHStr, pad, daysInMonth, today } from "../utils/time";
-import { convertTo, TIME_TRANSFER_MAP, BREAK_MIN } from "../constants";
+import { convertTo, TIME_TRANSFER_MAP, BREAK_MIN, isHalfLeave } from "../constants";
 
 const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
@@ -43,10 +43,14 @@ function getWeekShiftMin(weekStart, empId, shifts, shiftDefs, lvReqs, dept) {
       total += Math.max(0, toMin(def.end) - toMin(def.start) - bk);
     }
     const lv = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && (r.status === "approved" || r.status === "pending"));
-    if (lv && lv.leaveStart && lv.leaveEnd) {
-      const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
-      const breakMin = lv.leaveBreak === "1" ? 60 : 0;
-      total += Math.max(0, lvMin - breakMin);
+    if (lv) {
+      if (lv.leaveStart && lv.leaveEnd) {
+        const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
+        const breakMin = lv.leaveBreak === "1" ? 60 : 0;
+        total += Math.max(0, lvMin - breakMin);
+      } else if (!isHalfLeave(lv.half)) {
+        total += 480; // 全日・時間帯未指定は8時間で計上
+      }
     }
   }
   return total;

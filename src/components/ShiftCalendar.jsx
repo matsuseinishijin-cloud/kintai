@@ -47,10 +47,14 @@ function calcWeekTotal(empId, weekDays, shifts, shiftDefs, lvReqs, timeTransferR
     }
     // 有休
     const lv = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && (r.status === "approved" || r.status === "pending"));
-    if (lv && lv.leaveStart && lv.leaveEnd) {
-      const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
-      const bk = lv.leaveBreak === "1" ? 60 : 0;
-      total += Math.max(0, lvMin - bk);
+    if (lv) {
+      if (lv.leaveStart && lv.leaveEnd) {
+        const lvMin = toMin(lv.leaveEnd) - toMin(lv.leaveStart);
+        const bk = lv.leaveBreak === "1" ? 60 : 0;
+        total += Math.max(0, lvMin - bk);
+      } else if (!isHalfLeave(lv.half)) {
+        total += 480; // 全日・時間帯未指定は8時間で計上
+      }
     }
   });
 

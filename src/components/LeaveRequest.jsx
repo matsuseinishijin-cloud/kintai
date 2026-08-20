@@ -45,7 +45,8 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   };
 
   const submit = async () => {
-    if (!form.date || !form.leaveStart || !form.leaveEnd || !form.reason || submitting) return;
+    const timeRequired = form.half !== "full"; // 半日は時間帯必須、全日は任意（未入力なら8時間計上）
+    if (!form.date || (timeRequired && (!form.leaveStart || !form.leaveEnd)) || !form.reason || submitting) return;
     if (rem <= 0) { alert("有休残日数がありません"); return; }
     // シフト重なり警告（申請は可能）
     if (checkOverlap()) {
@@ -102,7 +103,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   // 残日数：現在有効な（期限切れでない）バケツに残っている日数の合計（LIFO・日付考慮済みの消化結果）
   const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0);
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0 && !submitting;
+  const canSubmit = form.date && form.half && (form.half !== "full" ? (form.leaveStart && form.leaveEnd) : true) && form.reason && rem > 0 && !submitting;
 
   return (
     <div>
@@ -140,9 +141,11 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             </div>
           )}
 
-          {/* 有休時間帯 */}
+          {/* 有休時間帯（全日は任意：未入力なら8時間で計上、半日は必須） */}
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>有休時間帯</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>
+              有休時間帯{form.half === "full" ? "（任意・未入力の場合は8時間で計上）" : ""}
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
                 <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>開始</div>
@@ -155,8 +158,8 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             </div>
           </div>
 
-          {/* 休憩（全日・半日どちらでも表示） */}
-          {form.half && (
+          {/* 休憩（時間帯を入力している場合のみ表示。全日で時間帯未入力＝8時間固定計上のときは対象外） */}
+          {form.half && (form.half !== "full" || (form.leaveStart && form.leaveEnd)) && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />
