@@ -163,7 +163,8 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   const visibleShiftDefs = (() => {
     const list = (shiftDefList || []).filter(d => d.key !== "off");
     if (!roleFilter) return [];
-    const deptMatched = list.filter(d => d.dept === roleFilter);
+    const lookupDept = roleFilter === "AT" ? "理学療法士" : roleFilter; // ATは理学療法士のシフト定義を転用
+    const deptMatched = list.filter(d => d.dept === lookupDept);
     // 部署情報が未設定の古いデータ用フォールバック（部署列が空のものも一応出す）
     return deptMatched.length > 0 ? deptMatched : list.filter(d => !d.dept);
   })();
