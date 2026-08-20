@@ -26,17 +26,10 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   // 有休残日数（バケツ方式・LIFO・有効期限考慮）
   const td2 = today();
   const myLeaves = leaves.filter(l => String(l.empId) === String(emp.id));
-  const validLeaves = myLeaves
-    .map(l => {
-      const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
-      return records.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td2));
-    })
-    .flat()
-    .sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // 新しい順
-  const totalGranted = validLeaves.reduce((s, r) => s + (Number(r.days) || 0), 0);
   const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
-  const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
-  const rem = totalGranted - usedDays;
+  // ※ rem（残日数）はこの下でバケツ消化計算後にまとめて算出する（バグ修正：期限切れバケツ除外の
+  //    「非期限切れ付与合計 − 全期間取得日数」方式だと、期限切れ済みバケツで正しく消化済みの分まで
+  //    現在有効なバケツから二重に差し引いてしまい「残っているのに不足」と誤表示していたため）
 
   // 選択日のシフト
   const shiftRow = form.date ? shifts.find(s => String(s.empId) === String(emp.id) && s.date === form.date) : null;
@@ -106,6 +99,8 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     b.assignedReqs.push(req);
   });
   const buckets = bucketsWithRem.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
+  // 残日数：現在有効な（期限切れでない）バケツに残っている日数の合計（LIFO・日付考慮済みの消化結果）
+  const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0);
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
   const canSubmit = form.date && form.half && form.leaveStart && form.leaveEnd && form.reason && rem > 0 && !submitting;
 

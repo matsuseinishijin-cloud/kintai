@@ -168,19 +168,25 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   if (def.start && !punch) notifications.push({ type: "warn", msg: "本日の出勤打刻がありません" });
 
   // ④有休残日数（0・不足時は赤で強めに、少ない時は青で知らせる）
-  // ※LeaveRequest.jsxと同じ計算方法（期限切れの付与を除外）に統一している
+  // ※バケツ方式・LIFO・有効期限考慮でLeaveRequest.jsx/LeaveManager.jsxと同じ計算方法に統一している。
+  //   （以前は「非期限切れ付与合計－全期間取得日数」で計算しており、期限切れ済みバケツで既に
+  //     正しく消化済みの分まで二重に差し引いてしまい、実際は残っているのに「不足」と誤表示していた）
   const myLeaves4 = (leaves || []).filter(l => String(l.empId) === String(emp.id));
   if (myLeaves4.length > 0) {
-    const validLeaves4 = myLeaves4
-      .map(l => {
-        const records = (() => { try { return JSON.parse(l.records || "[]"); } catch { return []; } })();
-        return records.filter(r => r.type === "grant" && (!r.expiresAt || r.expiresAt >= td));
-      })
-      .flat();
-    const totalGranted4 = validLeaves4.reduce((s, r) => s + (Number(r.days) || 0), 0);
-    const approved = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved");
-    const usedDays = approved.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
-    const rem = totalGranted4 - usedDays;
+    const allRecords4 = myLeaves4.flatMap(l => {
+      try { return JSON.parse(l.records || "[]").filter(r => r.type === "grant"); } catch { return []; }
+    }).sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // 新しい順
+    const bucketsWithRem4 = allRecords4.map(b => ({ ...b, remaining: Number(b.days) }));
+    const approved4 = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved")
+      .sort((a, b) => a.date > b.date ? 1 : -1);
+    approved4.forEach(req => {
+      const days = isHalfLeave(req.half) ? 0.5 : 1;
+      const eligible = bucketsWithRem4.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date) && b.remaining > 0);
+      if (eligible.length === 0) return;
+      const b = eligible[0]; // 新しい順なので[0]が最新＝LIFO
+      b.remaining -= Math.min(b.remaining, days);
+    });
+    const rem = bucketsWithRem4.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0);
     if (rem < 0) notifications.push({ type: "error", msg: `有休残日数が不足しています（${Math.abs(rem)}日超過）` });
     else if (rem === 0) notifications.push({ type: "error", msg: "有休残日数がありません" });
     else if (rem < 2) notifications.push({ type: "info", msg: `有休残日数が少なくなっています（残${rem}日）` });
