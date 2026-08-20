@@ -20,6 +20,7 @@ function ABtn({ label, bg, color, onClick }) {
 }
 
 function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
   if (!shiftType || shiftType === "off") return { start: null, end: null };
   const st = String(shiftType);
   if (st.startsWith("custom:")) {

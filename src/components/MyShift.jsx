@@ -20,6 +20,7 @@ async function fetchHolidays(year) {
 
 // シフト定義からdef取得
 function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
   if (!shiftType || shiftType === "off") {
     return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af" };
   }

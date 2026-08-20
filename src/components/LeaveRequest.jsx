@@ -8,6 +8,7 @@ const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color:
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 
 function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
   if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);

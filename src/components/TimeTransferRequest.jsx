@@ -10,6 +10,7 @@ const thS = { padding: "7px 10px", fontSize: 11, color: "#6b7280", borderBottom:
 const tdS = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid #e9ddd0" };
 
 function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
   if (!shiftType || shiftType === "off") return { start: null, end: null, breakMin: 0 };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);

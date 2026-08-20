@@ -14,6 +14,7 @@ const tdS = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid #e9d
 const OT_MAP = { id:"id","従業員id":"empId","日付":"date","シフト終了":"shiftEnd","申請退勤":"requestedEnd","理由":"reason","状態":"status","種別":"type" };
 
 function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
   if (!shiftType || shiftType === "off") return { start: null, end: null };
   if (shiftType.startsWith("custom:")) {
     const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2})/);
