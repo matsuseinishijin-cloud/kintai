@@ -242,8 +242,10 @@ export default function App() {
   const cur = emps.find(e => e.id === loginId);
   // 責任者判定：本人が責任者フラグを持ち、担当グループ（リハ科 or シフト）に応じて管理できる職種の範囲が決まる
   const isLead = !!cur && isLeadVal(cur.isLead);
+  // 責任者判定：リハ科責任者（PT・リハマネ・AT）は3職種まとめて管理。
+  // シフト責任者（医療事務・看護師・放射線技師）は自分の職種のみを管理（部署ごとに独立）。
   const leadManagedRoles = !cur ? [] : REHA_LEAD_ROLES.includes(cur.role) ? REHA_LEAD_ROLES
-    : SHIFT_LEAD_ROLES.includes(cur.role) ? SHIFT_LEAD_ROLES : [];
+    : SHIFT_LEAD_ROLES.includes(cur.role) ? [cur.role] : [];
   const eTabs = ["打刻", "申請", "マイシフト", "タイムカード", ...(isLead ? ["シフト作成"] : [])];
 
   return (
