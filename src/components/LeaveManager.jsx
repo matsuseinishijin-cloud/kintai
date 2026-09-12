@@ -19,31 +19,36 @@ function addYears(dateStr, years) {
   return d.toISOString().slice(0, 10);
 }
 
-// バケツの残日数計算（LIFO）
+// バケツの残日数計算（LIFO・従業員側と同じロジック：申請の帰属＝assignedReqsも追跡）
 function calcBucketsWithRemaining(records, lvReqs, empId) {
-  const td = today();
   let recs = [];
   try { recs = JSON.parse(records || "[]"); } catch { recs = []; }
   const grants = recs.filter(r => r.type === "grant").sort((a, b) => b.grantedAt > a.grantedAt ? 1 : -1); // 新しい順
 
   const approved = (lvReqs || []).filter(r => String(r.empId) === String(empId) && r.status === "approved")
     .sort((a, b) => a.date > b.date ? 1 : -1);
+  const pending = (lvReqs || []).filter(r => String(r.empId) === String(empId) && r.status === "pending")
+    .sort((a, b) => a.date > b.date ? 1 : -1);
 
-  // バケツごとの残日数を計算
-  const buckets = grants.map(g => ({ ...g, remaining: Number(g.days) }));
+  // バケツごとの残日数・帰属申請を計算
+  const buckets = grants.map(g => ({ ...g, remaining: Number(g.days), assignedReqs: [] }));
+  const unassignedReqs = []; // どのバケツからも消化できなかった承認済み申請（＝繰り越し不足）
   approved.forEach(req => {
     const days = isHalfLeave(req.half) ? 0.5 : 1;
-    for (const b of buckets) {
-      if (b.remaining <= 0) continue;
-      if (b.grantedAt > req.date) continue; // 付与日が取得日より後のバケツは対象外
-      if (b.expiresAt && b.expiresAt < req.date) continue;
-      const deduct = Math.min(b.remaining, days);
-      b.remaining -= deduct;
-      break;
-    }
+    const eligible = buckets.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date) && b.remaining > 0);
+    if (eligible.length === 0) { unassignedReqs.push(req); return; }
+    const b = eligible[0]; // bucketsは新しい順なので[0]が最新＝LIFO
+    b.remaining -= Math.min(b.remaining, days);
+    b.assignedReqs.push(req);
+  });
+  // 承認待ちも同様に表示上だけ割り当て（残日数の消化はしない）
+  pending.forEach(req => {
+    const eligible = buckets.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date));
+    if (eligible.length === 0) return;
+    eligible[0].assignedReqs.push(req);
   });
 
-  return buckets;
+  return { buckets, unassignedReqs };
 }
 
 // 残日数の合計（マイナスも許容：不足分を承認した場合に負の値で正しく表示するため）
@@ -67,7 +72,8 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   const td = today();
 
   const leave = leaves.find(l => String(l.empId) === String(sel));
-  const buckets = calcBucketsWithRemaining(leave?.records, lvReqs, sel).sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
+  const { buckets: bucketsRaw, unassignedReqs } = calcBucketsWithRemaining(leave?.records, lvReqs, sel);
+  const buckets = bucketsRaw.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
   const totalGranted = buckets.reduce((s, b) => s + Number(b.days || 0), 0);
   const usedDays = (lvReqs || []).filter(r => String(r.empId) === String(sel) && r.status === "approved").reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   // 残日数：現在有効な（期限切れでない）バケツに残っている日数の合計
@@ -183,55 +189,80 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
           </div>
         </div>
 
-        {/* 右：バケツ一覧 */}
+        {/* 右：付与・取得履歴（従業員側画面と同じバケツ単位のカード表示） */}
         <div style={{ ...crd, overflow: "hidden" }}>
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>付与履歴</div>
-          {buckets.length === 0 ? (
-            <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>付与履歴なし</div>
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid #e9ddd0", fontSize: 14, fontWeight: 600 }}>付与・取得履歴</div>
+          {buckets.length === 0 && unassignedReqs.length === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>履歴なし</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr>{["付与日", "日数", "有効期限", "残日数", "備考", "操作"].map(h => <th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>
-                {buckets.map(b => {
-                  const bucketId = b.id || b.grantedAt;
-                  const isExpired = b.expiresAt && b.expiresAt < td;
-                  const isEditing = editBucket?.id === bucketId;
-                  return (
-                    <tr key={bucketId} style={{ borderBottom: "0.5px solid #e9ddd0", background: isExpired ? "#fafafa" : "inherit" }}>
-                      {isEditing ? (
-                        <>
-                          <td style={tdS}><input type="date" value={editBucket.grantedAt} onChange={e => setEditBucket(p => ({ ...p, grantedAt: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12 }} /></td>
-                          <td style={tdS}><input type="number" min="0.5" step="0.5" value={editBucket.days} onChange={e => setEditBucket(p => ({ ...p, days: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12, width: 60 }} /></td>
-                          <td style={tdS}><input type="date" value={editBucket.expiresAt} onChange={e => setEditBucket(p => ({ ...p, expiresAt: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12 }} /></td>
-                          <td style={tdS}>―</td>
-                          <td style={tdS}><input type="text" value={editBucket.note} onChange={e => setEditBucket(p => ({ ...p, note: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12 }} /></td>
-                          <td style={tdS}>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button onClick={saveBucket} style={{ ...bP, padding: "4px 10px", fontSize: 11 }}>保存</button>
-                              <button onClick={() => setEditBucket(null)} style={{ ...bS, padding: "4px 10px", fontSize: 11 }}>取消</button>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td style={{ ...tdS, color: isExpired ? "#9ca3af" : "#111827" }}>{b.grantedAt}</td>
-                          <td style={{ ...tdS, fontWeight: 500 }}>{b.days}日</td>
-                          <td style={{ ...tdS, color: isExpired ? "#A32D2D" : "#374151" }}>{b.expiresAt}{isExpired && <span style={{ fontSize: 10, marginLeft: 4, color: "#A32D2D" }}>期限切れ</span>}</td>
-                          <td style={{ ...tdS, fontWeight: 600, color: b.remaining > 0 ? "#0F6E56" : "#9ca3af" }}>{b.remaining}日</td>
-                          <td style={{ ...tdS, color: "#6b7280", fontSize: 12 }}>{b.note || "―"}</td>
-                          <td style={tdS}>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button onClick={() => setEditBucket({ id: bucketId, days: String(b.days), grantedAt: b.grantedAt, expiresAt: b.expiresAt, note: b.note || "" })} style={bE}>編集</button>
-                              <button onClick={() => deleteBucket(bucketId)} style={bD}>削除</button>
-                            </div>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{ padding: "8px 12px" }}>
+              {buckets.length === 0 ? (
+                <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>付与履歴なし</div>
+              ) : buckets.map(b => {
+                const bucketId = b.id || b.grantedAt;
+                const isExpired = b.expiresAt && b.expiresAt < td;
+                const isEditing = editBucket?.id === bucketId;
+                return (
+                  <div key={bucketId} style={{ marginBottom: 12, borderRadius: 8, border: `1px solid ${isExpired ? "#e9ddd0" : "#c7d2fe"}`, overflow: "hidden" }}>
+                    {/* バケツヘッダー */}
+                    {isEditing ? (
+                      <div style={{ padding: "8px 12px", background: "#EEF2FF", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input type="date" value={editBucket.grantedAt} onChange={e => setEditBucket(p => ({ ...p, grantedAt: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12, width: "auto" }} />
+                        <input type="number" min="0.5" step="0.5" value={editBucket.days} onChange={e => setEditBucket(p => ({ ...p, days: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12, width: 60 }} />
+                        <input type="date" value={editBucket.expiresAt} onChange={e => setEditBucket(p => ({ ...p, expiresAt: e.target.value }))} style={{ ...iS, padding: "4px 6px", fontSize: 12, width: "auto" }} />
+                        <input type="text" value={editBucket.note} onChange={e => setEditBucket(p => ({ ...p, note: e.target.value }))} placeholder="備考" style={{ ...iS, padding: "4px 6px", fontSize: 12, width: 120 }} />
+                        <button onClick={saveBucket} style={{ ...bP, padding: "4px 10px", fontSize: 11 }}>保存</button>
+                        <button onClick={() => setEditBucket(null)} style={{ ...bS, padding: "4px 10px", fontSize: 11 }}>取消</button>
+                      </div>
+                    ) : (
+                      <div style={{ padding: "8px 12px", background: isExpired ? "#fafafa" : "#EEF2FF", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: isExpired ? "#9ca3af" : "#1251a3" }}>付与日：{b.grantedAt}</span>
+                        <span style={{ fontSize: 12, color: "#6b7280" }}>付与{b.days}日</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: b.remaining > 0 ? "#0F6E56" : "#9ca3af" }}>残{b.remaining}日</span>
+                        {b.expiresAt && <span style={{ fontSize: 11, color: isExpired ? "#A32D2D" : "#6b7280" }}>有効期限：{b.expiresAt}{isExpired ? "（期限切れ）" : ""}</span>}
+                        {b.note && <span style={{ fontSize: 11, color: "#6b7280" }}>{b.note}</span>}
+                        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+                          <button onClick={() => setEditBucket({ id: bucketId, days: String(b.days), grantedAt: b.grantedAt, expiresAt: b.expiresAt, note: b.note || "" })} style={bE}>編集</button>
+                          <button onClick={() => deleteBucket(bucketId)} style={bD}>削除</button>
+                        </div>
+                      </div>
+                    )}
+                    {/* このバケツの申請履歴 */}
+                    {b.assignedReqs.length === 0 ? (
+                      <div style={{ padding: "6px 12px", fontSize: 12, color: "#9ca3af" }}>　申請なし</div>
+                    ) : b.assignedReqs.map(r => (
+                      <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #e9ddd0", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                        <span style={{ color: "#6b7280" }}>└</span>
+                        <span style={{ fontWeight: 500 }}>{r.date}</span>
+                        <span style={{ color: "#374151" }}>{r.reason === "指定休" ? "指定休" : isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
+                        {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
+                        {r.status === "pending" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
+                          : r.status === "approved" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                            : <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              {/* 繰り越し不足（どのバケツからも消化できなかった取得分＝次回付与時に差し引かれる） */}
+              {unassignedReqs.length > 0 && (
+                <div style={{ marginBottom: 12, borderRadius: 8, border: "1px solid #F09595", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", background: "#FFF0F0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#A32D2D" }}>繰り越し不足：{unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0)}日分</span>
+                    <span style={{ fontSize: 11, color: "#A32D2D" }}>次回付与時に差し引かれます</span>
+                  </div>
+                  {unassignedReqs.map(r => (
+                    <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #F09595", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                      <span style={{ color: "#A32D2D" }}>└</span>
+                      <span style={{ fontWeight: 500 }}>{r.date}</span>
+                      <span style={{ color: "#374151" }}>{isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
+                      {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
+                      <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
