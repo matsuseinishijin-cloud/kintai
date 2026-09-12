@@ -122,7 +122,9 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload, allowedRoles }) {
+  // allowedRoles未指定（管理者）は全職種。責任者タブから渡された場合はその職種だけに絞る。
+  const roleOptions = allowedRoles || ROLES;
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -287,7 +289,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
         <button onClick={nextM} style={bS}>›</button>
         <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); if (e.target.value !== "理学療法士") setPtTypeFilter(""); }} style={{ ...iS, width: "auto" }}>
           <option value="">全職種</option>
-          {ROLES.map(r => <option key={r}>{r}</option>)}
+          {roleOptions.map(r => <option key={r}>{r}</option>)}
         </select>
         {roleFilter === "理学療法士" && (
           <select value={ptTypeFilter} onChange={e => setPtTypeFilter(e.target.value)} style={{ ...iS, width: "auto" }}>

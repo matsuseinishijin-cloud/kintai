@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gasGet } from "./api/gas";
-import { ADMIN_PASSWORD, ACCESS_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps, WEEK_ALERT_EXCLUSION_MAP } from "./constants";
+import { ADMIN_PASSWORD, ACCESS_PASSWORD, ROLES, convertFrom, EMP_MAP, PW_MAP, SHIFT_MAP, PUNCH_MAP, LV_REQ_MAP, LEAVE_MAP, TIME_TRANSFER_MAP, PUNCH_FIX_MAP, isActiveEmp, WEEK_PATTERN_MAP, sortEmps, WEEK_ALERT_EXCLUSION_MAP, REHA_LEAD_ROLES, SHIFT_LEAD_ROLES } from "./constants";
 import PunchScreen from "./components/PunchScreen";
 import MyShift from "./components/MyShift";
 import RequestTab from "./components/RequestTab";
@@ -41,6 +41,9 @@ const bP = { padding: "8px 18px", borderRadius: 8, background: "#1251a3", color:
 const bS = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, cursor: "pointer" };
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const nB = active => ({ flex: 1, minWidth: 80, padding: "8px 4px", borderRadius: 8, border: "none", background: active ? "#1251a3" : "transparent", color: active ? "white" : "#6b7280", fontSize: 13, fontWeight: active ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap" });
+
+// 責任者判定（EmpManager.jsxと同じ判定ロジック）
+const isLeadVal = v => v === "true" || v === true || v === "TRUE" || v === 1;
 
 function Loading() { return <div style={{ padding: "2rem", textAlign: "center", color: "#6b7280" }}>読み込み中...</div>; }
 function Err({ msg }) { return <div style={{ padding: "1rem", background: "#FFF0F0", borderRadius: 8, color: "#A32D2D" }}>エラー：{msg}</div>; }
@@ -237,7 +240,11 @@ export default function App() {
 
   const isAdmin = loginId === "admin";
   const cur = emps.find(e => e.id === loginId);
-  const eTabs = ["打刻", "申請", "マイシフト", "タイムカード"];
+  // 責任者判定：本人が責任者フラグを持ち、担当グループ（リハ科 or シフト）に応じて管理できる職種の範囲が決まる
+  const isLead = !!cur && isLeadVal(cur.isLead);
+  const leadManagedRoles = !cur ? [] : REHA_LEAD_ROLES.includes(cur.role) ? REHA_LEAD_ROLES
+    : SHIFT_LEAD_ROLES.includes(cur.role) ? SHIFT_LEAD_ROLES : [];
+  const eTabs = ["打刻", "申請", "マイシフト", "タイムカード", ...(isLead ? ["シフト作成"] : [])];
 
   return (
     <div style={{ padding: "0 0 2rem" }}>
@@ -265,6 +272,15 @@ export default function App() {
           if(isPartStd) return <TimecardPartStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
           return <TimecardSeishainStd emp={cur} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} />;
         })()}
+        {tab === 4 && isLead && (
+          <ShiftCalendar
+            emps={emps.filter(e => leadManagedRoles.includes(e.role))}
+            shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns}
+            lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays}
+            weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions}
+            reload={loadAll} allowedRoles={leadManagedRoles}
+          />
+        )}
       </div>)}
       {isAdmin && (() => {
         const aTabs = ["従業員管理", "シフト", "シフト設定", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
