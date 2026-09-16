@@ -80,21 +80,18 @@ function AccessGate({ onPass }) {
 }
 
 function LoginScreen({ emps, passwords, onLogin }) {
-  const [mode, setMode] = useState("admin");
-  const [roleFilter, setRoleFilter] = useState("全て");
+  const [mode, setMode] = useState("employee");
   const [sel, setSel] = useState(emps[0]?.id || "");
   const [empIdInput, setEmpIdInput] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
-  const allRoles = ["全て", ...ROLES];
-  const filteredEmps = sortEmps(roleFilter === "全て" ? emps : emps.filter(e => e.role === roleFilter));
-  const onRoleChange = r => { setRoleFilter(r); const first = (r === "全て" ? emps : emps.filter(e => e.role === r))[0]; if (first) setSel(first.id); };
+  const filteredEmps = sortEmps(emps);
   // 従業員番号を直接入力→一致する従業員が見つかればプルダウンの選択も連動して切り替える
   const onEmpIdInput = v => {
     const digits = v.replace(/\D/g, "");
     setEmpIdInput(digits);
     const found = emps.find(e => String(e.id) === digits);
-    if (found) { setSel(found.id); setRoleFilter("全て"); setPw(""); setErr(""); }
+    if (found) { setSel(found.id); setPw(""); setErr(""); }
   };
   const matchedEmp = emps.find(e => String(e.id) === empIdInput);
   const doLogin = () => { setErr(""); if (mode === "admin") { if (pw === ADMIN_PASSWORD) { onLogin("admin"); } else { setErr("パスワードが違います"); } } else { const pwRec = passwords.find(p => p.empId === sel); const correct = pwRec?.password || String(sel); if (pw === correct) { onLogin(sel); } else { setErr("パスワードが違います"); } } };
@@ -107,8 +104,6 @@ function LoginScreen({ emps, passwords, onLogin }) {
           {["admin", "employee"].map(m => (<button key={m} onClick={() => { setMode(m); setPw(""); setErr(""); }} style={{ padding: "10px 0", borderRadius: 8, border: mode === m ? "2px solid #1251a3" : "1px solid #d1d5db", background: mode === m ? "#E6F1FB" : "#fff", color: mode === m ? "#1251a3" : "#111827", fontWeight: mode === m ? 600 : 400, cursor: "pointer", fontSize: 14 }}>{m === "admin" ? "管理者" : "従業員"}</button>))}
         </div>
         {mode === "employee" && (<div style={{ marginBottom: "1rem" }}>
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>職種で絞り込み</div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>{allRoles.map(r => (<button key={r} onClick={() => onRoleChange(r)} style={{ padding: "3px 10px", borderRadius: 6, border: roleFilter === r ? "2px solid #1251a3" : "1px solid #d1d5db", background: roleFilter === r ? "#E6F1FB" : "#fff", color: roleFilter === r ? "#1251a3" : "#6b7280", fontSize: 12, cursor: "pointer" }}>{r}</button>))}</div>
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>従業員を選択</div>
           <select value={sel} onChange={e => { setSel(e.target.value); setEmpIdInput(""); setPw(""); }} style={iS}>{filteredEmps.map(e => (<option key={e.id} value={e.id}>[{e.id}] {e.name}（{e.role}・{e.type}）</option>))}</select>
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0" }}>
