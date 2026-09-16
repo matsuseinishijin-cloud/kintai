@@ -122,13 +122,16 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload, allowedRoles }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload, allowedRoles, leadOwnRole }) {
   // allowedRoles未指定（管理者）は全職種。責任者タブから渡された場合はその職種だけに絞る。
   const roleOptions = allowedRoles || ROLES;
+  // 「全職種」（複数部署の横断表示）は管理者、または理学療法士（リハ科責任者）だけに許可。
+  // それ以外の責任者（リハマネ・AT等）は個別の職種を選ぶ必要がある。
+  const showAllOption = !allowedRoles || leadOwnRole === "理学療法士";
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [roleFilter, setRoleFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState(() => (allowedRoles && !showAllOption && allowedRoles.length > 0) ? allowedRoles[0] : "");
   const [ptTypeFilter, setPtTypeFilter] = useState("");
   const [localEdits, setLocalEdits] = useState({});
   const [selectedShift, setSelectedShift] = useState("off");
@@ -178,6 +181,9 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
 
   // セルクリック
   const setCell = (empId, ds, dept) => {
+    // 責任者（理学療法士）が「全職種」横断表示を見ているときは閲覧のみ・編集不可
+    if (allowedRoles && !roleFilter) { alert("「全職種」表示は閲覧のみです。編集するには職種を選択してください。"); return; }
+
     // 全日有休チェック
     const lvApproved = (lvReqs || []).find(r => String(r.empId) === String(empId) && r.date === ds && r.status === "approved" && !isHalfLeave(r.half));
     if (lvApproved) { alert("この日は全日有休が承認済みのためシフト変更できません。"); return; }
@@ -250,6 +256,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   const td = today();
 
   const applyPattern = () => {
+    if (allowedRoles && !roleFilter) { alert("「全職種」表示は閲覧のみです。編集するには職種を選択してください。"); return; }
     if (!patternEmpId || !patternId || !patternStart) { alert("従業員・パターン・開始日を選んでください"); return; }
     const pattern = (weekPatterns || []).find(p => p.id === patternId);
     if (!pattern) return;
@@ -288,7 +295,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
         <span style={{ fontSize: 14, fontWeight: 600, color: "#1251a3" }}>{period.label}</span>
         <button onClick={nextM} style={bS}>›</button>
         <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); if (e.target.value !== "理学療法士") setPtTypeFilter(""); }} style={{ ...iS, width: "auto" }}>
-          <option value="">全職種</option>
+          {showAllOption && <option value="">全職種</option>}
           {roleOptions.map(r => <option key={r}>{r}</option>)}
         </select>
         {roleFilter === "理学療法士" && (

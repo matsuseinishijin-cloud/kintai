@@ -280,7 +280,7 @@ export default function App() {
             shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns}
             lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays}
             weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions}
-            reload={loadAll} allowedRoles={leadManagedRoles}
+            reload={loadAll} allowedRoles={leadManagedRoles} leadOwnRole={cur.role}
           />
         )}
       </div>)}
