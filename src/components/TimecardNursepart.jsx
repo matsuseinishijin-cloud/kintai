@@ -97,7 +97,7 @@ export default function TimecardNursepart({ emp, shifts, punches, shiftDefs, lvR
   const totalAwMin = rows.reduce((s, r) => s + r.awMin, 0);
   const attendDays = rows.filter(r => r.punch?.in && r.punch?.out && !r.absent).length;
   const cd = rows.filter(r => r.needsConfirm).length;
-  const lvC = rows.filter(r => r.isLeave).length;
+  const lvC = rows.reduce((s, r) => r.isLeave ? s + (isHalfLeave(r.lv?.half) ? 0.5 : 1) : s, 0); // 半休は0.5日として集計
   const totalAmMin = rows.reduce((s, r) => s + r.slots.am, 0);
   const totalPm1Min = rows.reduce((s, r) => s + r.slots.pm1, 0);
   const totalPm2Min = rows.reduce((s, r) => s + r.slots.pm2, 0);

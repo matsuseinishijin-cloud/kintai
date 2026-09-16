@@ -112,7 +112,7 @@ export default function TimecardSeishainStd({ emp, shifts, punches, shiftDefs, l
   const abC = rows.filter(r => r.absent).length;
   const lC = rows.filter(r => r.late).length;
   const eC = rows.filter(r => r.earlyLeave).length;
-  const lvC = rows.filter(r => r.isLeave).length;
+  const lvC = rows.reduce((s, r) => r.isLeave ? s + (isHalfLeave(r.lv?.half) ? 0.5 : 1) : s, 0); // 半休は0.5日として集計
 
   // フィルター
   const disp = filter === "issues" ? rows.filter(r => r.absent || r.late || r.earlyLeave || r.otMin > 0 || r.needsConfirm || r.missingOut) : rows;

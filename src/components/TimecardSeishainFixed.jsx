@@ -95,7 +95,7 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
   const abC = rows.filter(r => r.absent).length;
   const lC = rows.filter(r => r.late).length;
   const eC = rows.filter(r => r.earlyLeave).length;
-  const lvC = rows.filter(r => r.isLeave).length;
+  const lvC = rows.reduce((s, r) => r.isLeave ? s + (isHalfLeave(r.lv?.half) ? 0.5 : 1) : s, 0); // 半休は0.5日として集計
   const totalOtMin = rows.reduce((s, r) => s + r.otMin, 0);
   const fixedOTLimitMin = emp.fixedOTLimit ? Number(emp.fixedOTLimit) * 60 : null;
 
