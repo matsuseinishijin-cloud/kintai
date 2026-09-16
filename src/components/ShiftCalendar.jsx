@@ -477,7 +477,7 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
                     const isExcluded = (weekAlertExclusions || []).some(w => String(w.empId) === String(emp.id) && w.weekStart === weekMon);
                     const clickableForExclusion = hasLimit && (isShortfall || isExcluded);
                     const bgColor = !hasLimit ? "#f5f5f5" : isExcluded ? "#F5F9FE" : isExact || typeCApproved ? "#f0f4ff" : "#FCEBEB";
-                    const textColor = !hasLimit ? "#6b7280" : isExcluded ? "#6b7280" : isExact || typeCApproved ? "#1251a3" : "#A32D2D";
+                    const textColor = !hasLimit ? "#6b7280" : isExcluded ? "#6b7280" : isExact || typeCApproved ? "#1251a3" : isOver ? "#A32D2D" : "#1251a3";
 
                     const toggleWeekAlertExclusion = async () => {
                       if (!clickableForExclusion) return;
