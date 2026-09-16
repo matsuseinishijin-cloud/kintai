@@ -121,7 +121,9 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
           const d2 = new Date(mon);
           d2.setDate(mon.getDate() + i);
           const ds2 = `${d2.getFullYear()}-${pad(d2.getMonth() + 1)}-${pad(d2.getDate())}`;
-          if (ds2 > td) continue; // 今日より先の日付は実績ベース集計から除外
+          // ※以前は「今日より先の日付は集計から除外」していたが、これだとシフトカレンダー側の
+          //   週合計（未来の予定も含めて計算）と食い違い、週の途中で誤って「不足」と表示されて
+          //   いたため、シフトカレンダーと同じく予定分も含めて週全体を集計するよう統一。
           const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds2);
           const def2 = getShiftDef(sr?.shiftType, shiftDefs, emp.role);
           if (def2.start && def2.end) {
