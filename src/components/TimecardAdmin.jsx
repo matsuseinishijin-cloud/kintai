@@ -99,6 +99,7 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
       });
       await gasSaveBatch("打刻", dataArray);
       setEdits({});
+      setEditMode(false);
       await reload();
     } catch (e) { alert("保存失敗：" + e.message); }
     setSaving(false);
