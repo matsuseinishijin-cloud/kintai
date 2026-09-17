@@ -159,17 +159,21 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
 
   // ②タイムカード要確認
   const now2 = new Date();
-  let confirmCount = 0;
+  const confirmDates = [];
   // 今日の分は「本日の出勤打刻がありません」で別途通知するため、要確認カウントからは除外
   for (let d = 1; d < now2.getDate(); d++) {
     const ds = `${now2.getFullYear()}-${pad(now2.getMonth() + 1)}-${pad(d)}`;
     const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
     const def2 = getShiftDef(sr?.shiftType, shiftDefs, emp.role);
     const p2 = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
-    if (def2.start && !p2) confirmCount++;
-    if (p2?.in && !p2?.out && ds < td) confirmCount++;
+    if (def2.start && !p2) confirmDates.push(d);
+    else if (p2?.in && !p2?.out && ds < td) confirmDates.push(d);
   }
-  if (confirmCount > 0) notifications.push({ type: "error", msg: `タイムカード要確認が${confirmCount}件あります` });
+  if (confirmDates.length > 0) {
+    const shown = confirmDates.slice(0, 5).map(d => `${now2.getMonth() + 1}/${d}`).join("、");
+    const rest = confirmDates.length > 5 ? `　他${confirmDates.length - 5}件` : "";
+    notifications.push({ type: "error", msg: `タイムカード要確認：${shown}${rest}（「タイムカード」タブでご確認ください）` });
+  }
 
   // ③本日打刻忘れ
   if (def.start && !punch) notifications.push({ type: "warn", msg: "本日の出勤打刻がありません" });
