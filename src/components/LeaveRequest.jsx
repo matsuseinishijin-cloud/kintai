@@ -100,8 +100,10 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
     b.assignedReqs.push(req);
   });
   const buckets = bucketsWithRem.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
-  // 残日数：現在有効な（期限切れでない）バケツに残っている日数の合計（LIFO・日付考慮済みの消化結果）
-  const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0);
+  // 残日数：現在有効な（期限切れでない）バケツの残り合計から、繰り越し不足分（どのバケツにも
+  // 紐づけられなかった取得分）を差し引く
+  const unassignedTotal = unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
+  const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0) - unassignedTotal;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
   const canSubmit = form.date && form.half && (form.half !== "full" ? (form.leaveStart && form.leaveEnd) : true) && form.reason && rem > 0 && !submitting;
 

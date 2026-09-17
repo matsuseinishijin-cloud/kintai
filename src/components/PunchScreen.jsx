@@ -187,14 +187,16 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
     const bucketsWithRem4 = allRecords4.map(b => ({ ...b, remaining: Number(b.days) }));
     const approved4 = (lvReqs || []).filter(r => String(r.empId) === String(emp.id) && r.status === "approved")
       .sort((a, b) => a.date > b.date ? 1 : -1);
+    let unassignedTotal4 = 0;
     approved4.forEach(req => {
       const days = isHalfLeave(req.half) ? 0.5 : 1;
       const eligible = bucketsWithRem4.filter(b => b.grantedAt <= req.date && (!b.expiresAt || b.expiresAt >= req.date) && b.remaining > 0);
-      if (eligible.length === 0) return;
+      if (eligible.length === 0) { unassignedTotal4 += days; return; }
       const b = eligible[0]; // 新しい順なので[0]が最新＝LIFO
       b.remaining -= Math.min(b.remaining, days);
     });
-    const rem = bucketsWithRem4.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0);
+    // 繰り越し不足分（どのバケツにも紐づけられなかった取得分）も残日数から差し引く
+    const rem = bucketsWithRem4.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0) - unassignedTotal4;
     if (rem < 0) notifications.push({ type: "error", msg: `有休残日数が不足しています（${Math.abs(rem)}日超過）` });
     else if (rem === 0) notifications.push({ type: "error", msg: "有休残日数がありません" });
     else if (rem < 2) notifications.push({ type: "info", msg: `有休残日数が少なくなっています（残${rem}日）` });

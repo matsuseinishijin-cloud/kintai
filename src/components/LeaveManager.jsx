@@ -80,7 +80,11 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   // ※ 以前はここで calcTotalRemaining()（非期限切れ付与合計－全期間取得日数）を使っていたが、
   //   期限切れバケツで既に正しく消化済みの分まで二重に差し引いてしまうバグがあったため、
   //   バケツ単位の残り（buckets[].remaining）を合計する方式に修正。
-  const displayRem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0);
+  // 残日数：現在有効な（期限切れでない）バケツの残り合計から、繰り越し不足分（どのバケツにも
+  // 紐づけられなかった取得分）を差し引く。差し引かないと、繰り越し不足があるのに残日数が
+  // 減らないまま表示されてしまう。
+  const unassignedTotal = unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
+  const displayRem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td).reduce((s, b) => s + b.remaining, 0) - unassignedTotal;
 
   // 付与
   const grant = async () => {
