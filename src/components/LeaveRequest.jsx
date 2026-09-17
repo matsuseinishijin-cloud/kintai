@@ -221,9 +221,9 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                       <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #e9ddd0", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
                         <span style={{ color: "#6b7280" }}>└</span>
                         <span style={{ fontWeight: 500 }}>{r.date}</span>
-                        <span style={{ color: "#374151" }}>{r.reason === "指定休" ? "指定休" : isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
+                        <span style={{ color: "#374151" }}>{(r.reason === "指定休" || r.reason?.startsWith("指定有休")) ? "指定休" : isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
                         {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
-                        {r.reason && r.reason !== "指定休" && <span style={{ color: "#9ca3af", fontSize: 11 }}>（{r.reason}）</span>}
+                        {r.reason && r.reason !== "指定休" && !r.reason.startsWith("指定有休") && <span style={{ color: "#9ca3af", fontSize: 11 }}>（{r.reason}）</span>}
                         {r.status === "pending" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FAEEDA", color: "#854F0B" }}>承認待ち</span>
                           : r.status === "approved" ? <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
                             : <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#FFF0F0", color: "#A32D2D" }}>却下</span>}
@@ -243,9 +243,9 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                     <div key={r.id} style={{ padding: "6px 12px", borderTop: "0.5px solid #F09595", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
                       <span style={{ color: "#A32D2D" }}>└</span>
                       <span style={{ fontWeight: 500 }}>{r.date}</span>
-                      <span style={{ color: "#374151" }}>{r.reason === "指定休" ? "指定休" : isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
+                      <span style={{ color: "#374151" }}>{(r.reason === "指定休" || r.reason?.startsWith("指定有休")) ? "指定休" : isHalfLeave(r.half) ? "半日 0.5日" : "全日 1.0日"}</span>
                       {r.leaveStart && r.leaveEnd && <span style={{ color: "#6b7280" }}>{r.leaveStart}〜{r.leaveEnd}</span>}
-                      {r.reason && r.reason !== "指定休" && <span style={{ color: "#9ca3af", fontSize: 11 }}>（{r.reason}）</span>}
+                      {r.reason && r.reason !== "指定休" && !r.reason.startsWith("指定有休") && <span style={{ color: "#9ca3af", fontSize: 11 }}>（{r.reason}）</span>}
                       <span style={{ padding: "1px 6px", borderRadius: 99, fontSize: 10, background: "#EAF3DE", color: "#3B6D11" }}>承認済</span>
                     </div>
                   ))}
