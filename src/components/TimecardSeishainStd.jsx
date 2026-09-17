@@ -45,7 +45,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   }
 
   // 実働時間・残業・遅刻・早退
-  let awMin = 0, otMin = 0, late = false, earlyLeave = false, earlyLeaveMin = 0;
+  let awMin = 0, otMin = 0, late = false, lateMin = 0, earlyLeave = false, earlyLeaveMin = 0;
   let absent = false, missingOut = false, missingIn = false;
 
   if (isLeave) {
@@ -62,8 +62,12 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
     const bk = punch.break != null ? Number(punch.break) : BREAK_MIN;
     const shiftS = toMin(def.start), shiftE = toMin(def.end);
 
-    // 遅刻チェック
-    if (im > shiftS + 1) late = true;
+    // 遅刻チェック・遅刻分（丸め）
+    if (im > shiftS + 1) {
+      late = true;
+      const rawLate = im - shiftS;
+      lateMin = Math.floor(rawLate / roundMin) * roundMin;
+    }
 
     // 早退チェック・早退分（丸め）
     if (om < shiftE - 1) {
@@ -78,15 +82,17 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
 
     // 実働時間 = 所定時間 - 早退分 + 残業分
     awMin = Math.max(0, swMin - earlyLeaveMin + otMin);
-  } else if (!isOff && !punch?.in) {
+  } else if (!isOff && !punch?.in && !punch?.out) {
     absent = true;
+  } else if (!punch?.in && punch?.out) {
+    missingIn = true;
   } else if (punch?.in && !punch?.out) {
     missingOut = true;
   }
 
-  const needsConfirm = !isLeave && (absent || missingOut || missingIn || (earlyLeave && earlyLeaveMin >= 60));
+  const needsConfirm = !isLeave && (absent || missingOut || missingIn || (earlyLeave && earlyLeaveMin >= 60) || (late && lateMin >= 30));
 
-  return { ds, dow, def, punch, lv, lvPending, isOff, isLeave, swMin, awMin, otMin, late, earlyLeave, earlyLeaveMin, absent, missingOut, missingIn, needsConfirm };
+  return { ds, dow, def, punch, lv, lvPending, isOff, isLeave, swMin, awMin, otMin, late, lateMin, earlyLeave, earlyLeaveMin, absent, missingOut, missingIn, needsConfirm };
 }
 
 export default function TimecardSeishainStd({ emp, shifts, punches, shiftDefs, lvReqs, isAdmin = false, editMode = false, edits = {}, onEdit }) {
@@ -122,7 +128,16 @@ export default function TimecardSeishainStd({ emp, shifts, punches, shiftDefs, l
     if (r.isLeave) return <Badge label={isHalfLeave(r.lv?.half) ? "半休" : "有休"} bg="#E1F5EE" color="#0F6E56" />;
     if (r.absent) return <Badge label="欠勤" bg="#FFF0F0" color="#A32D2D" />;
     if (r.missingOut) return <Badge label="退勤忘れ" bg="#FCEBEB" color="#A32D2D" />;
-    if (r.needsConfirm) return <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />;
+    if (r.needsConfirm) {
+      // 30分以上の遅刻が理由の場合は「要確認」と「遅刻」を両方表示
+      if (r.late && r.lateMin >= 30) {
+        return <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+          <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />
+          <Badge label="遅刻" bg="#FAEEDA" color="#854F0B" />
+        </span>;
+      }
+      return <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />;
+    }
     if (r.isOff && r.punch?.in) return <Badge label="休日出勤" bg="#FAEEDA" color="#854F0B" />;
     const badges = [];
     if (r.late) badges.push(<Badge key="late" label="遅刻" bg="#FAEEDA" color="#854F0B" />);

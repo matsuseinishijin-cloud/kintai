@@ -50,7 +50,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   const dow = new Date(ds).getDay();
 
   let awMin = 0, late = false, earlyLeave = false;
-  let absent = false, missingOut = false;
+  let absent = false, missingOut = false, missingIn = false;
   let slots = { am: 0, pm1: 0, pm2: 0, sun: 0 };
 
   if (isLeave) {
@@ -67,15 +67,17 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
       if (im > shiftS + 1) late = true;
       if (om < shiftE - 1) earlyLeave = true;
     }
-  } else if (!isOff && !punch?.in) {
+  } else if (!isOff && !punch?.in && !punch?.out) {
     absent = true;
+  } else if (!punch?.in && punch?.out) {
+    missingIn = true;
   } else if (punch?.in && !punch?.out) {
     missingOut = true;
   }
 
-  const needsConfirm = !isLeave && (absent || missingOut);
+  const needsConfirm = !isLeave && (absent || missingOut || missingIn);
 
-  return { ds, dow, def, punch, lv, isOff, isLeave, awMin, late, earlyLeave, absent, missingOut, needsConfirm, slots };
+  return { ds, dow, def, punch, lv, isOff, isLeave, awMin, late, earlyLeave, absent, missingOut, missingIn, needsConfirm, slots };
 }
 
 export default function TimecardNursepart({ emp, shifts, punches, shiftDefs, lvReqs, editMode = false, edits = {}, onEdit }) {

@@ -160,7 +160,8 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   // ②タイムカード要確認
   const now2 = new Date();
   let confirmCount = 0;
-  for (let d = 1; d <= now2.getDate(); d++) {
+  // 今日の分は「本日の出勤打刻がありません」で別途通知するため、要確認カウントからは除外
+  for (let d = 1; d < now2.getDate(); d++) {
     const ds = `${now2.getFullYear()}-${pad(now2.getMonth() + 1)}-${pad(d)}`;
     const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
     const def2 = getShiftDef(sr?.shiftType, shiftDefs, emp.role);

@@ -57,7 +57,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   const dow = new Date(ds).getDay();
 
   let awMin = 0, otMin = 0, late = false, earlyLeave = false, earlyLeaveMin = 0;
-  let absent = false, missingOut = false;
+  let absent = false, missingOut = false, missingIn = false;
   let slots = { am: 0, pm: 0, night: 0, sun: 0 };
 
   let swMin = 0;
@@ -87,15 +87,18 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
       const rawOt = Math.max(0, om - shiftE);
       otMin = Math.floor(rawOt / roundMin) * roundMin;
     }
-  } else if (!isOff && !punch?.in) {
+  } else if (!isOff && !punch?.in && !punch?.out) {
     absent = true;
+  } else if (!punch?.in && punch?.out) {
+    missingIn = true;
   } else if (punch?.in && !punch?.out) {
     missingOut = true;
   }
 
-  const needsConfirm = !isLeave && (absent || missingOut || (earlyLeave && earlyLeaveMin >= 60));
+  // ①パートは働いた時間のみが給与対象のため、早退は要確認としない
+  const needsConfirm = !isLeave && (absent || missingOut || missingIn);
 
-  return { ds, dow, def, punch, lv, isOff, isLeave, swMin, awMin, otMin, late, earlyLeave, earlyLeaveMin, absent, missingOut, needsConfirm, slots };
+  return { ds, dow, def, punch, lv, isOff, isLeave, swMin, awMin, otMin, late, earlyLeave, earlyLeaveMin, absent, missingOut, missingIn, needsConfirm, slots };
 }
 
 export default function TimecardPartStd({ emp, shifts, punches, shiftDefs, lvReqs, editMode = false, edits = {}, onEdit }) {

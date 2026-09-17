@@ -40,8 +40,8 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
     swMin = Math.max(0, toMin(def.end) - toMin(def.start) - bk);
   }
 
-  let awMin = 0, otMin = 0, late = false, earlyLeave = false, earlyLeaveMin = 0;
-  let absent = false, missingOut = false;
+  let awMin = 0, otMin = 0, late = false, lateMin = 0, earlyLeave = false, earlyLeaveMin = 0;
+  let absent = false, missingOut = false, missingIn = false;
 
   if (isLeave) {
     // 有休
@@ -54,7 +54,11 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   } else if (!isOff && punch?.in && punch?.out) {
     const im = toMin(punch.in), om = toMin(punch.out);
     const shiftS = toMin(def.start), shiftE = toMin(def.end);
-    if (im > shiftS + 1) late = true;
+    if (im > shiftS + 1) {
+      late = true;
+      const rawLate = im - shiftS;
+      lateMin = Math.floor(rawLate / roundMin) * roundMin;
+    }
     if (om < shiftE - 1) {
       earlyLeave = true;
       const rawEl = shiftE - om;
@@ -63,15 +67,17 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
     const rawOt = Math.max(0, om - shiftE);
     otMin = Math.floor(rawOt / roundMin) * roundMin;
     awMin = Math.max(0, swMin - earlyLeaveMin + otMin);
-  } else if (!isOff && !punch?.in) {
+  } else if (!isOff && !punch?.in && !punch?.out) {
     absent = true;
+  } else if (!punch?.in && punch?.out) {
+    missingIn = true;
   } else if (punch?.in && !punch?.out) {
     missingOut = true;
   }
 
-  const needsConfirm = !isLeave && (absent || missingOut || (earlyLeave && earlyLeaveMin >= 60));
+  const needsConfirm = !isLeave && (absent || missingOut || missingIn || (earlyLeave && earlyLeaveMin >= 60) || (late && lateMin >= 30));
 
-  return { ds, dow: new Date(ds).getDay(), def, punch, lv, isOff, isLeave, swMin, awMin, otMin, late, earlyLeave, earlyLeaveMin, absent, missingOut, needsConfirm };
+  return { ds, dow: new Date(ds).getDay(), def, punch, lv, isOff, isLeave, swMin, awMin, otMin, late, lateMin, earlyLeave, earlyLeaveMin, absent, missingOut, missingIn, needsConfirm };
 }
 
 export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs, lvReqs, timeTransferReqs, isAdmin = false, editMode = false, edits = {}, onEdit }) {
@@ -115,7 +121,16 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
     if (r.isLeave) return <Badge label={isHalfLeave(r.lv?.half) ? "半休" : "有休"} bg="#E1F5EE" color="#0F6E56" />;
     if (r.absent) return <Badge label="欠勤" bg="#FFF0F0" color="#A32D2D" />;
     if (r.missingOut) return <Badge label="退勤忘れ" bg="#FCEBEB" color="#A32D2D" />;
-    if (r.needsConfirm) return <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />;
+    if (r.needsConfirm) {
+      // 30分以上の遅刻が理由の場合は「要確認」と「遅刻」を両方表示
+      if (r.late && r.lateMin >= 30) {
+        return <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+          <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />
+          <Badge label="遅刻" bg="#FAEEDA" color="#854F0B" />
+        </span>;
+      }
+      return <Badge label="要確認" bg="#FCEBEB" color="#A32D2D" />;
+    }
     if (r.isOff && r.punch?.in) return <Badge label="休日出勤" bg="#FAEEDA" color="#854F0B" />;
     const badges = [];
     if (r.late) badges.push(<Badge key="late" label="遅刻" bg="#FAEEDA" color="#854F0B" />);

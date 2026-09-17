@@ -37,7 +37,7 @@ function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
   let workMin = 0, lateMin = 0, lateDeduct = 0, otMin = 0;
   let isLate = false, isEarly = false, isOT = false;
   let adjOutMin = null;
-  let absent = false, missingOut = false;
+  let absent = false, missingOut = false, missingIn = false;
 
   if (!isLeave && punch?.in && def.start) {
     const shiftStart = toMin(def.start), shiftEnd = toMin(def.end);
@@ -72,15 +72,17 @@ function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
       isEarly = adjOutMin < shiftEnd - 1;
       isOT = otMin > 0;
     }
-  } else if (!isLeave && !isOff && !punch?.in) {
+  } else if (!isLeave && !isOff && !punch?.in && !punch?.out) {
     absent = true;
+  } else if (!isLeave && !punch?.in && punch?.out) {
+    missingIn = true;
   } else if (punch?.in && !punch?.out) {
     missingOut = true;
   }
 
-  const needsConfirm = !isLeave && (absent || missingOut);
+  const needsConfirm = !isLeave && (absent || missingOut || missingIn);
 
-  return { ds, dow, def, punch, lv, isOff, isLeave, workMin, lateMin, lateDeduct, otMin, isLate, isEarly, isOT, adjOutMin, absent, missingOut, needsConfirm };
+  return { ds, dow, def, punch, lv, isOff, isLeave, workMin, lateMin, lateDeduct, otMin, isLate, isEarly, isOT, adjOutMin, absent, missingOut, missingIn, needsConfirm };
 }
 
 export default function TimecardPTpart({ emp, shifts, punches, shiftDefs, lvReqs, otReqs, editMode = false, edits = {}, onEdit }) {
