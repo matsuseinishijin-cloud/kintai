@@ -43,6 +43,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   const [saving, setSaving] = useState(false);
   const [savingType, setSavingType] = useState(null); // "in" | "out" | null
   const [showPastWeeks, setShowPastWeeks] = useState(false);
+  const [showConfirmDates, setShowConfirmDates] = useState(false);
   const [fixForm, setFixForm] = useState({ date: today(), reqIn: "", reqOut: "", reason: "" });
   const [fixSub, setFixSub] = useState(false);
 
@@ -169,11 +170,7 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
     if (def2.start && !p2) confirmDates.push(d);
     else if (p2?.in && !p2?.out && ds < td) confirmDates.push(d);
   }
-  if (confirmDates.length > 0) {
-    const shown = confirmDates.slice(0, 5).map(d => `${now2.getMonth() + 1}/${d}`).join("、");
-    const rest = confirmDates.length > 5 ? `　他${confirmDates.length - 5}件` : "";
-    notifications.push({ type: "error", msg: `タイムカード要確認：${shown}${rest}（「タイムカード」タブでご確認ください）` });
-  }
+  // ↑要確認の一覧表示は下の通知エリアでタップ展開式にするため、ここでは confirmDates を保持するだけ
 
   // ③本日打刻忘れ
   if (def.start && !punch) notifications.push({ type: "warn", msg: "本日の出勤打刻がありません" });
@@ -224,8 +221,22 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   return (
     <div style={{ maxWidth: 440 }}>
       {/* 通知エリア */}
-      {(otherNotifs.length > 0 || currentWeekNotif || pastWeekNotifs.length > 0) && (
+      {(otherNotifs.length > 0 || currentWeekNotif || pastWeekNotifs.length > 0 || confirmDates.length > 0) && (
         <div style={{ marginBottom: "1rem", display: "flex", flexDirection: "column", gap: 6 }}>
+          {confirmDates.length > 0 && (
+            <div>
+              <div onClick={() => setShowConfirmDates(s => !s)}
+                style={{ cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 500, background: "#FFF0F0", color: "#A32D2D", border: "1px solid #F09595" }}>
+                🔴 タイムカード要確認が{confirmDates.length}件あります {showConfirmDates ? "▲" : "▼ タップで表示"}
+              </div>
+              {showConfirmDates && (
+                <div style={{ padding: "8px 12px", borderRadius: 8, marginTop: 6, background: "#FFF0F0", color: "#A32D2D", border: "1px solid #F09595", fontSize: 13 }}>
+                  {confirmDates.map(d => `${now2.getMonth() + 1}/${d}`).join("、")}<br />
+                  「タイムカード」タブでご確認ください。
+                </div>
+              )}
+            </div>
+          )}
           {otherNotifs.map((n, i) => <NotificationItem key={`o${i}`} {...n} />)}
           {currentWeekNotif && <NotificationItem {...currentWeekNotif} />}
           {pastWeekNotifs.length > 0 && (
