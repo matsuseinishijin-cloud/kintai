@@ -155,6 +155,7 @@ export default function App() {
   const [tab, setTab] = useState(0);
   const [aTab, setATab] = useState(0);
   const [shiftSettingSub, setShiftSettingSub] = useState(0);
+  const [shiftDirty, setShiftDirty] = useState(false); // シフト作成画面に未保存の変更があるか
 
   // 打刻専用の軽量リロード（全13シートではなく打刻データだけ再取得。打刻は最も頻繁な操作なので専用に高速化）
   const reloadPunches = useCallback(async () => {
@@ -271,7 +272,7 @@ export default function App() {
           <button onClick={() => { setLoginId(null); setTab(0); }} style={bS}>ログアウト</button>
         </div>
       </div>
-      {!isAdmin && (<div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => setTab(i)} style={nB(tab === i)}>{t}</button>))}</div>)}
+      {!isAdmin && (<div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => { if (tab === 4 && shiftDirty && i !== 4 && !confirm("シフトの未保存の変更があります。保存せずに移動しますか？")) return; setTab(i); }} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll} reloadPunches={reloadPunches} />}
         {tab === 1 && <RequestTab emp={cur} leaves={leaves} lvReqs={lvReqs} shifts={shifts} shiftDefs={shiftDefs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll}
@@ -294,7 +295,7 @@ export default function App() {
             shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns}
             lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays}
             weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions}
-            reload={loadAll} allowedRoles={leadManagedRoles} leadOwnRole={cur.role}
+            reload={loadAll} allowedRoles={leadManagedRoles} leadOwnRole={cur.role} onDirtyChange={setShiftDirty}
           />
         )}
       </div>)}
@@ -302,10 +303,10 @@ export default function App() {
         const aTabs = ["従業員管理", "シフト", "シフト設定", "申請許可", "有給管理", "タイムカード", "打刻履歴"];
         return <div>
           <div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>
-            {aTabs.map((t, i) => <button key={t} onClick={() => setATab(i)} style={nB(aTab === i)}>{t}</button>)}
+            {aTabs.map((t, i) => <button key={t} onClick={() => { if (aTab === 1 && shiftDirty && i !== 1 && !confirm("シフトの未保存の変更があります。保存せずに移動しますか？")) return; setATab(i); }} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions} reload={loadAll} />}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions} reload={loadAll} onDirtyChange={setShiftDirty} />}
           {aTab === 2 && (() => {
             const shiftSettingTabs = ["シフト定義", "週間パターン"];
             return <div>

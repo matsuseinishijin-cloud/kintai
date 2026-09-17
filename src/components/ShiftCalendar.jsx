@@ -122,7 +122,7 @@ function buildWeekGroups(periodDays) {
   return groups;
 }
 
-export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload, allowedRoles, leadOwnRole }) {
+export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs, shiftDefList, weekPatterns, lvReqs, timeTransferReqs, designatedHolidays, weekAlertExclusions, reloadWeekAlertExclusions, reload, allowedRoles, leadOwnRole, onDirtyChange }) {
   // allowedRoles未指定（管理者）は全職種。責任者タブから渡された場合はその職種だけに絞る。
   const roleOptions = allowedRoles || ROLES;
   // 「全職種」（複数部署の横断表示）は管理者、または理学療法士（リハ科責任者）だけに許可。
@@ -150,6 +150,16 @@ export default function ShiftCalendar({ emps, shifts: shiftsFromProps, shiftDefs
   const periodDays = getPeriodDays(year, month);
   const weekGroups = buildWeekGroups(periodDays);
   const hasEdits = Object.keys(localEdits).length > 0;
+
+  // 未保存のシフト編集がある状態でタブを閉じる・再読み込みしようとしたら警告
+  useEffect(() => {
+    const handler = e => { e.preventDefault(); e.returnValue = ""; };
+    if (hasEdits) window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasEdits]);
+
+  // アプリ内タブ切り替え時の未保存チェック用に、親へ状態を通知
+  useEffect(() => { onDirtyChange?.(hasEdits); }, [hasEdits]);
 
   // シフトをlocalEditsとマージ
   const shifts = (() => {
