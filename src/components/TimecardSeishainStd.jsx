@@ -39,7 +39,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
 
   // 所定時間
   let swMin = 0;
-  if (!isOff && !isLeave && def.start && def.end) {
+  if (!isOff && (!isLeave || isHalfLeave(lv?.half)) && def.start && def.end) {
     const bk = def.breakMin != null ? def.breakMin : BREAK_MIN;
     swMin = Math.max(0, toMin(def.end) - toMin(def.start) - bk);
   }
@@ -48,8 +48,8 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   let awMin = 0, otMin = 0, late = false, lateMin = 0, earlyLeave = false, earlyLeaveMin = 0;
   let absent = false, missingOut = false, missingIn = false;
 
-  if (isLeave) {
-    // 有休：実働なし
+  if (isLeave && !isHalfLeave(lv?.half)) {
+    // 全日有休：実働なし（半休は実際に働いた分の計算を行う）
   } else if (isOff && punch?.in && punch?.out) {
     // 休日出勤：打刻時間から休憩を引いて丸め
     const im = toMin(punch.in), om = toMin(punch.out);

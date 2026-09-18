@@ -39,7 +39,7 @@ function calcPTDay(ds, emp, shiftDefs, shifts, punches, lvReqs, otReqs) {
   let adjOutMin = null;
   let absent = false, missingOut = false, missingIn = false;
 
-  if (!isLeave && punch?.in && def.start) {
+  if ((!isLeave || isHalfLeave(lv?.half)) && punch?.in && def.start) {
     const shiftStart = toMin(def.start), shiftEnd = toMin(def.end);
     const pIn = toMin(punch.in);
     const pOut = punch.out ? toMin(punch.out) : null;

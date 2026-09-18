@@ -218,7 +218,8 @@ export default function PunchScreen({ emp, punches, shifts, shiftDefs, leaves, l
   const weeklyNotifs = notifications.filter(n => n._week);
   const otherNotifs = notifications.filter(n => !n._week);
   const currentWeekNotif = weeklyNotifs.find(n => n._week === curMonStr);
-  const pastWeekNotifs = weeklyNotifs.filter(n => n._week !== curMonStr);
+  // 「過去」なので、今週より後（未来）の週は含めない（今週じゃなければ全部「過去」扱いになっていたバグを修正）
+  const pastWeekNotifs = weeklyNotifs.filter(n => n._week < curMonStr);
 
   return (
     <div style={{ maxWidth: 440 }}>

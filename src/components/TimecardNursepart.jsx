@@ -53,8 +53,8 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
   let absent = false, missingOut = false, missingIn = false;
   let slots = { am: 0, pm1: 0, pm2: 0, sun: 0 };
 
-  if (isLeave) {
-    // 有休
+  if (isLeave && !isHalfLeave(lv?.half)) {
+    // 全日有休：実働なし（半休は実際に働いた分の計算を行う）
   } else if (punch?.in && punch?.out) {
     const im = toMin(punch.in), om = toMin(punch.out);
     const bk = punch.break != null ? Number(punch.break) : 0;
