@@ -28,13 +28,15 @@ const AM_START = toMin("08:30"), AM_END = toMin("14:00");
 const PM1_START = toMin("14:00"), PM1_END = toMin("17:00");
 const PM2_START = toMin("17:00");
 
-function calcNurseSlots(inMin, outMin, dow) {
+function calcNurseSlots(inMin, outMin, dow, breakMin) {
   if (!inMin || !outMin || inMin >= outMin) return { am: 0, pm1: 0, pm2: 0, sun: 0 };
+  // 実働時間の計算（休憩差し引き）と揃えるため、退勤時刻から休憩分を差し引いた時刻を使う
+  const effOut = Math.max(inMin, outMin - (breakMin || 0));
   const isSun = dow === 0;
-  if (isSun) return { am: 0, pm1: 0, pm2: 0, sun: Math.max(0, outMin - inMin) };
-  const am = Math.max(0, Math.min(outMin, AM_END) - Math.max(inMin, AM_START));
-  const pm1 = Math.max(0, Math.min(outMin, PM1_END) - Math.max(inMin, PM1_START));
-  const pm2 = Math.max(0, outMin - Math.max(inMin, PM2_START));
+  if (isSun) return { am: 0, pm1: 0, pm2: 0, sun: Math.max(0, effOut - inMin) };
+  const am = Math.max(0, Math.min(effOut, AM_END) - Math.max(inMin, AM_START));
+  const pm1 = Math.max(0, Math.min(effOut, PM1_END) - Math.max(inMin, PM1_START));
+  const pm2 = Math.max(0, effOut - Math.max(inMin, PM2_START));
   return { am: Math.max(0, am), pm1: Math.max(0, pm1), pm2: Math.max(0, pm2), sun: 0 };
 }
 
@@ -60,7 +62,7 @@ function calcDay(ds, emp, shiftDefs, shifts, punches, lvReqs) {
     const bk = punch.break != null ? Number(punch.break) : 0;
     const raw = Math.max(0, om - im - bk);
     awMin = Math.floor(raw / roundMin) * roundMin;
-    slots = calcNurseSlots(im, om, dow);
+    slots = calcNurseSlots(im, om, dow, bk);
 
     if (!isOff && def.start) {
       const shiftS = toMin(def.start), shiftE = toMin(def.end);
