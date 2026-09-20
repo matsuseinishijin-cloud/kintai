@@ -112,11 +112,15 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
       if (status === "approved") {
         // 打刻を実際に修正（既存レコードがあれば上書き、なければ新規作成）
         const existingPunch = (punches || []).find(p => String(p.empId) === String(req.empId) && p.date === req.date);
+        // 既存の休憩値がなければ、当日のシフト定義から休憩を取得（一律60分にしない）
+        const reqShiftRow = shifts.find(s => String(s.empId) === String(req.empId) && s.date === req.date);
+        const reqEmpRole2 = emps.find(e => String(e.id) === String(req.empId))?.role;
+        const reqDef = getShiftDef(reqShiftRow?.shiftType, shiftDefs, reqEmpRole2);
         const punchData = convertTo({
           id: existingPunch?.id || newId(),
           empId: req.empId, date: req.date,
           in: req.reqIn, out: req.reqOut,
-          break: existingPunch?.break != null ? existingPunch.break : BREAK_MIN,
+          break: existingPunch?.break != null ? existingPunch.break : (reqDef.breakMin != null ? reqDef.breakMin : BREAK_MIN),
           adjusted: true,
         }, PUNCH_MAP);
         await gasSave("打刻", punchData);
@@ -227,10 +231,14 @@ export default function ApprovalCenter({ emps, lvReqs, otReqs, timeTransferReqs,
         if (pfTargets.length > 0) {
           pfTargets.forEach(r => {
             const existingPunch = (punches || []).find(p => String(p.empId) === String(r.empId) && p.date === r.date);
+            // 既存の休憩値がなければ、当日のシフト定義から休憩を取得（一律60分にしない）
+            const rShiftRow = shifts.find(s => String(s.empId) === String(r.empId) && s.date === r.date);
+            const rRole = emps.find(e => String(e.id) === String(r.empId))?.role;
+            const rDef = getShiftDef(rShiftRow?.shiftType, shiftDefs, rRole);
             push("打刻", convertTo({
               id: existingPunch?.id || newId(), empId: r.empId, date: r.date,
               in: r.reqIn, out: r.reqOut,
-              break: existingPunch?.break != null ? existingPunch.break : BREAK_MIN,
+              break: existingPunch?.break != null ? existingPunch.break : (rDef.breakMin != null ? rDef.breakMin : BREAK_MIN),
               adjusted: true,
             }, PUNCH_MAP));
           });

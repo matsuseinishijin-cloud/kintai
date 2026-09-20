@@ -8,6 +8,16 @@ import TimecardPartStd from "./TimecardPartStd";
 import TimecardPTpart from "./TimecardPTpart";
 import TimecardNursepart from "./TimecardNursepart";
 
+function getShiftDef(shiftType, shiftDefs, dept) {
+  if (dept === "AT") dept = "理学療法士"; // ATは理学療法士のシフト定義を転用
+  if (!shiftType || shiftType === "off") return { label: "休日", start: null, end: null, color: "#F5F9FE", tc: "#9ca3af", breakMin: 0 };
+  if (shiftType.startsWith("custom:")) {
+    const match = shiftType.slice(7).match(/^(\d{2}:\d{2})-(\d{2}:\d{2}):?(\d*)$/);
+    if (match) return { label: "臨時", start: match[1], end: match[2], color: "#EDE9FE", tc: "#5B21B6", breakMin: match[3] ? Number(match[3]) : 60 };
+  }
+  return (dept && shiftDefs[`${dept}:${shiftType}`]) || shiftDefs[shiftType] || { label: shiftType, start: null, end: null, color: "#F5F9FE", tc: "#6b7280", breakMin: BREAK_MIN };
+}
+
 const crd = { background: "#fff", border: "1px solid #e9ddd0", borderRadius: 12 };
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "auto" };
 const bP = { padding: "8px 16px", borderRadius: 8, background: "#1251a3", color: "white", border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer" };
@@ -91,10 +101,13 @@ export default function TimecardAdmin({ emps, shifts, punches, shiftDefs, lvReqs
     try {
       const dataArray = Object.entries(edits).map(([ds, v]) => {
         const existing = punches.find(p => String(p.empId) === String(emp.id) && p.date === ds);
+        // 既存の休憩値がなければ、当日のシフト定義から休憩を取得（一律60分にしない）
+        const shiftRow = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
+        const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
         return {
           id: existing?.id || newId(), "従業員id": emp.id, "日付": ds,
           "出勤": v.in ?? existing?.in ?? "", "退勤": v.out ?? existing?.out ?? "",
-          "休憩": existing?.break != null ? existing.break : BREAK_MIN, "補正済": true,
+          "休憩": existing?.break != null ? existing.break : (def.breakMin != null ? def.breakMin : BREAK_MIN), "補正済": true,
         };
       });
       await gasSaveBatch("打刻", dataArray);
