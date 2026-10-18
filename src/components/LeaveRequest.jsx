@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { gasSave } from "../api/gas";
-import { today, newId, toMin } from "../utils/time";
+import { gasSave, gasSaveBatch } from "../api/gas";
+import { today, newId, toMin, pad, DOW_JP } from "../utils/time";
 import { convertTo, isHalfLeave, LV_REQ_MAP } from "../constants";
 
 const iS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, width: "100%" };
@@ -18,10 +18,11 @@ function getShiftDef(shiftType, shiftDefs, dept) {
 }
 
 export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, reload }) {
-  const [form, setForm] = useState({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
+  const [form, setForm] = useState({ date: "", endDate: "", includeOff: false, half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
   const [sub, setSub] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [warn, setWarn] = useState("");
+  const [submittedCount, setSubmittedCount] = useState(1);
 
   // 有休残日数（バケツ方式・LIFO・有効期限考慮）
   const td2 = today();
@@ -36,6 +37,28 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const def = getShiftDef(shiftRow?.shiftType, shiftDefs, emp.role);
   const hasShift = def.start !== null;
 
+  // 連日申請（全日のみ）：取得日〜取得終了日の対象日を計算
+  const isRange = form.half === "full" && !!form.date && !!form.endDate && form.endDate > form.date;
+  const rangeInfo = (() => {
+    if (!isRange) return { targets: form.date ? [form.date] : [], excluded: [], tooLong: false };
+    const days = [];
+    const [sy, sm, sd] = form.date.split("-").map(Number), [ey, em, ed] = form.endDate.split("-").map(Number);
+    let c = new Date(sy, sm - 1, sd); const e = new Date(ey, em - 1, ed);
+    while (c <= e && days.length < 32) { days.push(`${c.getFullYear()}-${pad(c.getMonth() + 1)}-${pad(c.getDate())}`); c.setDate(c.getDate() + 1); }
+    const tooLong = days.length > 31;
+    const targets = [], excluded = [];
+    days.slice(0, 31).forEach(ds => {
+      const already = (lvReqs || []).some(r => String(r.empId) === String(emp.id) && r.date === ds && r.status !== "rejected");
+      const sr = shifts.find(s => String(s.empId) === String(emp.id) && s.date === ds);
+      const hasSh = getShiftDef(sr?.shiftType, shiftDefs, emp.role).start !== null;
+      if (already) excluded.push({ ds, why: "申請済み" });
+      else if (!hasSh && !form.includeOff) excluded.push({ ds, why: "休日" });
+      else targets.push(ds);
+    });
+    return { targets, excluded, tooLong };
+  })();
+  const fmtMD = ds => { const d = new Date(ds); return `${d.getMonth() + 1}/${d.getDate()}(${DOW_JP[d.getDay()]})`; };
+
   // シフトとの重なりチェック
   const checkOverlap = () => {
     if (!hasShift || !form.leaveStart || !form.leaveEnd) return false;
@@ -46,8 +69,9 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
 
   const submit = async () => {
     const timeRequired = form.half !== "full"; // 半日は時間帯必須、全日は任意（未入力なら8時間計上）
-    if (!form.date || (timeRequired && (!form.leaveStart || !form.leaveEnd)) || !form.reason || submitting) return;
+    if (!form.date || (!isRange && timeRequired && (!form.leaveStart || !form.leaveEnd)) || !form.reason || submitting) return;
     if (rem <= 0) { alert("有休残日数がありません"); return; }
+    if (isRange && (rangeInfo.targets.length === 0 || rangeInfo.tooLong)) return;
     // シフト重なり警告（申請は可能）
     if (checkOverlap()) {
       setWarn("申請時間帯にシフトが入っています。シフト責任者に連絡してください。");
@@ -57,6 +81,21 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
 
     setSubmitting(true);
     try {
+      if (isRange) {
+        // 連日申請：対象日ごとに全日の申請を1件ずつ作成（まとめて1回で保存）
+        const dataArray = rangeInfo.targets.map(ds => convertTo({
+          id: newId(), empId: emp.id, date: ds, half: "1日",
+          reason: form.reason, status: "pending", leaveStart: "", leaveEnd: "", leaveBreak: "",
+        }, LV_REQ_MAP));
+        await gasSaveBatch("有給申請", dataArray);
+        setSubmittedCount(rangeInfo.targets.length);
+        setForm({ date: "", endDate: "", includeOff: false, half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
+        setSub(true); setTimeout(() => setSub(false), 3000);
+        await reload();
+        setSubmitting(false);
+        return;
+      }
+      setSubmittedCount(1);
       const halfVal = form.half === "full" ? "1日" : form.half;
       const data = convertTo({
         id: newId(), empId: emp.id, date: form.date,
@@ -66,7 +105,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         leaveBreak: form.leaveBreak ? "1" : "",
       }, LV_REQ_MAP);
       await gasSave("有給申請", data);
-      setForm({ date: "", half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
+      setForm({ date: "", endDate: "", includeOff: false, half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
       await reload();
     } catch (e) { alert("申請失敗：" + e.message); }
@@ -110,7 +149,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const unassignedTotal = unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0) - unassignedTotal;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
-  const canSubmit = form.date && form.half && (form.half !== "full" ? (form.leaveStart && form.leaveEnd) : true) && form.reason && rem > 0 && !submitting;
+  const canSubmit = form.date && form.half && (form.half !== "full" ? (form.leaveStart && form.leaveEnd) : true) && form.reason && rem > 0 && !submitting && (!isRange || (rangeInfo.targets.length > 0 && !rangeInfo.tooLong));
 
   return (
     <div>
@@ -127,7 +166,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>区分</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
               {[["full", "全日（1日）"], ["am", "午前（0.5日）"], ["pm", "午後（0.5日）"]].map(([v, l]) => (
-                <button key={v} onClick={() => setForm(p => ({ ...p, half: v }))}
+                <button key={v} onClick={() => setForm(p => ({ ...p, half: v, endDate: v === "full" ? p.endDate : "" }))}
                   style={{ padding: "8px 0", borderRadius: 8, border: form.half === v ? "2px solid #1251a3" : "1px solid #d1d5db", background: form.half === v ? "#E6F1FB" : "#fff", color: form.half === v ? "#1251a3" : "#111827", fontWeight: form.half === v ? 600 : 400, cursor: "pointer", fontSize: 12 }}>
                   {l}
                 </button>
@@ -138,8 +177,29 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
           {/* 日付 */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>取得日</div>
-            <input type="date" value={form.date} max="2099-12-31" onChange={e => setForm(p => ({ ...p, date: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
+            <input type="date" value={form.date} max="2099-12-31" onChange={e => setForm(p => ({ ...p, date: e.target.value, endDate: p.endDate && p.endDate <= e.target.value ? "" : p.endDate, leaveStart: "", leaveEnd: "" }))} style={iS} />
           </div>
+
+          {/* 取得終了日（全日の連日申請用） */}
+          {form.half === "full" && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>取得終了日（連日で申請する場合のみ・最大31日）</div>
+              <input type="date" value={form.endDate} min={form.date || undefined} max="2099-12-31" onChange={e => setForm(p => ({ ...p, endDate: e.target.value, leaveStart: "", leaveEnd: "" }))} style={iS} />
+              {isRange && (
+                <div style={{ marginTop: 6, padding: "8px 10px", background: "#F5F9FE", borderRadius: 8, fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
+                  <div style={{ fontWeight: 600 }}>申請対象：{rangeInfo.targets.length}日</div>
+                  {rangeInfo.targets.length > 0 && <div>{rangeInfo.targets.map(fmtMD).join("、")}</div>}
+                  {rangeInfo.excluded.length > 0 && <div style={{ color: "#9ca3af", marginTop: 4 }}>除外：{rangeInfo.excluded.map(x => `${fmtMD(x.ds)}（${x.why}）`).join("、")}</div>}
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={form.includeOff} onChange={e => setForm(p => ({ ...p, includeOff: e.target.checked }))} style={{ width: 14, height: 14 }} />
+                    シフトのない日（休日）も申請に含める
+                  </label>
+                  {rangeInfo.tooLong && <div style={{ color: "#A32D2D", marginTop: 4 }}>期間が長すぎます（最大31日）</div>}
+                  {rem > 0 && rangeInfo.targets.length > rem && <div style={{ color: "#854F0B", marginTop: 4 }}>⚠️ 残日数（{rem}日）を超える申請です。超過分は繰り越し不足として扱われます。</div>}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* シフト表示 */}
           {form.date && (
@@ -148,8 +208,8 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             </div>
           )}
 
-          {/* 有休時間帯（全日は任意：未入力なら8時間で計上、半日は必須） */}
-          <div style={{ marginBottom: 10 }}>
+          {/* 有休時間帯（全日は任意：未入力なら8時間で計上、半日は必須）※連日申請のときは非表示（各日8時間で計上） */}
+          {!isRange && <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 3 }}>
               有休時間帯{form.half === "full" ? "（任意・未入力の場合は8時間で計上）" : ""}
             </div>
@@ -163,10 +223,10 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
                 <input type="time" value={form.leaveEnd} onChange={e => setForm(p => ({ ...p, leaveEnd: e.target.value }))} style={iS} />
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* 休憩（時間帯を入力している場合のみ表示。全日で時間帯未入力＝8時間固定計上のときは対象外） */}
-          {form.half && (form.half !== "full" || (form.leaveStart && form.leaveEnd)) && (
+          {!isRange && form.half && (form.half !== "full" || (form.leaveStart && form.leaveEnd)) && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.leaveBreak} onChange={e => setForm(p => ({ ...p, leaveBreak: e.target.checked }))} style={{ width: 16, height: 16 }} />
@@ -188,7 +248,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             style={{ ...bP, width: "100%", padding: "10px 0", opacity: canSubmit ? 1 : 0.4 }}>
             {submitting ? "送信中…" : "申請する"}
           </button>
-          {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>申請しました。</div>}
+          {sub && <div style={{ marginTop: 8, fontSize: 13, color: "#3B6D11", padding: "6px 10px", background: "#EAF3DE", borderRadius: 6 }}>{submittedCount > 1 ? `${submittedCount}日分を申請しました。` : "申請しました。"}</div>}
         </div>
 
         {/* 申請履歴（バケツごとにグループ表示） */}
