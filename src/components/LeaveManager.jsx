@@ -81,7 +81,8 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   const leave = leaves.find(l => String(l.empId) === String(sel));
   const { buckets: bucketsRaw, unassignedReqs } = calcBucketsWithRemaining(leave?.records, lvReqs, sel);
   const buckets = bucketsRaw.sort((a, b) => a.grantedAt > b.grantedAt ? 1 : -1);
-  const totalGranted = buckets.reduce((s, b) => s + Number(b.days || 0), 0);
+  // 付与合計：期限切れ（非表示）の付与は含めず、有効な付与だけの合計
+  const totalGranted = buckets.filter(b => !(b.expiresAt && b.expiresAt < td)).reduce((s, b) => s + Number(b.days || 0), 0);
   const usedDays = (lvReqs || []).filter(r => String(r.empId) === String(sel) && r.status === "approved").reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   // 残日数：現在有効な（期限切れでない）バケツに残っている日数の合計
   // ※ 以前はここで calcTotalRemaining()（非期限切れ付与合計－全期間取得日数）を使っていたが、
