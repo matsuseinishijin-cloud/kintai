@@ -72,6 +72,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
   const [sel, setSel] = useState(emps[0]?.id || "");
   const [form, setForm] = useState({ days: "", note: "", grantedAt: today() });
   const [editBucket, setEditBucket] = useState(null);
+  const [showExpired, setShowExpired] = useState(false); // 期限切れの付与を表示するか（既定は非表示）
   const [roleFilter, setRoleFilter] = useState("");
 
   const filteredEmps = sortEmps(roleFilter ? emps.filter(e => e.role === roleFilter) : emps);
@@ -140,12 +141,17 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
     try { recs = JSON.parse(cur?.records || "[]"); } catch { recs = []; }
     const target = recs.find(r => r.type === "grant" && (r.id || r.grantedAt) === bucketId);
     if (!target) return;
+    if (target.expiresAt && target.expiresAt < td) { alert("期限切れの付与は、過去の取得の割り当てに使うため削除できません。"); return; }
     const removeDays = Number(target.days || 0);
     const filtered = recs.filter(r => !(r.type === "grant" && (r.id || r.grantedAt) === bucketId));
     const data = convertTo({ id: cur?.id || newId(), empId: sel, granted: Math.max(0, Number(cur?.granted || 0) - removeDays), used: Number(cur?.used || 0), records: JSON.stringify(filtered) }, LEAVE_MAP);
     try { await gasSave("有給", data); await reload(); }
     catch (e) { alert("削除失敗：" + e.message); }
   };
+
+  // 期限切れの付与は、画面上は非表示にするだけで削除はしない（過去の取得の割り当てに使い続けるため）
+  const expiredCount = buckets.filter(b => b.expiresAt && b.expiresAt < td).length;
+  const visibleBuckets = showExpired ? buckets : buckets.filter(b => !(b.expiresAt && b.expiresAt < td));
 
   const roles = [...new Set(emps.map(e => e.role))];
 
@@ -206,9 +212,18 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
             <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>履歴なし</div>
           ) : (
             <div style={{ padding: "8px 12px" }}>
+              {expiredCount > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                  <button onClick={() => setShowExpired(v => !v)} style={{ ...bS, padding: "3px 10px", fontSize: 11 }}>
+                    {showExpired ? "期限切れを非表示にする" : `期限切れを表示（${expiredCount}件）`}
+                  </button>
+                </div>
+              )}
               {buckets.length === 0 ? (
                 <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>付与履歴なし</div>
-              ) : buckets.map(b => {
+              ) : visibleBuckets.length === 0 ? (
+                <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>有効な付与はありません</div>
+              ) : visibleBuckets.map(b => {
                 const bucketId = b.id || b.grantedAt;
                 const isExpired = b.expiresAt && b.expiresAt < td;
                 const isEditing = editBucket?.id === bucketId;
@@ -233,7 +248,7 @@ export default function LeaveManager({ emps, leaves, lvReqs, designatedHolidays,
                         {b.note && <span style={{ fontSize: 11, color: "#6b7280" }}>{b.note}</span>}
                         <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
                           <button onClick={() => setEditBucket({ id: bucketId, days: String(b.days), grantedAt: b.grantedAt, expiresAt: b.expiresAt, note: b.note || "" })} style={bE}>編集</button>
-                          <button onClick={() => deleteBucket(bucketId)} style={bD}>削除</button>
+                          {!isExpired && <button onClick={() => deleteBucket(bucketId)} style={bD}>削除</button>}
                         </div>
                       </div>
                     )}

@@ -23,6 +23,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const [submitting, setSubmitting] = useState(false);
   const [warn, setWarn] = useState("");
   const [submittedCount, setSubmittedCount] = useState(1);
+  const [showExpired, setShowExpired] = useState(false); // 期限切れの付与を表示するか（既定は非表示）
 
   // 有休残日数（バケツ方式・LIFO・有効期限考慮）
   const td2 = today();
@@ -149,6 +150,9 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
   const unassignedTotal = unassignedReqs.reduce((s, r) => s + (isHalfLeave(r.half) ? 0.5 : 1), 0);
   const rem = buckets.filter(b => !b.expiresAt || b.expiresAt >= td2).reduce((s, b) => s + b.remaining, 0) - unassignedTotal;
   const myReqs = (lvReqs || []).filter(r => String(r.empId) === String(emp.id)).sort((a, b) => b.date > a.date ? 1 : -1);
+  // 期限切れの付与は、画面上は非表示にするだけ（残日数・割り当ての計算には引き続き使う）
+  const expiredCount = buckets.filter(b => b.expiresAt && b.expiresAt < td2).length;
+  const visibleBuckets = showExpired ? buckets : buckets.filter(b => !(b.expiresAt && b.expiresAt < td2));
   const canSubmit = form.date && form.half && (form.half !== "full" ? (form.leaveStart && form.leaveEnd) : true) && form.reason && rem > 0 && !submitting && (!isRange || (rangeInfo.targets.length > 0 && !rangeInfo.tooLong));
 
   return (
@@ -258,9 +262,18 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
             <div style={{ padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>履歴なし</div>
           ) : (
             <div style={{ padding: "8px 12px" }}>
+              {expiredCount > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                  <button onClick={() => setShowExpired(v => !v)} style={{ padding: "3px 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 11, cursor: "pointer" }}>
+                    {showExpired ? "期限切れを非表示にする" : `期限切れを表示（${expiredCount}件）`}
+                  </button>
+                </div>
+              )}
               {buckets.length === 0 ? (
                 <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>付与履歴なし</div>
-              ) : buckets.map((b, bi) => {
+              ) : visibleBuckets.length === 0 ? (
+                <div style={{ padding: "1rem", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>有効な付与はありません</div>
+              ) : visibleBuckets.map((b, bi) => {
                 const bucketId = b.id || b.grantedAt;
                 const td2 = today();
                 const isExpired = b.expiresAt && b.expiresAt < td2;
