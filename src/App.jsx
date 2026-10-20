@@ -45,6 +45,23 @@ const nB = active => ({ flex: 1, minWidth: 80, padding: "8px 4px", borderRadius:
 // 責任者判定（EmpManager.jsxと同じ判定ロジック）
 const isLeadVal = v => v === "true" || v === true || v === "TRUE" || v === 1;
 
+// シフト定義（スプレッドシートの行）→ { 部署:キー の対応表, 一覧 } に変換する
+function buildShiftDefs(sd) {
+  const defsMap = {};
+  const defsList = [];
+  sd.forEach(d => {
+    if (!d["キー"]) return;
+    const entry = { id: d["id"], key: d["キー"], dept: d["部署"] || "", label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60, order: d["順番"] != null && d["順番"] !== "" ? Number(d["順番"]) : 999 };
+    // 同じキー（例："A"）が部署をまたいで重複定義されるケースがあるため、
+    // 「部署:キー」の組み合わせで正しく引けるようにする（部署単位が優先）。
+    // キーのみのエントリも後方互換のため残すが、複数部署で重複する場合は最後の1件で上書きされる点に注意。
+    defsMap[d["キー"]] = entry;
+    if (d["部署"]) defsMap[`${d["部署"]}:${d["キー"]}`] = entry;
+    defsList.push(entry);
+  });
+  return { defsMap, defsList };
+}
+
 function Loading() { return <div style={{ padding: "2rem", textAlign: "center", color: "#6b7280" }}>読み込み中...</div>; }
 function Err({ msg }) { return <div style={{ padding: "1rem", background: "#FFF0F0", borderRadius: 8, color: "#A32D2D" }}>エラー：{msg}</div>; }
 
@@ -151,6 +168,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState(""); // 更新失敗時の小さな通知
   const [loginId, setLoginId] = useState(null);
   const [tab, setTab] = useState(0);
   const [aTab, setATab] = useState(0);
@@ -201,51 +219,81 @@ export default function App() {
     await Promise.all([reloadPunchFixReqs(), reloadPunches()]);
   }, [reloadPunchFixReqs, reloadPunches]);
 
+  // 全シートを取得して画面のデータに反映する（失敗したら例外を投げる）
+  const fetchAllData = useCallback(async () => {
+    const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp, wae] = await Promise.all([
+      gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
+      gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
+      gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
+      gasGet("残業申請"), gasGet("その他申請"), gasGet("指定休"),
+      gasGet("週間パターン"), gasGet("週アラート除外"),
+    ]);
+    setEmps(e.map(r => convertFrom(r, EMP_MAP)));
+    setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
+    setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
+    setLvReqs(lr.map(r => convertFrom(r, LV_REQ_MAP)));
+    setLeaves(lv.map(r => convertFrom(r, LEAVE_MAP)));
+    setPasswords(pw.map(r => convertFrom(r, PW_MAP)));
+    setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP)));
+    setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP)));
+    setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
+    setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
+    setDesignatedHolidays(dh.map(r => convertFrom(r, { id:"id","日付":"date","メモ":"memo" })));
+    setWeekAlertExclusions(wae.map(r => convertFrom(r, WEEK_ALERT_EXCLUSION_MAP)));
+    setWeekPatterns(wp.map(r => convertFrom(r, WEEK_PATTERN_MAP)));
+    const { defsMap, defsList } = buildShiftDefs(sd);
+    setShiftDefs(defsMap);
+    setShiftDefList(defsList);
+  }, []);
+
+  // 従来どおりの全再読み込み（失敗時は全画面エラー）
   const loadAll = useCallback(async () => {
     try {
-      const [e, s, p, lr, lv, pw, sd, ttr, pfr, otr, otr2, dh, wp, wae] = await Promise.all([
-        gasGet("従業員"), gasGet("シフト"), gasGet("打刻"),
-        gasGet("有給申請"), gasGet("有給"), gasGet("パスワード"),
-        gasGet("シフト定義"), gasGet("時間振替申請"), gasGet("打刻修正申請"),
-        gasGet("残業申請"), gasGet("その他申請"), gasGet("指定休"),
-        gasGet("週間パターン"), gasGet("週アラート除外"),
-      ]);
-      setEmps(e.map(r => convertFrom(r, EMP_MAP)));
-      setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
-      setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
-      setLvReqs(lr.map(r => convertFrom(r, LV_REQ_MAP)));
-      setLeaves(lv.map(r => convertFrom(r, LEAVE_MAP)));
-      setPasswords(pw.map(r => convertFrom(r, PW_MAP)));
-      setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP)));
-      setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP)));
-      setOtReqs(otr.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","種別":"type","状態":"status","申請退勤":"requestedEnd","シフト終了":"shiftEnd" })));
-      setOtherReqs(otr2.map(r => convertFrom(r, { id:"id","従業員id":"empId","日付":"date","内容":"content","状態":"status","申請日時":"createdAt","コメント":"comment" })));
-      setDesignatedHolidays(dh.map(r => convertFrom(r, { id:"id","日付":"date","メモ":"memo" })));
-      setWeekAlertExclusions(wae.map(r => convertFrom(r, WEEK_ALERT_EXCLUSION_MAP)));
-      setWeekPatterns(wp.map(r => convertFrom(r, WEEK_PATTERN_MAP)));
-      const defsMap = {};
-      const defsList = [];
-      sd.forEach(d => {
-        if (!d["キー"]) return;
-        const entry = { id: d["id"], key: d["キー"], dept: d["部署"] || "", label: d["名前"] || d["キー"], start: d["開始"] || null, end: d["終了"] || null, color: d["色"] || "#F5F9FE", tc: d["文字色"] || "#6b7280", breakMin: d["休憩"] != null ? Number(d["休憩"]) : 60, order: d["順番"] != null && d["順番"] !== "" ? Number(d["順番"]) : 999 };
-        // 同じキー（例："A"）が部署をまたいで重複定義されるケースがあるため、
-        // 「部署:キー」の組み合わせで正しく引けるようにする（部署単位が優先）。
-        // キーのみのエントリも後方互換のため残すが、複数部署で重複する場合は最後の1件で上書きされる点に注意。
-        defsMap[d["キー"]] = entry;
-        if (d["部署"]) defsMap[`${d["部署"]}:${d["キー"]}`] = entry;
-        defsList.push(entry);
-      });
-      setShiftDefs(defsMap);
-      setShiftDefList(defsList);
+      await fetchAllData();
     } catch (e) { setError(e.message); }
     setLoading(false);
+  }, [fetchAllData]);
+
+  // ── 保存後の「必要なシートだけ」の再読み込み ──────────────────────────────
+  // 失敗しても全画面エラーにはせず、小さな通知を出す（保存自体は成功しているため）。
+  const softReload = useCallback(async fn => {
+    try { await fn(); setRefreshNotice(""); }
+    catch (e) { setRefreshNotice("保存しました。ただし最新の表示への更新に失敗しました。右上の「🔄 更新」を押してください。"); }
   }, []);
+  // シフト保存後：シフト・有給申請（指定有休で自動作成されるため）
+  const reloadShiftsAndLeaveReqs = useCallback(() => softReload(async () => {
+    const [s, lr] = await Promise.all([gasGet("シフト"), gasGet("有給申請")]);
+    setShifts(s.map(r => convertFrom(r, SHIFT_MAP)));
+    setLvReqs(lr.map(r => convertFrom(r, LV_REQ_MAP)));
+  }), [softReload]);
+  // 打刻の一括修正後：打刻のみ
+  const reloadPunchesSoft = useCallback(() => softReload(async () => {
+    const p = await gasGet("打刻");
+    setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
+  }), [softReload]);
+  // シフト定義の保存・並べ替え・削除後：シフト定義のみ
+  const reloadShiftDefsSoft = useCallback(() => softReload(async () => {
+    const sd = await gasGet("シフト定義");
+    const { defsMap, defsList } = buildShiftDefs(sd);
+    setShiftDefs(defsMap);
+    setShiftDefList(defsList);
+  }), [softReload]);
+  // 週間パターンの保存・削除後：週間パターンのみ
+  const reloadWeekPatternsSoft = useCallback(() => softReload(async () => {
+    const wp = await gasGet("週間パターン");
+    setWeekPatterns(wp.map(r => convertFrom(r, WEEK_PATTERN_MAP)));
+  }), [softReload]);
 
   useEffect(() => { if (accessGranted) loadAll(); }, [loadAll, accessGranted]);
 
   const doRefresh = async () => {
     setRefreshing(true);
-    try { await loadAll(); } finally { setRefreshing(false); }
+    try {
+      await fetchAllData();
+      setRefreshNotice("");
+    } catch (e) {
+      setRefreshNotice("最新の状態に更新できませんでした。通信状況を確認して、もう一度「🔄 更新」を押してください。");
+    } finally { setRefreshing(false); }
   };
 
   if (!accessGranted) return <AccessGate onPass={() => setAccessGranted(true)} />;
@@ -272,6 +320,12 @@ export default function App() {
           <button onClick={() => { setLoginId(null); setTab(0); }} style={bS}>ログアウト</button>
         </div>
       </div>
+      {refreshNotice && (
+        <div className="no-print" style={{ marginBottom: "1rem", padding: "8px 12px", borderRadius: 8, fontSize: 13, background: "#FFF8E1", color: "#854F0B", border: "1px solid #F59E0B", display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
+          <span>⚠️ {refreshNotice}</span>
+          <button onClick={() => setRefreshNotice("")} style={{ ...bS, padding: "2px 8px", fontSize: 11 }}>閉じる</button>
+        </div>
+      )}
       {!isAdmin && (<div className="no-print" style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, ...crd, marginBottom: "1rem", flexWrap: "wrap" }}>{eTabs.map((t, i) => (<button key={t} onClick={() => { if (tab === 4 && shiftDirty && i !== 4 && !confirm("シフトの未保存の変更があります。保存せずに移動しますか？")) return; setTab(i); }} style={nB(tab === i)}>{t}</button>))}</div>)}
       {!isAdmin && cur && (<div>
         {tab === 0 && <PunchScreen emp={cur} punches={punches} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} weekAlertExclusions={weekAlertExclusions} reload={loadAll} reloadPunches={reloadPunches} />}
@@ -295,7 +349,7 @@ export default function App() {
             shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns}
             lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays}
             weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions}
-            reload={loadAll} allowedRoles={leadManagedRoles} leadOwnRole={cur.role} onDirtyChange={setShiftDirty}
+            reload={reloadShiftsAndLeaveReqs} allowedRoles={leadManagedRoles} leadOwnRole={cur.role} onDirtyChange={setShiftDirty}
           />
         )}
       </div>)}
@@ -306,7 +360,7 @@ export default function App() {
             {aTabs.map((t, i) => <button key={t} onClick={() => { if (aTab === 1 && shiftDirty && i !== 1 && !confirm("シフトの未保存の変更があります。保存せずに移動しますか？")) return; setATab(i); }} style={nB(aTab === i)}>{t}</button>)}
           </div>
           {aTab === 0 && <EmpManager emps={emps} passwords={passwords} reload={loadAll} />}
-          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions} reload={loadAll} onDirtyChange={setShiftDirty} />}
+          {aTab === 1 && <ShiftCalendar emps={emps} shifts={shifts} shiftDefs={shiftDefs} shiftDefList={shiftDefList} weekPatterns={weekPatterns} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} designatedHolidays={designatedHolidays} weekAlertExclusions={weekAlertExclusions} reloadWeekAlertExclusions={reloadWeekAlertExclusions} reload={reloadShiftsAndLeaveReqs} onDirtyChange={setShiftDirty} />}
           {aTab === 2 && (() => {
             const shiftSettingTabs = ["シフト定義", "週間パターン"];
             return <div>
@@ -318,14 +372,14 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              {shiftSettingSub === 0 && <ShiftDefManager shiftDefList={shiftDefList} reload={loadAll} />}
-              {shiftSettingSub === 1 && <WeekPatternManager weekPatterns={weekPatterns} shiftDefList={shiftDefList} reload={loadAll} />}
+              {shiftSettingSub === 0 && <ShiftDefManager shiftDefList={shiftDefList} reload={reloadShiftDefsSoft} />}
+              {shiftSettingSub === 1 && <WeekPatternManager weekPatterns={weekPatterns} shiftDefList={shiftDefList} reload={reloadWeekPatternsSoft} />}
             </div>;
           })()}
           {aTab === 3 && <ApprovalCenter emps={emps} lvReqs={lvReqs} otReqs={otReqs} timeTransferReqs={timeTransferReqs} punchFixReqs={punchFixReqs} otherReqs={otherReqs} shifts={shifts} shiftDefs={shiftDefs} leaves={leaves} punches={punches} reload={loadAll}
             reloadLeaveReqs={reloadLeaveReqs} reloadPunchFixAndPunches={reloadPunchFixAndPunches} reloadOtReqs={reloadOtReqs} reloadTimeTransferReqs={reloadTimeTransferReqs} reloadOtherReqs={reloadOtherReqs} />}
           {aTab === 4 && <LeaveManager emps={emps} leaves={leaves} lvReqs={lvReqs} designatedHolidays={designatedHolidays} reload={loadAll} />}
-          {aTab === 5 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={loadAll} />}
+          {aTab === 5 && <TimecardAdmin emps={emps} shifts={shifts} punches={punches} shiftDefs={shiftDefs} lvReqs={lvReqs} timeTransferReqs={timeTransferReqs} otReqs={otReqs} reload={reloadPunchesSoft} />}
           {aTab === 6 && <PunchHistory emps={emps} punches={punches} reload={loadAll} />}
         </div>;
       })()}

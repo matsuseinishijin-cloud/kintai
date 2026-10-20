@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { gasSave, gasDelete } from "../api/gas";
+import { gasSave, gasDelete, gasSaveBatch } from "../api/gas";
 import { newId } from "../utils/time";
 import { ROLES, convertTo } from "../constants";
 
@@ -75,8 +75,11 @@ export default function ShiftDefManager({ shiftDefList, reload }) {
     const target = deptDefs[idx + dir];
     if (!target) return;
     try {
-      await gasSave("シフト定義", convertTo({ id: d.id, key: d.key, label: d.label, start: d.start || "", end: d.end || "", color: d.color, tc: d.tc, dept: d.dept, order: target.order, breakMin: d.breakMin }, SHIFTDEF_MAP));
-      await gasSave("シフト定義", convertTo({ id: target.id, key: target.key, label: target.label, start: target.start || "", end: target.end || "", color: target.color, tc: target.tc, dept: target.dept, order: d.order, breakMin: target.breakMin }, SHIFTDEF_MAP));
+      // 2件を1回の通信でまとめて保存（途中で片方だけ失敗して並び順の番号が重複するのを防ぐ）
+      await gasSaveBatch("シフト定義", [
+        convertTo({ id: d.id, key: d.key, label: d.label, start: d.start || "", end: d.end || "", color: d.color, tc: d.tc, dept: d.dept, order: target.order, breakMin: d.breakMin }, SHIFTDEF_MAP),
+        convertTo({ id: target.id, key: target.key, label: target.label, start: target.start || "", end: target.end || "", color: target.color, tc: target.tc, dept: target.dept, order: d.order, breakMin: target.breakMin }, SHIFTDEF_MAP),
+      ]);
       await reload();
     } catch (e) { alert("並び替え失敗：" + e.message); }
   };
