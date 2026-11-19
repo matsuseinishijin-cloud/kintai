@@ -45,7 +45,7 @@ export default function OvertimeExtendRequest({ emp, shifts, shiftDefs, otReqs, 
       await gasSave("残業申請", data);
       setForm({ date: td, requestedEnd: "", reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };

@@ -92,7 +92,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
         setSubmittedCount(rangeInfo.targets.length);
         setForm({ date: "", endDate: "", includeOff: false, half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
         setSub(true); setTimeout(() => setSub(false), 3000);
-        await reload();
+        await reload(dataArray);
         setSubmitting(false);
         return;
       }
@@ -108,7 +108,7 @@ export default function LeaveRequest({ emp, leaves, lvReqs, shifts, shiftDefs, r
       await gasSave("有給申請", data);
       setForm({ date: "", endDate: "", includeOff: false, half: "", leaveStart: "", leaveEnd: "", leaveBreak: false, reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };

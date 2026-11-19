@@ -146,6 +146,24 @@ function LoginScreen({ emps, passwords, onLogin }) {
   );
 }
 
+// 申請系の再読み込み用の補助
+// ・応答が前後しても「最後に出した取得」だけを画面に反映する
+// ・送信した内容を、サーバーから返る形（空は null、値は文字列）にそろえて先に画面へ反映する
+const REQ_OT_MAP = { id: "id", "従業員id": "empId", "日付": "date", "種別": "type", "状態": "status", "申請退勤": "requestedEnd", "シフト終了": "shiftEnd" };
+const REQ_OTHER_MAP = { id: "id", "従業員id": "empId", "日付": "date", "内容": "content", "状態": "status", "申請日時": "createdAt", "コメント": "comment" };
+const fetchSeq = {};
+async function refetchSheet(sheet, apply) {
+  const n = (fetchSeq[sheet] = (fetchSeq[sheet] || 0) + 1);
+  const rows = await gasGet(sheet);
+  if (fetchSeq[sheet] === n) apply(rows);
+}
+function mergeById(prev, saved, map) {
+  const add = [].concat(saved).map(r => convertFrom(
+    Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v === "" || v == null ? null : String(v)])), map));
+  const ids = new Set(add.map(r => String(r.id)));
+  return [...prev.filter(r => !ids.has(String(r.id))), ...add];
+}
+
 export default function App() {
   const [accessGranted, setAccessGranted] = useState(() => {
     try { return localStorage.getItem(ACCESS_GATE_KEY) === "1"; } catch { return false; }
@@ -175,39 +193,30 @@ export default function App() {
   const [shiftSettingSub, setShiftSettingSub] = useState(0);
   const [shiftDirty, setShiftDirty] = useState(false); // シフト作成画面に未保存の変更があるか
 
-  // 打刻専用の軽量リロード（全13シートではなく打刻データだけ再取得。打刻は最も頻繁な操作なので専用に高速化）
-  const reloadPunches = useCallback(async () => {
-    try {
-      const p = await gasGet("打刻");
-      setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
-    } catch (e) { setError(e.message); }
+  // 保存後の再読み込み：失敗しても全画面エラーにはせず、小さな通知を出す（保存自体は成功しているため）。
+  const softReload = useCallback(async fn => {
+    try { await fn(); setRefreshNotice(""); }
+    catch (e) { setRefreshNotice("保存しました。ただし最新の表示への更新に失敗しました。右上の「🔄 更新」を押してください。"); }
   }, []);
 
+  // 打刻専用の軽量リロード（全13シートではなく打刻データだけ再取得。打刻は最も頻繁な操作なので専用に高速化）
+  const reloadPunches = useCallback(() => softReload(async () => {
+    const p = await gasGet("打刻");
+    setPunches(p.map(r => convertFrom(r, PUNCH_MAP)));
+  }), [softReload]);
+
   // 申請系の軽量リロード（申請したデータの種類だけ再取得）
-  const reloadLeaveReqs = useCallback(async () => {
-    try { const lr = await gasGet("有給申請"); setLvReqs(lr.map(r => convertFrom(r, LV_REQ_MAP))); }
-    catch (e) { setError(e.message); }
-  }, []);
-  const reloadPunchFixReqs = useCallback(async () => {
-    try { const pfr = await gasGet("打刻修正申請"); setPunchFixReqs(pfr.map(r => convertFrom(r, PUNCH_FIX_MAP))); }
-    catch (e) { setError(e.message); }
-  }, []);
-  const reloadOtReqs = useCallback(async () => {
-    try {
-      const otr = await gasGet("残業申請");
-      setOtReqs(otr.map(r => convertFrom(r, { id: "id", "従業員id": "empId", "日付": "date", "種別": "type", "状態": "status", "申請退勤": "requestedEnd", "シフト終了": "shiftEnd" })));
-    } catch (e) { setError(e.message); }
-  }, []);
-  const reloadTimeTransferReqs = useCallback(async () => {
-    try { const ttr = await gasGet("時間振替申請"); setTimeTransferReqs(ttr.map(r => convertFrom(r, TIME_TRANSFER_MAP))); }
-    catch (e) { setError(e.message); }
-  }, []);
-  const reloadOtherReqs = useCallback(async () => {
-    try {
-      const otr2 = await gasGet("その他申請");
-      setOtherReqs(otr2.map(r => convertFrom(r, { id: "id", "従業員id": "empId", "日付": "date", "内容": "content", "状態": "status", "申請日時": "createdAt", "コメント": "comment" })));
-    } catch (e) { setError(e.message); }
-  }, []);
+  // saved（送信した内容）を渡すと、それを先に画面へ反映し、最新データの取得は待たずに裏で行う。
+  const reloadReq = useCallback((sheet, map, setter, saved) => {
+    if (saved) setter(prev => mergeById(prev, saved, map));
+    const p = softReload(() => refetchSheet(sheet, rows => setter(rows.map(r => convertFrom(r, map)))));
+    return saved ? undefined : p;
+  }, [softReload]);
+  const reloadLeaveReqs = useCallback(saved => reloadReq("有給申請", LV_REQ_MAP, setLvReqs, saved), [reloadReq]);
+  const reloadPunchFixReqs = useCallback(saved => reloadReq("打刻修正申請", PUNCH_FIX_MAP, setPunchFixReqs, saved), [reloadReq]);
+  const reloadOtReqs = useCallback(saved => reloadReq("残業申請", REQ_OT_MAP, setOtReqs, saved), [reloadReq]);
+  const reloadTimeTransferReqs = useCallback(saved => reloadReq("時間振替申請", TIME_TRANSFER_MAP, setTimeTransferReqs, saved), [reloadReq]);
+  const reloadOtherReqs = useCallback(saved => reloadReq("その他申請", REQ_OTHER_MAP, setOtherReqs, saved), [reloadReq]);
   const reloadWeekAlertExclusions = useCallback(async () => {
     try {
       const wae = await gasGet("週アラート除外");
@@ -255,11 +264,6 @@ export default function App() {
   }, [fetchAllData]);
 
   // ── 保存後の「必要なシートだけ」の再読み込み ──────────────────────────────
-  // 失敗しても全画面エラーにはせず、小さな通知を出す（保存自体は成功しているため）。
-  const softReload = useCallback(async fn => {
-    try { await fn(); setRefreshNotice(""); }
-    catch (e) { setRefreshNotice("保存しました。ただし最新の表示への更新に失敗しました。右上の「🔄 更新」を押してください。"); }
-  }, []);
   // シフト保存後：シフト・有給申請（指定有休で自動作成されるため）
   const reloadShiftsAndLeaveReqs = useCallback(() => softReload(async () => {
     const [s, lr] = await Promise.all([gasGet("シフト"), gasGet("有給申請")]);

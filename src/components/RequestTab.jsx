@@ -108,7 +108,7 @@ function PunchFixRequest({ emp, punchFixReqs, reload }) {
       await gasSave("打刻修正申請", data);
       setForm({ date: maxDate, reqIn: "", reqOut: "", reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };
@@ -172,7 +172,7 @@ function OtherRequest({ emp, reload }) {
       await gasSave("その他申請", data);
       setForm({ date: today(), content: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };

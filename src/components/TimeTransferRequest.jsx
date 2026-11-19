@@ -118,7 +118,7 @@ export default function TimeTransferRequest({ emp, shifts, shiftDefs, timeTransf
       await gasSave("時間振替申請", data);
       setForm({ overWeekStart: "", shortWeekStart: "", reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };

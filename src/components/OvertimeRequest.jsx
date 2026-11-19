@@ -118,7 +118,7 @@ export default function OvertimeRequest({ emp, shifts, shiftDefs, timeTransferRe
       await gasSaveBatch("時間振替申請", dataArray);
       setSelectedWeeks(new Set());
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(dataArray);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };

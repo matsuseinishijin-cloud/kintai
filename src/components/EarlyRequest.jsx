@@ -43,7 +43,7 @@ export default function EarlyRequest({ emp, shifts, shiftDefs, otReqs, reload })
       await gasSave("残業申請", data);
       setForm({ date: td, requestedStart: "", reason: "" });
       setSub(true); setTimeout(() => setSub(false), 3000);
-      await reload();
+      await reload(data);
     } catch (e) { alert("申請失敗：" + e.message); }
     setSubmitting(false);
   };
