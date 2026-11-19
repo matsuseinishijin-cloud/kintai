@@ -105,10 +105,10 @@ export default function TimecardSeishainFixed({ emp, shifts, punches, shiftDefs,
   const totalOtMin = rows.reduce((s, r) => s + r.otMin, 0);
   const fixedOTLimitMin = emp.fixedOTLimit ? Number(emp.fixedOTLimit) * 60 : null;
 
-  // タイプC承認済み時間外
-  const periodWeekStarts = new Set(periodDays.map(ds => {
-    const d = new Date(ds); const dow = d.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
-    d.setDate(d.getDate() + diff);
+  // タイプC承認済み時間外（週の日曜日が属する期間に計上。締め日をまたぐ週が前後の月で二重に載らないようにする）
+  const periodWeekStarts = new Set(periodDays.filter(ds => new Date(ds).getDay() === 0).map(ds => {
+    const d = new Date(ds);
+    d.setDate(d.getDate() - 6);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }));
   const approvedTypeC = (timeTransferReqs || [])
